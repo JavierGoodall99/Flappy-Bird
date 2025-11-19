@@ -1,3 +1,4 @@
+
 class AudioController {
   private ctx: AudioContext | null = null;
   private masterGain: GainNode | null = null;
@@ -116,6 +117,42 @@ class AudioController {
     gain2.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.15);
     osc2.start();
     osc2.stop(this.ctx.currentTime + 0.15);
+  }
+
+  playShrink() {
+    if (!this.ctx || !this.masterGain) return;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.connect(gain);
+    gain.connect(this.masterGain);
+    
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(600, this.ctx.currentTime);
+    osc.frequency.linearRampToValueAtTime(1200, this.ctx.currentTime + 0.2);
+    
+    gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
+    gain.gain.linearRampToValueAtTime(0.01, this.ctx.currentTime + 0.2);
+    
+    osc.start();
+    osc.stop(this.ctx.currentTime + 0.2);
+  }
+
+  playGrow() {
+    if (!this.ctx || !this.masterGain) return;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.connect(gain);
+    gain.connect(this.masterGain);
+    
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(300, this.ctx.currentTime);
+    osc.frequency.linearRampToValueAtTime(150, this.ctx.currentTime + 0.3);
+    
+    gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
+    gain.gain.linearRampToValueAtTime(0.01, this.ctx.currentTime + 0.3);
+    
+    osc.start();
+    osc.stop(this.ctx.currentTime + 0.3);
   }
 }
 

@@ -1,3 +1,4 @@
+
 export enum GameState {
   START = 'START',
   PLAYING = 'PLAYING',
@@ -9,6 +10,9 @@ export interface Bird {
   y: number;
   velocity: number;
   rotation: number;
+  scale: number;
+  targetScale: number;
+  effectTimer: number;
 }
 
 export interface Pipe {
@@ -18,6 +22,13 @@ export interface Pipe {
   type: 'normal' | 'glass';
   brokenTop: boolean;
   brokenBottom: boolean;
+}
+
+export interface Powerup {
+  x: number;
+  y: number;
+  type: 'shrink' | 'grow';
+  active: boolean;
 }
 
 export interface GameConfig {
@@ -31,4 +42,5 @@ export interface GameConfig {
 export interface ReplayFrame {
   y: number;
   rotation: number;
+  scale: number;
 }

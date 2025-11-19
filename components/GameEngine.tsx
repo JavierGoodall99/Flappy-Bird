@@ -1,7 +1,7 @@
 
 import React, { useRef, useEffect, useCallback } from 'react';
 import * as THREE from 'three';
-import { GameState, Bird, Pipe, ReplayFrame } from '../types';
+import { GameState, Bird, Pipe, ReplayFrame, Powerup } from '../types';
 import { GAME_CONSTANTS, COLORS } from '../constants';
 import { audioService } from '../services/audioService';
 
@@ -25,8 +25,16 @@ export const GameEngine: React.FC<GameEngineProps> = ({
   const frameCountRef = useRef<number>(0);
   
   // Game State Refs (Mutable for performance)
-  const birdRef = useRef<Bird>({ y: 0, velocity: 0, rotation: 0 });
+  const birdRef = useRef<Bird>({ 
+    y: 0, 
+    velocity: 0, 
+    rotation: 0,
+    scale: 1,
+    targetScale: 1,
+    effectTimer: 0
+  });
   const pipesRef = useRef<Pipe[]>([]);
+  const powerupsRef = useRef<Powerup[]>([]);
   const scoreRef = useRef<number>(0);
   const speedRef = useRef<number>(GAME_CONSTANTS.BASE_PIPE_SPEED);
   const prevGameStateRef = useRef<GameState>(gameState);
@@ -42,11 +50,14 @@ export const GameEngine: React.FC<GameEngineProps> = ({
   const birdMeshRef = useRef<THREE.Group | null>(null);
   const ghostMeshRef = useRef<THREE.Group | null>(null);
   const pipeMeshesRef = useRef<Map<Pipe, THREE.Group>>(new Map());
+  const powerupMeshesRef = useRef<Map<Powerup, THREE.Mesh>>(new Map());
   
   // Static Geometries & Materials (Initialized in useEffect)
   const geometryRef = useRef<{
     pipe: THREE.CylinderGeometry;
     pipeCap: THREE.CylinderGeometry;
+    powerupShrink: THREE.IcosahedronGeometry;
+    powerupGrow: THREE.OctahedronGeometry;
   } | null>(null);
   
   const materialRef = useRef<{
@@ -54,6 +65,8 @@ export const GameEngine: React.FC<GameEngineProps> = ({
     pipeCap: THREE.MeshStandardMaterial;
     glassPipe: THREE.MeshPhysicalMaterial;
     glassCap: THREE.MeshPhysicalMaterial;
+    powerupShrink: THREE.MeshStandardMaterial;
+    powerupGrow: THREE.MeshStandardMaterial;
   } | null>(null);
 
   // Initialize Game State
@@ -62,10 +75,14 @@ export const GameEngine: React.FC<GameEngineProps> = ({
     
     birdRef.current = { 
       y: height / 2, 
-      velocity: 0,
-      rotation: 0
+      velocity: 0, 
+      rotation: 0,
+      scale: GAME_CONSTANTS.SCALE_NORMAL,
+      targetScale: GAME_CONSTANTS.SCALE_NORMAL,
+      effectTimer: 0
     };
     pipesRef.current = [];
+    powerupsRef.current = [];
     scoreRef.current = 0;
     speedRef.current = GAME_CONSTANTS.BASE_PIPE_SPEED;
     frameCountRef.current = 0;
@@ -75,12 +92,17 @@ export const GameEngine: React.FC<GameEngineProps> = ({
     
     setScore(0);
 
-    // Clear 3D pipes
+    // Clear 3D objects
     if (sceneRef.current) {
       pipeMeshesRef.current.forEach((group) => {
         sceneRef.current?.remove(group);
       });
       pipeMeshesRef.current.clear();
+      
+      powerupMeshesRef.current.forEach((mesh) => {
+        sceneRef.current?.remove(mesh);
+      });
+      powerupMeshesRef.current.clear();
     }
   }, [setScore]);
 
@@ -119,12 +141,13 @@ export const GameEngine: React.FC<GameEngineProps> = ({
     const width = window.innerWidth;
     const height = window.innerHeight;
 
-    // --- PHYSICS & LOGIC (Identical to original) ---
+    // --- PHYSICS & LOGIC ---
     if (gameState === GameState.PLAYING) {
       // 0. Record Frame for Ghost
       currentRecordingRef.current.push({
         y: birdRef.current.y,
-        rotation: birdRef.current.rotation
+        rotation: birdRef.current.rotation,
+        scale: birdRef.current.scale
       });
 
       frameCountRef.current++;
@@ -135,6 +158,16 @@ export const GameEngine: React.FC<GameEngineProps> = ({
 
       // Rotation
       birdRef.current.rotation = Math.min(Math.PI / 4, Math.max(-Math.PI / 4, (birdRef.current.velocity * 0.1)));
+
+      // Scale Logic (Lerp & Timer)
+      if (birdRef.current.effectTimer > 0) {
+        birdRef.current.effectTimer--;
+        if (birdRef.current.effectTimer <= 0) {
+          birdRef.current.targetScale = GAME_CONSTANTS.SCALE_NORMAL;
+        }
+      }
+      // Lerp current scale to target scale
+      birdRef.current.scale += (birdRef.current.targetScale - birdRef.current.scale) * 0.1;
 
       // Difficulty
       speedRef.current += GAME_CONSTANTS.SPEED_INCREMENT;
@@ -160,21 +193,92 @@ export const GameEngine: React.FC<GameEngineProps> = ({
         });
       }
 
+      // Spawn Powerups
+      if (frameCountRef.current % GAME_CONSTANTS.POWERUP_SPAWN_RATE === 0) {
+         const type = Math.random() > 0.5 ? 'shrink' : 'grow';
+         
+         // Smart Spawn Logic: Avoid placing powerups where they cause death
+         let spawnMinY = height * 0.25; // Default safe central channel
+         let spawnMaxY = height * 0.75;
+
+         // Check if a pipe is nearby to align with the gap
+         if (pipesRef.current.length > 0) {
+            const lastPipe = pipesRef.current[pipesRef.current.length - 1];
+            // Calculate distance from the pipe's current position to the spawn point (width)
+            const distFromPipe = Math.abs(width - lastPipe.x);
+            
+            // If within a reasonable distance (approx pipe influence zone ~350px), align to gap
+            if (distFromPipe < 350) {
+                const padding = 45; // Keep slightly away from the pipe edges
+                spawnMinY = lastPipe.topHeight + padding;
+                spawnMaxY = lastPipe.topHeight + GAME_CONSTANTS.PIPE_GAP - padding;
+            }
+         }
+         
+         // Ensure bounds are valid and on screen
+         spawnMinY = Math.max(50, spawnMinY);
+         spawnMaxY = Math.min(height - 50, spawnMaxY);
+
+         if (spawnMinY > spawnMaxY) {
+             const mid = (spawnMinY + spawnMaxY) / 2;
+             spawnMinY = mid;
+             spawnMaxY = mid;
+         }
+
+         const y = spawnMinY + Math.random() * (spawnMaxY - spawnMinY);
+
+         powerupsRef.current.push({
+           x: width,
+           y: y,
+           type,
+           active: true
+         });
+      }
+
+      const birdX = width * GAME_CONSTANTS.BIRD_X_POSITION;
+      // Hitbox radius scales with bird
+      const birdRadius = (GAME_CONSTANTS.BIRD_RADIUS * birdRef.current.scale) - 2; 
+
+      // Update Powerups
+      for (let i = powerupsRef.current.length - 1; i >= 0; i--) {
+        const p = powerupsRef.current[i];
+        p.x -= speedRef.current;
+        
+        // Collision with Bird
+        if (p.active) {
+          const dx = p.x - birdX;
+          const dy = p.y - birdRef.current.y;
+          const dist = Math.sqrt(dx*dx + dy*dy);
+          if (dist < birdRadius + GAME_CONSTANTS.POWERUP_SIZE) {
+            // Collected
+            p.active = false;
+            if (p.type === 'shrink') {
+              birdRef.current.targetScale = GAME_CONSTANTS.SCALE_SHRINK;
+              birdRef.current.effectTimer = GAME_CONSTANTS.POWERUP_DURATION;
+              audioService.playShrink();
+            } else {
+              birdRef.current.targetScale = GAME_CONSTANTS.SCALE_GROW;
+              birdRef.current.effectTimer = GAME_CONSTANTS.POWERUP_DURATION;
+              audioService.playGrow();
+            }
+          }
+        }
+
+        if (p.x + GAME_CONSTANTS.POWERUP_SIZE < 0 || !p.active) {
+          powerupsRef.current.splice(i, 1);
+        }
+      }
+
       // Move Pipes & Check Collision
       for (let i = pipesRef.current.length - 1; i >= 0; i--) {
         const pipe = pipesRef.current[i];
         pipe.x -= speedRef.current;
 
-        // Remove off-screen
         if (pipe.x + GAME_CONSTANTS.PIPE_WIDTH < 0) {
           pipesRef.current.splice(i, 1);
           continue;
         }
 
-        // Collision
-        const birdX = width * GAME_CONSTANTS.BIRD_X_POSITION;
-        const birdRadius = GAME_CONSTANTS.BIRD_RADIUS - 2; 
-        
         // Horizontal Collision Check
         if (
           birdX + birdRadius > pipe.x && 
@@ -186,32 +290,21 @@ export const GameEngine: React.FC<GameEngineProps> = ({
 
           if (hitTop || hitBottom) {
              if (pipe.type === 'glass') {
-               // Handle Glass Break
                const isFreshBreak = (hitTop && !pipe.brokenTop) || (hitBottom && !pipe.brokenBottom);
-               
                if (isFreshBreak) {
                  if (hitTop) pipe.brokenTop = true;
                  if (hitBottom) pipe.brokenBottom = true;
-                 
-                 // Rewards
                  scoreRef.current += GAME_CONSTANTS.GLASS_BREAK_SCORE;
                  setScore(scoreRef.current);
                  audioService.playGlassBreak();
                  triggerEffect();
-                 
-                 // Penalty: Lose momentum (push down)
-                 // If moving up (negative vel), cancel it. If moving down, push faster?
-                 // "Lose velocity" -> Stop rising.
                  birdRef.current.velocity = Math.max(birdRef.current.velocity + GAME_CONSTANTS.GLASS_BREAK_PENALTY, GAME_CONSTANTS.GLASS_BREAK_PENALTY / 2);
                }
-               // If already broken, just fly through
              } else {
-               // Normal Pipe -> Game Over
                audioService.playCrash();
                triggerEffect();
                setGameState(GameState.GAME_OVER);
                
-               // Check for New High Score & Save Ghost
                if (scoreRef.current > highScore) {
                  bestRecordingRef.current = [...currentRecordingRef.current];
                  localStorage.setItem('flapai-ghost-data', JSON.stringify(bestRecordingRef.current));
@@ -220,7 +313,6 @@ export const GameEngine: React.FC<GameEngineProps> = ({
           }
         }
 
-        // Scoring
         if (!pipe.passed && birdX > pipe.x + GAME_CONSTANTS.PIPE_WIDTH) {
           pipe.passed = true;
           scoreRef.current += 1;
@@ -230,12 +322,11 @@ export const GameEngine: React.FC<GameEngineProps> = ({
       }
 
       // Ground/Ceiling Collision
-      if (birdRef.current.y + GAME_CONSTANTS.BIRD_RADIUS >= height || birdRef.current.y - GAME_CONSTANTS.BIRD_RADIUS <= 0) {
+      if (birdRef.current.y + birdRadius >= height || birdRef.current.y - birdRadius <= 0) {
          audioService.playCrash();
          triggerEffect();
          setGameState(GameState.GAME_OVER);
 
-         // Check for New High Score & Save Ghost
          if (scoreRef.current > highScore) {
            bestRecordingRef.current = [...currentRecordingRef.current];
            localStorage.setItem('flapai-ghost-data', JSON.stringify(bestRecordingRef.current));
@@ -251,10 +342,13 @@ export const GameEngine: React.FC<GameEngineProps> = ({
       birdMeshRef.current.position.x = toWorldX(birdX, width);
       birdMeshRef.current.position.y = toWorldY(birdRef.current.y, height);
       
-      // Smooth rotation
       birdMeshRef.current.rotation.z = birdRef.current.rotation;
       birdMeshRef.current.rotation.y = 0;
       birdMeshRef.current.rotation.x = 0;
+      
+      // Apply Scale
+      const s = birdRef.current.scale;
+      birdMeshRef.current.scale.set(s, s, s);
     }
 
     // 2. Update Ghost Bird
@@ -267,6 +361,10 @@ export const GameEngine: React.FC<GameEngineProps> = ({
             ghostMeshRef.current.position.x = toWorldX(birdX, width);
             ghostMeshRef.current.position.y = toWorldY(ghostFrame.y, height);
             ghostMeshRef.current.rotation.z = ghostFrame.rotation;
+            
+            // Apply Ghost Scale (fallback to 1 if old data)
+            const gs = ghostFrame.scale || 1;
+            ghostMeshRef.current.scale.set(gs, gs, gs);
          } else {
             ghostMeshRef.current.visible = false;
          }
@@ -278,7 +376,6 @@ export const GameEngine: React.FC<GameEngineProps> = ({
     // 3. Sync Pipes
     const currentPipes = new Set(pipesRef.current);
     
-    // Remove old pipes
     for (const [pipe, mesh] of pipeMeshesRef.current.entries()) {
       if (!currentPipes.has(pipe)) {
         sceneRef.current.remove(mesh);
@@ -286,55 +383,44 @@ export const GameEngine: React.FC<GameEngineProps> = ({
       }
     }
 
-    // Add/Update pipes
     pipesRef.current.forEach(pipe => {
       let group = pipeMeshesRef.current.get(pipe);
-      
       if (!group) {
-        // Create new Pipe Mesh Group
         group = new THREE.Group();
-        
         if (geometryRef.current && materialRef.current) {
             const isGlass = pipe.type === 'glass';
             const bodyMat = isGlass ? materialRef.current.glassPipe : materialRef.current.pipe;
             const capMat = isGlass ? materialRef.current.glassCap : materialRef.current.pipeCap;
 
-            // Top Pipe
             const topMesh = new THREE.Mesh(geometryRef.current.pipe, bodyMat);
             topMesh.castShadow = !isGlass;
             topMesh.receiveShadow = true;
             topMesh.name = 'top';
             group.add(topMesh);
 
-            // Top Cap
             const topCap = new THREE.Mesh(geometryRef.current.pipeCap, capMat);
             topCap.name = 'topCap';
             topCap.castShadow = !isGlass;
             group.add(topCap);
 
-            // Bottom Pipe
             const bottomMesh = new THREE.Mesh(geometryRef.current.pipe, bodyMat);
             bottomMesh.castShadow = !isGlass;
             bottomMesh.receiveShadow = true;
             bottomMesh.name = 'bottom';
             group.add(bottomMesh);
 
-            // Bottom Cap
             const bottomCap = new THREE.Mesh(geometryRef.current.pipeCap, capMat);
             bottomCap.name = 'bottomCap';
             bottomCap.castShadow = !isGlass;
             group.add(bottomCap);
         }
-
         sceneRef.current?.add(group);
         pipeMeshesRef.current.set(pipe, group);
       }
 
-      // Position the Group
       group.position.x = toWorldX(pipe.x + GAME_CONSTANTS.PIPE_WIDTH / 2, width);
       group.position.z = 0;
 
-      // Update Visibility based on Broken State
       const topMesh = group.getObjectByName('top') as THREE.Mesh;
       const topCap = group.getObjectByName('topCap') as THREE.Mesh;
       const bottomMesh = group.getObjectByName('bottom') as THREE.Mesh;
@@ -345,7 +431,6 @@ export const GameEngine: React.FC<GameEngineProps> = ({
       if (bottomMesh) bottomMesh.visible = !pipe.brokenBottom;
       if (bottomCap) bottomCap.visible = !pipe.brokenBottom;
 
-      // Update Heights (Scaling)
       if (topMesh && topCap) {
         const topPipeHeight = pipe.topHeight;
         topMesh.scale.set(1, topPipeHeight, 1);
@@ -356,10 +441,38 @@ export const GameEngine: React.FC<GameEngineProps> = ({
       if (bottomMesh && bottomCap) {
         const bottomPipeYStart = pipe.topHeight + GAME_CONSTANTS.PIPE_GAP;
         const bottomPipeHeight = Math.max(1, height - bottomPipeYStart);
-        
         bottomMesh.scale.set(1, bottomPipeHeight, 1);
         bottomMesh.position.y = (height / 2) - bottomPipeYStart - (bottomPipeHeight / 2);
         bottomCap.position.y = (height / 2) - bottomPipeYStart + 5;
+      }
+    });
+
+    // 4. Sync Powerups
+    const currentPowerups = new Set(powerupsRef.current);
+    for (const [p, mesh] of powerupMeshesRef.current.entries()) {
+      if (!currentPowerups.has(p)) {
+        sceneRef.current.remove(mesh);
+        powerupMeshesRef.current.delete(p);
+      }
+    }
+
+    powerupsRef.current.forEach(p => {
+      let mesh = powerupMeshesRef.current.get(p);
+      if (!mesh) {
+        if (geometryRef.current && materialRef.current) {
+          const geo = p.type === 'shrink' ? geometryRef.current.powerupShrink : geometryRef.current.powerupGrow;
+          const mat = p.type === 'shrink' ? materialRef.current.powerupShrink : materialRef.current.powerupGrow;
+          mesh = new THREE.Mesh(geo, mat);
+          mesh.scale.set(GAME_CONSTANTS.POWERUP_SIZE/2, GAME_CONSTANTS.POWERUP_SIZE/2, GAME_CONSTANTS.POWERUP_SIZE/2); // Approximate size
+          sceneRef.current?.add(mesh);
+          powerupMeshesRef.current.set(p, mesh);
+        }
+      }
+      if (mesh) {
+        mesh.position.x = toWorldX(p.x, width);
+        mesh.position.y = toWorldY(p.y, height);
+        mesh.rotation.y += 0.05;
+        mesh.rotation.z += 0.02;
       }
     });
 
@@ -429,13 +542,16 @@ export const GameEngine: React.FC<GameEngineProps> = ({
     fillLight.position.set(-50, 50, 100);
     scene.add(fillLight);
 
-    // Shared Geometries for Pipes
+    // Geometries
     const pipeRadius = GAME_CONSTANTS.PIPE_WIDTH / 2;
     geometryRef.current = {
         pipe: new THREE.CylinderGeometry(pipeRadius, pipeRadius, 1, 32),
-        pipeCap: new THREE.CylinderGeometry(pipeRadius + 4, pipeRadius + 4, 10, 32)
+        pipeCap: new THREE.CylinderGeometry(pipeRadius + 4, pipeRadius + 4, 10, 32),
+        powerupShrink: new THREE.IcosahedronGeometry(1, 0),
+        powerupGrow: new THREE.OctahedronGeometry(1, 0)
     };
     
+    // Materials
     materialRef.current = {
         pipe: new THREE.MeshStandardMaterial({ 
             color: COLORS.PIPE_FILL, 
@@ -461,6 +577,20 @@ export const GameEngine: React.FC<GameEngineProps> = ({
             metalness: 0.3,
             transparent: true,
             opacity: 0.6
+        }),
+        powerupShrink: new THREE.MeshStandardMaterial({
+            color: COLORS.POWERUP_SHRINK,
+            roughness: 0.2,
+            metalness: 0.5,
+            emissive: COLORS.POWERUP_SHRINK,
+            emissiveIntensity: 0.6
+        }),
+        powerupGrow: new THREE.MeshStandardMaterial({
+            color: COLORS.POWERUP_GROW,
+            roughness: 0.2,
+            metalness: 0.5,
+            emissive: COLORS.POWERUP_GROW,
+            emissiveIntensity: 0.6
         })
     };
 
@@ -568,10 +698,15 @@ export const GameEngine: React.FC<GameEngineProps> = ({
         renderer.dispose();
         geometryRef.current?.pipe.dispose();
         geometryRef.current?.pipeCap.dispose();
+        geometryRef.current?.powerupShrink.dispose();
+        geometryRef.current?.powerupGrow.dispose();
+
         materialRef.current?.pipe.dispose();
         materialRef.current?.pipeCap.dispose();
         materialRef.current?.glassPipe.dispose();
         materialRef.current?.glassCap.dispose();
+        materialRef.current?.powerupShrink.dispose();
+        materialRef.current?.powerupGrow.dispose();
         
         birdGroup.traverse((obj) => {
             if (obj instanceof THREE.Mesh) {
@@ -606,6 +741,7 @@ export const GameEngine: React.FC<GameEngineProps> = ({
           rendererRef.current.setSize(w, h);
           
           pipesRef.current = [];
+          powerupsRef.current = [];
           if (birdRef.current.y > h) {
               birdRef.current.y = h/2;
               birdRef.current.velocity = 0;
