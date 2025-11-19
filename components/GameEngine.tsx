@@ -1,7 +1,7 @@
 
 import React, { useRef, useEffect, useCallback } from 'react';
 import * as THREE from 'three';
-import { GameState, Bird, Pipe } from '../types';
+import { GameState, Bird, Pipe, ReplayFrame } from '../types';
 import { GAME_CONSTANTS, COLORS } from '../constants';
 import { audioService } from '../services/audioService';
 
@@ -10,13 +10,15 @@ interface GameEngineProps {
   setGameState: (state: GameState) => void;
   setScore: (score: number) => void;
   triggerEffect: () => void;
+  highScore: number;
 }
 
 export const GameEngine: React.FC<GameEngineProps> = ({ 
   gameState, 
   setGameState, 
   setScore,
-  triggerEffect
+  triggerEffect,
+  highScore
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const requestRef = useRef<number>();
@@ -28,12 +30,17 @@ export const GameEngine: React.FC<GameEngineProps> = ({
   const scoreRef = useRef<number>(0);
   const speedRef = useRef<number>(GAME_CONSTANTS.BASE_PIPE_SPEED);
   const prevGameStateRef = useRef<GameState>(gameState);
+  
+  // Ghost / Replay Refs
+  const currentRecordingRef = useRef<ReplayFrame[]>([]);
+  const bestRecordingRef = useRef<ReplayFrame[]>([]);
 
   // Three.js Refs
   const sceneRef = useRef<THREE.Scene | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const birdMeshRef = useRef<THREE.Group | null>(null);
+  const ghostMeshRef = useRef<THREE.Group | null>(null);
   const pipeMeshesRef = useRef<Map<Pipe, THREE.Group>>(new Map());
   
   // Static Geometries & Materials (Initialized in useEffect)
@@ -60,6 +67,10 @@ export const GameEngine: React.FC<GameEngineProps> = ({
     scoreRef.current = 0;
     speedRef.current = GAME_CONSTANTS.BASE_PIPE_SPEED;
     frameCountRef.current = 0;
+    
+    // Reset Recording
+    currentRecordingRef.current = [];
+    
     setScore(0);
 
     // Clear 3D pipes
@@ -70,6 +81,18 @@ export const GameEngine: React.FC<GameEngineProps> = ({
       pipeMeshesRef.current.clear();
     }
   }, [setScore]);
+
+  // Load High Score Ghost on Mount
+  useEffect(() => {
+    const savedGhost = localStorage.getItem('flapai-ghost-data');
+    if (savedGhost) {
+      try {
+        bestRecordingRef.current = JSON.parse(savedGhost);
+      } catch (e) {
+        console.error("Failed to load ghost data", e);
+      }
+    }
+  }, []);
 
   // Handle Jump
   const handleJump = useCallback(() => {
@@ -96,6 +119,12 @@ export const GameEngine: React.FC<GameEngineProps> = ({
 
     // --- PHYSICS & LOGIC (Identical to original) ---
     if (gameState === GameState.PLAYING) {
+      // 0. Record Frame for Ghost
+      currentRecordingRef.current.push({
+        y: birdRef.current.y,
+        rotation: birdRef.current.rotation
+      });
+
       frameCountRef.current++;
 
       // Physics
@@ -151,6 +180,12 @@ export const GameEngine: React.FC<GameEngineProps> = ({
             audioService.playCrash();
             triggerEffect();
             setGameState(GameState.GAME_OVER);
+            
+            // Check for New High Score & Save Ghost
+            if (scoreRef.current > highScore) {
+              bestRecordingRef.current = [...currentRecordingRef.current];
+              localStorage.setItem('flapai-ghost-data', JSON.stringify(bestRecordingRef.current));
+            }
           }
         }
 
@@ -168,6 +203,12 @@ export const GameEngine: React.FC<GameEngineProps> = ({
          audioService.playCrash();
          triggerEffect();
          setGameState(GameState.GAME_OVER);
+
+         // Check for New High Score & Save Ghost
+         if (scoreRef.current > highScore) {
+           bestRecordingRef.current = [...currentRecordingRef.current];
+           localStorage.setItem('flapai-ghost-data', JSON.stringify(bestRecordingRef.current));
+         }
       }
     }
 
@@ -186,7 +227,26 @@ export const GameEngine: React.FC<GameEngineProps> = ({
       birdMeshRef.current.rotation.x = 0;
     }
 
-    // 2. Sync Pipes
+    // 2. Update Ghost Bird
+    if (ghostMeshRef.current) {
+      if (gameState === GameState.PLAYING || gameState === GameState.GAME_OVER) {
+         const ghostFrame = bestRecordingRef.current[frameCountRef.current];
+         if (ghostFrame) {
+            const birdX = width * GAME_CONSTANTS.BIRD_X_POSITION;
+            ghostMeshRef.current.visible = true;
+            ghostMeshRef.current.position.x = toWorldX(birdX, width);
+            ghostMeshRef.current.position.y = toWorldY(ghostFrame.y, height);
+            ghostMeshRef.current.rotation.z = ghostFrame.rotation;
+         } else {
+            // Ghost finished run
+            ghostMeshRef.current.visible = false;
+         }
+      } else {
+        ghostMeshRef.current.visible = false;
+      }
+    }
+
+    // 3. Sync Pipes
     const currentPipes = new Set(pipesRef.current);
     
     // Remove old pipes
@@ -269,7 +329,7 @@ export const GameEngine: React.FC<GameEngineProps> = ({
 
     rendererRef.current.render(sceneRef.current, cameraRef.current);
     requestRef.current = requestAnimationFrame(loop);
-  }, [gameState, setGameState, setScore, triggerEffect]);
+  }, [gameState, setGameState, setScore, triggerEffect, highScore]);
 
   // Initialize Three.js
   useEffect(() => {
@@ -317,6 +377,7 @@ export const GameEngine: React.FC<GameEngineProps> = ({
     const ambient = new THREE.AmbientLight(0xffffff, 0.7);
     scene.add(ambient);
 
+    // Main Key Light (Sun)
     const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
     dirLight.position.set(100, 200, 200);
     dirLight.castShadow = true;
@@ -329,6 +390,11 @@ export const GameEngine: React.FC<GameEngineProps> = ({
     dirLight.shadow.camera.bottom = -d;
     dirLight.shadow.bias = -0.0005;
     scene.add(dirLight);
+
+    // Secondary Fill Light (Softer, from opposite angle for depth)
+    const fillLight = new THREE.DirectionalLight(0xffffff, 0.4);
+    fillLight.position.set(-50, 50, 100);
+    scene.add(fillLight);
 
     // Shared Geometries for Pipes
     const pipeRadius = GAME_CONSTANTS.PIPE_WIDTH / 2;
@@ -349,83 +415,110 @@ export const GameEngine: React.FC<GameEngineProps> = ({
         })
     };
 
-    // --- 2D "Cutout" Bird Construction ---
-    const birdGroup = new THREE.Group();
+    // --- Helper to Build Bird ---
+    const createBirdMesh = (isGhost: boolean) => {
+        const group = new THREE.Group();
+        
+        // Materials
+        const opacity = isGhost ? 0.35 : 1.0;
+        const transparent = isGhost;
+        const ghostColor = 0x40E0D0; // Turquoise/Cyan for ghost
+
+        const bodyMat = new THREE.MeshStandardMaterial({ 
+            color: isGhost ? ghostColor : COLORS.BIRD_FILL, 
+            roughness: 0.4, 
+            metalness: 0.1,
+            flatShading: false,
+            emissive: isGhost ? ghostColor : COLORS.BIRD_FILL,
+            emissiveIntensity: 0.2,
+            transparent, opacity
+        });
+        const whiteMat = new THREE.MeshStandardMaterial({ 
+            color: isGhost ? ghostColor : 0xffffff, 
+            roughness: 0.2, 
+            metalness: 0.1,
+            transparent, opacity 
+        });
+        const blackMat = new THREE.MeshBasicMaterial({ 
+            color: isGhost ? 0x000000 : 0x000000,
+            transparent, opacity 
+        }); 
+        const beakMat = new THREE.MeshStandardMaterial({ 
+            color: isGhost ? ghostColor : COLORS.BIRD_STROKE,
+            roughness: 0.5, 
+            metalness: 0.1,
+            transparent, opacity 
+        });
+        const cheekMat = new THREE.MeshStandardMaterial({
+            color: isGhost ? ghostColor : 0xFF8A80, // Soft Pink
+            roughness: 0.5,
+            flatShading: true,
+            transparent, opacity
+        });
+
+        // 1. Body
+        const bodyGeo = new THREE.CylinderGeometry(15, 15, 2, 32);
+        const body = new THREE.Mesh(bodyGeo, bodyMat);
+        body.rotation.x = Math.PI / 2;
+        if (!isGhost) body.castShadow = true;
+        group.add(body);
+
+        // 2. Eye
+        const eyeGeo = new THREE.CylinderGeometry(7.5, 7.5, 2.2, 32);
+        const eye = new THREE.Mesh(eyeGeo, whiteMat);
+        eye.rotation.x = Math.PI / 2;
+        eye.position.set(6, 5, 0.5);
+        group.add(eye);
+
+        // 3. Pupil
+        const pupilGeo = new THREE.CircleGeometry(3.5, 32);
+        const pupil = new THREE.Mesh(pupilGeo, blackMat);
+        pupil.position.set(8, 5, 1.7);
+        group.add(pupil);
+
+        // 4. Cheek
+        const cheekGeo = new THREE.CylinderGeometry(3.5, 3.5, 2.2, 32);
+        const cheek = new THREE.Mesh(cheekGeo, cheekMat);
+        cheek.rotation.x = Math.PI / 2;
+        cheek.position.set(5, -4, 0.5);
+        group.add(cheek);
+
+        // 5. Wing
+        const wingGeo = new THREE.CylinderGeometry(5, 5, 2.2, 32);
+        const wing = new THREE.Mesh(wingGeo, whiteMat);
+        wing.rotation.x = Math.PI / 2;
+        wing.position.set(-6, -3, 0.5);
+        wing.scale.set(1.5, 1.1, 1);
+        group.add(wing);
+
+        // 6. Beak
+        const beakShape = new THREE.Shape();
+        beakShape.moveTo(0, 4);
+        beakShape.lineTo(10, 0);
+        beakShape.lineTo(0, -4);
+        beakShape.lineTo(0, 4);
+        const beakGeo = new THREE.ExtrudeGeometry(beakShape, { depth: 2, bevelEnabled: false });
+        const beak = new THREE.Mesh(beakGeo, beakMat);
+        beak.position.set(13, -2, -1); 
+        beak.scale.set(0.8, 0.8, 1);
+        group.add(beak);
+
+        return group;
+    };
+
+    // --- Create Birds ---
     
-    const bodyMat = new THREE.MeshStandardMaterial({ 
-        color: COLORS.BIRD_FILL, 
-        roughness: 0.4, 
-        metalness: 0.1,
-        flatShading: false,
-        emissive: COLORS.BIRD_FILL,
-        emissiveIntensity: 0.2
-    });
-    const whiteMat = new THREE.MeshStandardMaterial({ 
-        color: 0xffffff, 
-        roughness: 0.2, 
-        metalness: 0.1 
-    });
-    const blackMat = new THREE.MeshBasicMaterial({ color: 0x000000 }); 
-    const beakMat = new THREE.MeshStandardMaterial({ 
-        color: COLORS.BIRD_STROKE,
-        roughness: 0.5, 
-        metalness: 0.1 
-    });
-    const cheekMat = new THREE.MeshStandardMaterial({
-        color: 0xFF8A80, // Soft Pink
-        roughness: 0.5,
-        flatShading: true
-    });
-
-    // 1. Body - Cylinder acting as a thick circle
-    const bodyGeo = new THREE.CylinderGeometry(15, 15, 2, 32);
-    const body = new THREE.Mesh(bodyGeo, bodyMat);
-    body.rotation.x = Math.PI / 2; // Face camera
-    body.castShadow = true;
-    birdGroup.add(body);
-
-    // 2. Eye - Large White Cylinder (Cuter, larger)
-    const eyeGeo = new THREE.CylinderGeometry(7.5, 7.5, 2.2, 32);
-    const eye = new THREE.Mesh(eyeGeo, whiteMat);
-    eye.rotation.x = Math.PI / 2;
-    eye.position.set(6, 5, 0.5); // Slightly lower and forward
-    birdGroup.add(eye);
-
-    // 3. Pupil - Large Black Circle
-    const pupilGeo = new THREE.CircleGeometry(3.5, 32);
-    const pupil = new THREE.Mesh(pupilGeo, blackMat);
-    pupil.position.set(8, 5, 1.7);
-    birdGroup.add(pupil);
-
-    // 4. Cheek - Pink Blush (New!)
-    const cheekGeo = new THREE.CylinderGeometry(3.5, 3.5, 2.2, 32);
-    const cheek = new THREE.Mesh(cheekGeo, cheekMat);
-    cheek.rotation.x = Math.PI / 2;
-    cheek.position.set(5, -4, 0.5); // Below eye
-    birdGroup.add(cheek);
-
-    // 5. Wing - Flattened Cylinder
-    const wingGeo = new THREE.CylinderGeometry(5, 5, 2.2, 32);
-    const wing = new THREE.Mesh(wingGeo, whiteMat);
-    wing.rotation.x = Math.PI / 2;
-    wing.position.set(-6, -3, 0.5);
-    wing.scale.set(1.5, 1.1, 1);
-    birdGroup.add(wing);
-
-    // 6. Beak - Extruded Triangle
-    const beakShape = new THREE.Shape();
-    beakShape.moveTo(0, 4);
-    beakShape.lineTo(10, 0);
-    beakShape.lineTo(0, -4);
-    beakShape.lineTo(0, 4);
-    const beakGeo = new THREE.ExtrudeGeometry(beakShape, { depth: 2, bevelEnabled: false });
-    const beak = new THREE.Mesh(beakGeo, beakMat);
-    beak.position.set(13, -2, -1); 
-    beak.scale.set(0.8, 0.8, 1); // Slightly smaller beak for cuteness
-    birdGroup.add(beak);
-
+    // 1. Player Bird
+    const birdGroup = createBirdMesh(false);
     scene.add(birdGroup);
     birdMeshRef.current = birdGroup;
+
+    // 2. Ghost Bird
+    const ghostGroup = createBirdMesh(true);
+    ghostGroup.position.z = -10; // Slightly behind
+    ghostGroup.visible = false;
+    scene.add(ghostGroup);
+    ghostMeshRef.current = ghostGroup;
 
     // Store refs
     sceneRef.current = scene;
@@ -440,23 +533,24 @@ export const GameEngine: React.FC<GameEngineProps> = ({
         renderer.dispose();
         geometryRef.current?.pipe.dispose();
         geometryRef.current?.pipeCap.dispose();
-        
-        // Dispose Bird Geometries
-        bodyGeo.dispose();
-        eyeGeo.dispose();
-        pupilGeo.dispose();
-        wingGeo.dispose();
-        beakGeo.dispose();
-        cheekGeo.dispose();
-        
-        // Dispose Materials
-        bodyMat.dispose();
-        whiteMat.dispose();
-        blackMat.dispose();
-        beakMat.dispose();
-        cheekMat.dispose();
         materialRef.current?.pipe.dispose();
         materialRef.current?.pipeCap.dispose();
+        
+        // Simple traversal cleanup for bird/ghost parts
+        birdGroup.traverse((obj) => {
+            if (obj instanceof THREE.Mesh) {
+                obj.geometry.dispose();
+                if (Array.isArray(obj.material)) obj.material.forEach(m => m.dispose());
+                else obj.material.dispose();
+            }
+        });
+        ghostGroup.traverse((obj) => {
+             if (obj instanceof THREE.Mesh) {
+                obj.geometry.dispose();
+                if (Array.isArray(obj.material)) obj.material.forEach(m => m.dispose());
+                else obj.material.dispose();
+            }
+        });
     };
   }, []);
 

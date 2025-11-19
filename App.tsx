@@ -72,6 +72,7 @@ const App: React.FC = () => {
           setGameState={setGameState} 
           setScore={setScore}
           triggerEffect={triggerShake}
+          highScore={highScore}
         />
       </div>
 

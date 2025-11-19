@@ -24,3 +24,8 @@ export interface GameConfig {
   pipeSpawnRate: number; // Frames between pipes
   pipeGap: number;
 }
+
+export interface ReplayFrame {
+  y: number;
+  rotation: number;
+}
