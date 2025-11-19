@@ -78,6 +78,45 @@ class AudioController {
     osc.start();
     osc.stop(this.ctx.currentTime + 0.3);
   }
+
+  playGlassBreak() {
+    if (!this.ctx || !this.masterGain) return;
+
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    
+    // High pass filter for "shatter" sound
+    const filter = this.ctx.createBiquadFilter();
+    filter.type = 'highpass';
+    filter.frequency.value = 1000;
+
+    osc.connect(filter);
+    filter.connect(gain);
+    gain.connect(this.masterGain);
+
+    // Random noise texture roughly approximated by high freq sawtooth/square
+    osc.type = 'square'; 
+    osc.frequency.setValueAtTime(800 + Math.random() * 500, this.ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(100, this.ctx.currentTime + 0.1);
+
+    gain.gain.setValueAtTime(0.4, this.ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.1);
+
+    osc.start();
+    osc.stop(this.ctx.currentTime + 0.1);
+    
+    // Secondary "tinkle"
+    const osc2 = this.ctx.createOscillator();
+    const gain2 = this.ctx.createGain();
+    osc2.connect(gain2);
+    gain2.connect(this.masterGain);
+    osc2.type = 'sine';
+    osc2.frequency.setValueAtTime(3000, this.ctx.currentTime);
+    gain2.gain.setValueAtTime(0.1, this.ctx.currentTime);
+    gain2.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.15);
+    osc2.start();
+    osc2.stop(this.ctx.currentTime + 0.15);
+  }
 }
 
 export const audioService = new AudioController();

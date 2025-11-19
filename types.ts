@@ -15,6 +15,9 @@ export interface Pipe {
   x: number;
   topHeight: number; // Height of the top pipe
   passed: boolean;
+  type: 'normal' | 'glass';
+  brokenTop: boolean;
+  brokenBottom: boolean;
 }
 
 export interface GameConfig {

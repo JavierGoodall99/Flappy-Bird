@@ -52,6 +52,8 @@ export const GameEngine: React.FC<GameEngineProps> = ({
   const materialRef = useRef<{
     pipe: THREE.MeshStandardMaterial;
     pipeCap: THREE.MeshStandardMaterial;
+    glassPipe: THREE.MeshPhysicalMaterial;
+    glassCap: THREE.MeshPhysicalMaterial;
   } | null>(null);
 
   // Initialize Game State
@@ -146,11 +148,15 @@ export const GameEngine: React.FC<GameEngineProps> = ({
         );
         
         const topHeight = Math.floor(Math.random() * (maxTopPipeHeight - minPipeHeight + 1)) + minPipeHeight;
-        
+        const isGlass = Math.random() < GAME_CONSTANTS.GLASS_PIPE_CHANCE;
+
         pipesRef.current.push({
           x: width,
           topHeight,
-          passed: false
+          passed: false,
+          type: isGlass ? 'glass' : 'normal',
+          brokenTop: false,
+          brokenBottom: false
         });
       }
 
@@ -169,23 +175,48 @@ export const GameEngine: React.FC<GameEngineProps> = ({
         const birdX = width * GAME_CONSTANTS.BIRD_X_POSITION;
         const birdRadius = GAME_CONSTANTS.BIRD_RADIUS - 2; 
         
+        // Horizontal Collision Check
         if (
           birdX + birdRadius > pipe.x && 
           birdX - birdRadius < pipe.x + GAME_CONSTANTS.PIPE_WIDTH
         ) {
-          if (
-            birdRef.current.y - birdRadius < pipe.topHeight || 
-            birdRef.current.y + birdRadius > pipe.topHeight + GAME_CONSTANTS.PIPE_GAP
-          ) {
-            audioService.playCrash();
-            triggerEffect();
-            setGameState(GameState.GAME_OVER);
-            
-            // Check for New High Score & Save Ghost
-            if (scoreRef.current > highScore) {
-              bestRecordingRef.current = [...currentRecordingRef.current];
-              localStorage.setItem('flapai-ghost-data', JSON.stringify(bestRecordingRef.current));
-            }
+          // Check Verticals
+          const hitTop = birdRef.current.y - birdRadius < pipe.topHeight;
+          const hitBottom = birdRef.current.y + birdRadius > pipe.topHeight + GAME_CONSTANTS.PIPE_GAP;
+
+          if (hitTop || hitBottom) {
+             if (pipe.type === 'glass') {
+               // Handle Glass Break
+               const isFreshBreak = (hitTop && !pipe.brokenTop) || (hitBottom && !pipe.brokenBottom);
+               
+               if (isFreshBreak) {
+                 if (hitTop) pipe.brokenTop = true;
+                 if (hitBottom) pipe.brokenBottom = true;
+                 
+                 // Rewards
+                 scoreRef.current += GAME_CONSTANTS.GLASS_BREAK_SCORE;
+                 setScore(scoreRef.current);
+                 audioService.playGlassBreak();
+                 triggerEffect();
+                 
+                 // Penalty: Lose momentum (push down)
+                 // If moving up (negative vel), cancel it. If moving down, push faster?
+                 // "Lose velocity" -> Stop rising.
+                 birdRef.current.velocity = Math.max(birdRef.current.velocity + GAME_CONSTANTS.GLASS_BREAK_PENALTY, GAME_CONSTANTS.GLASS_BREAK_PENALTY / 2);
+               }
+               // If already broken, just fly through
+             } else {
+               // Normal Pipe -> Game Over
+               audioService.playCrash();
+               triggerEffect();
+               setGameState(GameState.GAME_OVER);
+               
+               // Check for New High Score & Save Ghost
+               if (scoreRef.current > highScore) {
+                 bestRecordingRef.current = [...currentRecordingRef.current];
+                 localStorage.setItem('flapai-ghost-data', JSON.stringify(bestRecordingRef.current));
+               }
+             }
           }
         }
 
@@ -222,7 +253,6 @@ export const GameEngine: React.FC<GameEngineProps> = ({
       
       // Smooth rotation
       birdMeshRef.current.rotation.z = birdRef.current.rotation;
-      // Keep flat for 2D look
       birdMeshRef.current.rotation.y = 0;
       birdMeshRef.current.rotation.x = 0;
     }
@@ -238,7 +268,6 @@ export const GameEngine: React.FC<GameEngineProps> = ({
             ghostMeshRef.current.position.y = toWorldY(ghostFrame.y, height);
             ghostMeshRef.current.rotation.z = ghostFrame.rotation;
          } else {
-            // Ghost finished run
             ghostMeshRef.current.visible = false;
          }
       } else {
@@ -266,32 +295,34 @@ export const GameEngine: React.FC<GameEngineProps> = ({
         group = new THREE.Group();
         
         if (geometryRef.current && materialRef.current) {
-            const pipeRadius = GAME_CONSTANTS.PIPE_WIDTH / 2;
-            
+            const isGlass = pipe.type === 'glass';
+            const bodyMat = isGlass ? materialRef.current.glassPipe : materialRef.current.pipe;
+            const capMat = isGlass ? materialRef.current.glassCap : materialRef.current.pipeCap;
+
             // Top Pipe
-            const topMesh = new THREE.Mesh(geometryRef.current.pipe, materialRef.current.pipe);
-            topMesh.castShadow = true;
+            const topMesh = new THREE.Mesh(geometryRef.current.pipe, bodyMat);
+            topMesh.castShadow = !isGlass;
             topMesh.receiveShadow = true;
             topMesh.name = 'top';
             group.add(topMesh);
 
             // Top Cap
-            const topCap = new THREE.Mesh(geometryRef.current.pipeCap, materialRef.current.pipeCap);
+            const topCap = new THREE.Mesh(geometryRef.current.pipeCap, capMat);
             topCap.name = 'topCap';
-            topCap.castShadow = true;
+            topCap.castShadow = !isGlass;
             group.add(topCap);
 
             // Bottom Pipe
-            const bottomMesh = new THREE.Mesh(geometryRef.current.pipe, materialRef.current.pipe);
-            bottomMesh.castShadow = true;
+            const bottomMesh = new THREE.Mesh(geometryRef.current.pipe, bodyMat);
+            bottomMesh.castShadow = !isGlass;
             bottomMesh.receiveShadow = true;
             bottomMesh.name = 'bottom';
             group.add(bottomMesh);
 
             // Bottom Cap
-            const bottomCap = new THREE.Mesh(geometryRef.current.pipeCap, materialRef.current.pipeCap);
+            const bottomCap = new THREE.Mesh(geometryRef.current.pipeCap, capMat);
             bottomCap.name = 'bottomCap';
-            bottomCap.castShadow = true;
+            bottomCap.castShadow = !isGlass;
             group.add(bottomCap);
         }
 
@@ -299,23 +330,28 @@ export const GameEngine: React.FC<GameEngineProps> = ({
         pipeMeshesRef.current.set(pipe, group);
       }
 
-      // Position the Group at the horizontal center of the pipe
+      // Position the Group
       group.position.x = toWorldX(pipe.x + GAME_CONSTANTS.PIPE_WIDTH / 2, width);
       group.position.z = 0;
 
-      // Update Heights (Scaling)
+      // Update Visibility based on Broken State
       const topMesh = group.getObjectByName('top') as THREE.Mesh;
       const topCap = group.getObjectByName('topCap') as THREE.Mesh;
-      
+      const bottomMesh = group.getObjectByName('bottom') as THREE.Mesh;
+      const bottomCap = group.getObjectByName('bottomCap') as THREE.Mesh;
+
+      if (topMesh) topMesh.visible = !pipe.brokenTop;
+      if (topCap) topCap.visible = !pipe.brokenTop;
+      if (bottomMesh) bottomMesh.visible = !pipe.brokenBottom;
+      if (bottomCap) bottomCap.visible = !pipe.brokenBottom;
+
+      // Update Heights (Scaling)
       if (topMesh && topCap) {
         const topPipeHeight = pipe.topHeight;
         topMesh.scale.set(1, topPipeHeight, 1);
         topMesh.position.y = (height / 2) - (topPipeHeight / 2);
         topCap.position.y = (height / 2) - topPipeHeight - 5; 
       }
-
-      const bottomMesh = group.getObjectByName('bottom') as THREE.Mesh;
-      const bottomCap = group.getObjectByName('bottomCap') as THREE.Mesh;
       
       if (bottomMesh && bottomCap) {
         const bottomPipeYStart = pipe.topHeight + GAME_CONSTANTS.PIPE_GAP;
@@ -340,7 +376,6 @@ export const GameEngine: React.FC<GameEngineProps> = ({
 
     // Scene
     const scene = new THREE.Scene();
-    // Gradient Background
     const canvas = document.createElement('canvas');
     canvas.width = 2;
     canvas.height = 512;
@@ -377,7 +412,6 @@ export const GameEngine: React.FC<GameEngineProps> = ({
     const ambient = new THREE.AmbientLight(0xffffff, 0.7);
     scene.add(ambient);
 
-    // Main Key Light (Sun)
     const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
     dirLight.position.set(100, 200, 200);
     dirLight.castShadow = true;
@@ -391,7 +425,6 @@ export const GameEngine: React.FC<GameEngineProps> = ({
     dirLight.shadow.bias = -0.0005;
     scene.add(dirLight);
 
-    // Secondary Fill Light (Softer, from opposite angle for depth)
     const fillLight = new THREE.DirectionalLight(0xffffff, 0.4);
     fillLight.position.set(-50, 50, 100);
     scene.add(fillLight);
@@ -412,17 +445,31 @@ export const GameEngine: React.FC<GameEngineProps> = ({
         pipeCap: new THREE.MeshStandardMaterial({
             color: COLORS.PIPE_STROKE,
             roughness: 0.3
+        }),
+        glassPipe: new THREE.MeshPhysicalMaterial({
+            color: COLORS.PIPE_GLASS,
+            roughness: 0,
+            metalness: 0.1,
+            transmission: 0, 
+            transparent: true,
+            opacity: 0.4,
+            side: THREE.DoubleSide
+        }),
+        glassCap: new THREE.MeshPhysicalMaterial({
+            color: COLORS.PIPE_GLASS_STROKE,
+            roughness: 0.1,
+            metalness: 0.3,
+            transparent: true,
+            opacity: 0.6
         })
     };
 
     // --- Helper to Build Bird ---
     const createBirdMesh = (isGhost: boolean) => {
         const group = new THREE.Group();
-        
-        // Materials
         const opacity = isGhost ? 0.35 : 1.0;
         const transparent = isGhost;
-        const ghostColor = 0x40E0D0; // Turquoise/Cyan for ghost
+        const ghostColor = 0x40E0D0;
 
         const bodyMat = new THREE.MeshStandardMaterial({ 
             color: isGhost ? ghostColor : COLORS.BIRD_FILL, 
@@ -450,40 +497,35 @@ export const GameEngine: React.FC<GameEngineProps> = ({
             transparent, opacity 
         });
         const cheekMat = new THREE.MeshStandardMaterial({
-            color: isGhost ? ghostColor : 0xFF8A80, // Soft Pink
+            color: isGhost ? ghostColor : 0xFF8A80,
             roughness: 0.5,
             flatShading: true,
             transparent, opacity
         });
 
-        // 1. Body
         const bodyGeo = new THREE.CylinderGeometry(15, 15, 2, 32);
         const body = new THREE.Mesh(bodyGeo, bodyMat);
         body.rotation.x = Math.PI / 2;
         if (!isGhost) body.castShadow = true;
         group.add(body);
 
-        // 2. Eye
         const eyeGeo = new THREE.CylinderGeometry(7.5, 7.5, 2.2, 32);
         const eye = new THREE.Mesh(eyeGeo, whiteMat);
         eye.rotation.x = Math.PI / 2;
         eye.position.set(6, 5, 0.5);
         group.add(eye);
 
-        // 3. Pupil
         const pupilGeo = new THREE.CircleGeometry(3.5, 32);
         const pupil = new THREE.Mesh(pupilGeo, blackMat);
         pupil.position.set(8, 5, 1.7);
         group.add(pupil);
 
-        // 4. Cheek
         const cheekGeo = new THREE.CylinderGeometry(3.5, 3.5, 2.2, 32);
         const cheek = new THREE.Mesh(cheekGeo, cheekMat);
         cheek.rotation.x = Math.PI / 2;
         cheek.position.set(5, -4, 0.5);
         group.add(cheek);
 
-        // 5. Wing
         const wingGeo = new THREE.CylinderGeometry(5, 5, 2.2, 32);
         const wing = new THREE.Mesh(wingGeo, whiteMat);
         wing.rotation.x = Math.PI / 2;
@@ -491,7 +533,6 @@ export const GameEngine: React.FC<GameEngineProps> = ({
         wing.scale.set(1.5, 1.1, 1);
         group.add(wing);
 
-        // 6. Beak
         const beakShape = new THREE.Shape();
         beakShape.moveTo(0, 4);
         beakShape.lineTo(10, 0);
@@ -506,26 +547,20 @@ export const GameEngine: React.FC<GameEngineProps> = ({
         return group;
     };
 
-    // --- Create Birds ---
-    
-    // 1. Player Bird
     const birdGroup = createBirdMesh(false);
     scene.add(birdGroup);
     birdMeshRef.current = birdGroup;
 
-    // 2. Ghost Bird
     const ghostGroup = createBirdMesh(true);
-    ghostGroup.position.z = -10; // Slightly behind
+    ghostGroup.position.z = -10;
     ghostGroup.visible = false;
     scene.add(ghostGroup);
     ghostMeshRef.current = ghostGroup;
 
-    // Store refs
     sceneRef.current = scene;
     cameraRef.current = camera;
     rendererRef.current = renderer;
 
-    // Cleanup
     return () => {
         if (containerRef.current && renderer.domElement) {
             containerRef.current.removeChild(renderer.domElement);
@@ -535,8 +570,9 @@ export const GameEngine: React.FC<GameEngineProps> = ({
         geometryRef.current?.pipeCap.dispose();
         materialRef.current?.pipe.dispose();
         materialRef.current?.pipeCap.dispose();
+        materialRef.current?.glassPipe.dispose();
+        materialRef.current?.glassCap.dispose();
         
-        // Simple traversal cleanup for bird/ghost parts
         birdGroup.traverse((obj) => {
             if (obj instanceof THREE.Mesh) {
                 obj.geometry.dispose();

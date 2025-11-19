@@ -9,6 +9,9 @@ export const GAME_CONSTANTS = {
   PIPE_SPAWN_RATE: 120, // Frames
   BIRD_RADIUS: 18,
   BIRD_X_POSITION: 0.3, // 30% of screen width
+  GLASS_PIPE_CHANCE: 0.2,
+  GLASS_BREAK_SCORE: 5,
+  GLASS_BREAK_PENALTY: 5, // Positive Y velocity to push down
 };
 
 export const COLORS = {
@@ -16,6 +19,8 @@ export const COLORS = {
   BIRD_STROKE: '#FF9100', // Bright Orange
   PIPE_FILL: '#22C55E', // Brighter Green
   PIPE_STROKE: '#15803D', // Green 700
+  PIPE_GLASS: '#A5F3FC', // Cyan 200 for Glass
+  PIPE_GLASS_STROKE: '#CFFAFE', // Cyan 100
   SKY_TOP: '#6366F1', // Indigo 500
   SKY_BOTTOM: '#38BDF8', // Sky 400
 };
