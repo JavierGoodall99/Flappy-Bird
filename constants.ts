@@ -1,0 +1,21 @@
+
+export const GAME_CONSTANTS = {
+  GRAVITY: 0.4,
+  JUMP_STRENGTH: -7, // Negative because Y is down
+  BASE_PIPE_SPEED: 3.5,
+  SPEED_INCREMENT: 0.001, // Speed increase per frame
+  PIPE_GAP: 180,
+  PIPE_WIDTH: 60,
+  PIPE_SPAWN_RATE: 120, // Frames
+  BIRD_RADIUS: 18,
+  BIRD_X_POSITION: 0.3, // 30% of screen width
+};
+
+export const COLORS = {
+  BIRD_FILL: '#FFE600', // Brighter Vivid Yellow
+  BIRD_STROKE: '#FF9100', // Bright Orange
+  PIPE_FILL: '#22C55E', // Brighter Green
+  PIPE_STROKE: '#15803D', // Green 700
+  SKY_TOP: '#6366F1', // Indigo 500
+  SKY_BOTTOM: '#38BDF8', // Sky 400
+};
