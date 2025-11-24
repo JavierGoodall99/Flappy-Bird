@@ -1,4 +1,6 @@
 
+
+
 class AudioController {
   private ctx: AudioContext | null = null;
   private masterGain: GainNode | null = null;
@@ -86,7 +88,6 @@ class AudioController {
     const osc = this.ctx.createOscillator();
     const gain = this.ctx.createGain();
     
-    // High pass filter for "shatter" sound
     const filter = this.ctx.createBiquadFilter();
     filter.type = 'highpass';
     filter.frequency.value = 1000;
@@ -95,7 +96,6 @@ class AudioController {
     filter.connect(gain);
     gain.connect(this.masterGain);
 
-    // Random noise texture roughly approximated by high freq sawtooth/square
     osc.type = 'square'; 
     osc.frequency.setValueAtTime(800 + Math.random() * 500, this.ctx.currentTime);
     osc.frequency.exponentialRampToValueAtTime(100, this.ctx.currentTime + 0.1);
@@ -106,7 +106,6 @@ class AudioController {
     osc.start();
     osc.stop(this.ctx.currentTime + 0.1);
     
-    // Secondary "tinkle"
     const osc2 = this.ctx.createOscillator();
     const gain2 = this.ctx.createGain();
     osc2.connect(gain2);
@@ -121,38 +120,92 @@ class AudioController {
 
   playShrink() {
     if (!this.ctx || !this.masterGain) return;
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
-    osc.connect(gain);
-    gain.connect(this.masterGain);
-    
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(600, this.ctx.currentTime);
-    osc.frequency.linearRampToValueAtTime(1200, this.ctx.currentTime + 0.2);
-    
-    gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
-    gain.gain.linearRampToValueAtTime(0.01, this.ctx.currentTime + 0.2);
-    
-    osc.start();
-    osc.stop(this.ctx.currentTime + 0.2);
+    this.playPowerupSound(600, 1200, 'sine');
   }
 
   playGrow() {
+    if (!this.ctx || !this.masterGain) return;
+    this.playPowerupSound(300, 150, 'square');
+  }
+
+  playSlowMo() {
     if (!this.ctx || !this.masterGain) return;
     const osc = this.ctx.createOscillator();
     const gain = this.ctx.createGain();
     osc.connect(gain);
     gain.connect(this.masterGain);
     
-    osc.type = 'square';
-    osc.frequency.setValueAtTime(300, this.ctx.currentTime);
-    osc.frequency.linearRampToValueAtTime(150, this.ctx.currentTime + 0.3);
+    // Warping down sound
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(400, this.ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(100, this.ctx.currentTime + 1.0);
     
     gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
-    gain.gain.linearRampToValueAtTime(0.01, this.ctx.currentTime + 0.3);
+    gain.gain.linearRampToValueAtTime(0.01, this.ctx.currentTime + 1.0);
     
     osc.start();
-    osc.stop(this.ctx.currentTime + 0.3);
+    osc.stop(this.ctx.currentTime + 1.0);
+  }
+
+  playShieldUp() {
+    if (!this.ctx || !this.masterGain) return;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.connect(gain);
+    gain.connect(this.masterGain);
+    
+    // Rising "charging" sound
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(200, this.ctx.currentTime);
+    osc.frequency.linearRampToValueAtTime(800, this.ctx.currentTime + 0.5);
+    
+    gain.gain.setValueAtTime(0.1, this.ctx.currentTime);
+    gain.gain.linearRampToValueAtTime(0.4, this.ctx.currentTime + 0.2);
+    gain.gain.linearRampToValueAtTime(0.01, this.ctx.currentTime + 0.5);
+    
+    osc.start();
+    osc.stop(this.ctx.currentTime + 0.5);
+  }
+
+  playShieldBreak() {
+    if (!this.ctx || !this.masterGain) return;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.connect(gain);
+    gain.connect(this.masterGain);
+    
+    // Quick shattering noise
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(800, this.ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(100, this.ctx.currentTime + 0.1);
+    
+    gain.gain.setValueAtTime(0.4, this.ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.1);
+    
+    osc.start();
+    osc.stop(this.ctx.currentTime + 0.1);
+  }
+
+  playGhost() {
+    if (!this.ctx || !this.masterGain) return;
+    this.playPowerupSound(1000, 1000, 'sine', 0.1, 0.5); // Ethereal ping
+  }
+
+  private playPowerupSound(startFreq: number, endFreq: number, type: OscillatorType, duration: number = 0.2, volume: number = 0.3) {
+    const osc = this.ctx!.createOscillator();
+    const gain = this.ctx!.createGain();
+    osc.connect(gain);
+    gain.connect(this.masterGain!);
+    
+    osc.type = type;
+    osc.frequency.setValueAtTime(startFreq, this.ctx!.currentTime);
+    osc.frequency.linearRampToValueAtTime(endFreq, this.ctx!.currentTime + duration);
+    
+    gain.gain.setValueAtTime(volume, this.ctx!.currentTime);
+    gain.gain.linearRampToValueAtTime(0.01, this.ctx!.currentTime + duration);
+    
+    osc.start();
+    osc.stop(this.ctx!.currentTime + duration);
   }
 }
 

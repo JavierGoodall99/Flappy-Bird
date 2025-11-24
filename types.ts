@@ -24,11 +24,19 @@ export interface Pipe {
   brokenBottom: boolean;
 }
 
+export type PowerupType = 'shrink' | 'grow' | 'slowmo' | 'shield' | 'ghost';
+
 export interface Powerup {
   x: number;
   y: number;
-  type: 'shrink' | 'grow';
+  type: PowerupType;
   active: boolean;
+}
+
+export interface ActivePowerup {
+  type: PowerupType;
+  timeLeft: number; // in milliseconds roughly (frames)
+  totalTime: number;
 }
 
 export interface GameConfig {
@@ -39,8 +47,84 @@ export interface GameConfig {
   pipeGap: number;
 }
 
-export interface ReplayFrame {
+// --- COSMETICS ---
+
+export type Rarity = 'Common' | 'Rare' | 'Epic' | 'Legendary';
+export type TrailType = 'none' | 'smoke' | 'sparkle' | 'neon_line' | 'pixel_dust' | 'ghost_trail';
+export type SkinId = 
+  | 'default' | 'neon_blue' | 'neon_pink' | 'pixel_bird' | 'pixel_scout' 
+  | 'ninja' | 'robot' | 'ghost' | 'golden'
+  | 'magma' | 'ice_breaker' | 'bumblebee' | 'zombie' | 'vampire' | 'bubblegum' | 'toxic' | 'saiyan'
+  | 'ninja_sage' | 'pirate_king';
+
+export interface UnlockCondition {
+  type: 'default' | 'score' | 'games_played' | 'login' | 'lucky_drop';
+  value: number; // e.g. Score 50, or 100 games
+  description: string;
+}
+
+export interface Skin {
+  id: SkinId;
+  name: string;
+  rarity: Rarity;
+  unlockCondition: UnlockCondition;
+  
+  // Visual Configuration
+  modelType: 'standard' | 'neon' | 'pixel';
+  trail: TrailType;
+  
+  // Colors (hex strings)
+  colors: {
+    body: number;
+    wing: number;
+    beak: number;
+    eye: number;
+    glow?: number; // For neon
+  };
+}
+
+export interface Particle {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  life: number;
+  maxLife: number;
+  scale: number;
+  color: number;
+  rotation: number;
+}
+// --- ENVIRONMENT ---
+
+export type Biome = 'City' | 'Jungle' | 'Space' | 'Underwater';
+export type Weather = 'Clear' | 'Rain' | 'Fog' | 'Wind';
+export type TimeOfDay = 'Dawn' | 'Noon' | 'Dusk' | 'Night';
+
+export interface EnvironmentState {
+  biome: Biome;
+  timeOfDay: TimeOfDay;
+  weather: Weather;
+  timeProgress: number; // 0 to 1 for day cycle
+}
+
+// --- ENDLESS DANGER MODE ---
+
+export type GameMode = 'standard' | 'danger';
+
+export type HazardType = 'laser' | 'debris';
+
+export interface Laser {
+  id: number;
+  y: number;
+  width: number; // full screen usually
+  state: 'warning' | 'active' | 'cooldown';
+  timer: number;
+}
+
+export interface Debris {
+  id: number;
+  x: number;
   y: number;
   rotation: number;
-  scale: number;
+  size: number;
 }
