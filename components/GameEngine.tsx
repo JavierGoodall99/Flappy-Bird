@@ -1,9 +1,10 @@
 
 import React, { useRef, useEffect, useCallback } from 'react';
 import * as THREE from 'three';
-import { GameState, Bird, Pipe, Powerup, PowerupType, ActivePowerup, Skin, Particle } from '../types';
+import { GameState, Bird, Pipe, Powerup, PowerupType, ActivePowerup, Skin, Particle, Projectile, RemotePlayer } from '../types';
 import { GAME_CONSTANTS, COLORS, PARTICLE_CONFIG } from '../constants';
 import { audioService } from '../services/audioService';
+import { Socket } from 'socket.io-client';
 
 interface GameEngineProps {
   gameState: GameState;
@@ -13,6 +14,7 @@ interface GameEngineProps {
   highScore: number;
   setActivePowerup: (powerup: ActivePowerup | null) => void;
   currentSkin: Skin;
+  socket?: Socket;
 }
 
 export const GameEngine: React.FC<GameEngineProps> = ({ 
@@ -22,7 +24,8 @@ export const GameEngine: React.FC<GameEngineProps> = ({
   triggerEffect,
   highScore,
   setActivePowerup,
-  currentSkin
+  currentSkin,
+  socket
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const requestRef = useRef<number>(0);
@@ -45,9 +48,15 @@ export const GameEngine: React.FC<GameEngineProps> = ({
   const pipesRef = useRef<Pipe[]>([]);
   const powerupsRef = useRef<Powerup[]>([]);
   const particlesRef = useRef<Particle[]>([]);
+  const projectilesRef = useRef<Projectile[]>([]);
+  const lastShotFrameRef = useRef<number>(0);
+
   const scoreRef = useRef<number>(0);
   const speedRef = useRef<number>(GAME_CONSTANTS.BASE_PIPE_SPEED);
   const prevGameStateRef = useRef<GameState>(gameState);
+
+  // Multiplayer Refs
+  const remotePlayersRef = useRef<Map<string, RemotePlayer>>(new Map());
   
   // Three.js Refs
   const sceneRef = useRef<THREE.Scene | null>(null);
@@ -56,6 +65,9 @@ export const GameEngine: React.FC<GameEngineProps> = ({
   const birdMeshRef = useRef<THREE.Group | null>(null);
   const pipeMeshesRef = useRef<Map<Pipe, THREE.Group>>(new Map());
   const powerupMeshesRef = useRef<Map<Powerup, THREE.Mesh>>(new Map());
+  const projectileMeshesRef = useRef<THREE.Mesh[]>([]);
+  const remotePlayerMeshesRef = useRef<Map<string, THREE.Group>>(new Map());
+
   const particleMeshesRef = useRef<THREE.Mesh[]>([]); // Pool of particle meshes
   const sceneReady = useRef<boolean>(false);
 
@@ -75,6 +87,7 @@ export const GameEngine: React.FC<GameEngineProps> = ({
     strawHatBrim: THREE.CylinderGeometry;
     strawHatTop: THREE.CylinderGeometry;
     headbandPlate: THREE.BoxGeometry;
+    gunBarrel: THREE.CylinderGeometry;
   } | null>(null);
   
   const materialRef = useRef<{
@@ -87,8 +100,11 @@ export const GameEngine: React.FC<GameEngineProps> = ({
     pSlow: THREE.MeshStandardMaterial;
     pShield: THREE.MeshStandardMaterial;
     pGhost: THREE.MeshStandardMaterial;
+    pGun: THREE.MeshStandardMaterial;
     shieldEffect: THREE.MeshPhysicalMaterial;
+    projectile: THREE.MeshBasicMaterial;
     particleMat: THREE.MeshBasicMaterial;
+    gunMat: THREE.MeshStandardMaterial;
   } | null>(null);
 
   // Initialize Game State
@@ -106,6 +122,7 @@ export const GameEngine: React.FC<GameEngineProps> = ({
     pipesRef.current = [];
     powerupsRef.current = [];
     particlesRef.current = [];
+    projectilesRef.current = [];
     scoreRef.current = 0;
     speedRef.current = GAME_CONSTANTS.BASE_PIPE_SPEED;
     frameCountRef.current = 0;
@@ -123,6 +140,7 @@ export const GameEngine: React.FC<GameEngineProps> = ({
       pipeMeshesRef.current.clear();
       powerupMeshesRef.current.forEach((mesh) => sceneRef.current?.remove(mesh));
       powerupMeshesRef.current.clear();
+      projectileMeshesRef.current.forEach(mesh => { mesh.visible = false; });
       
       // Hide all particles
       particleMeshesRef.current.forEach(mesh => mesh.visible = false);
@@ -242,62 +260,22 @@ export const GameEngine: React.FC<GameEngineProps> = ({
             const mediumSpike = geometryRef.current.hairSpikeMedium || new THREE.ConeGeometry(3, 12, 8);
             const smallSpike = geometryRef.current.hairSpikeSmall || new THREE.ConeGeometry(2, 8, 8);
 
-            // 1. Central Big Crests
             const s1 = new THREE.Mesh(largeSpike, hairMat);
-            s1.position.set(0, 16, -2);
-            s1.rotation.x = -0.3;
-            s1.scale.set(1.2, 1.2, 0.4);
-            group.add(s1);
-
+            s1.position.set(0, 16, -2); s1.rotation.x = -0.3; s1.scale.set(1.2, 1.2, 0.4); group.add(s1);
             const s2 = new THREE.Mesh(largeSpike, hairMat);
-            s2.position.set(-4, 15, -1);
-            s2.rotation.z = 0.5;
-            s2.rotation.x = -0.3;
-            s2.scale.set(1, 1, 0.4);
-            group.add(s2);
-
+            s2.position.set(-4, 15, -1); s2.rotation.z = 0.5; s2.rotation.x = -0.3; group.add(s2);
             const s3 = new THREE.Mesh(largeSpike, hairMat);
-            s3.position.set(4, 15, -1);
-            s3.rotation.z = -0.5;
-            s3.rotation.x = -0.3;
-            s3.scale.set(1, 1, 0.4);
-            group.add(s3);
-
-            // 2. Wide Flares
+            s3.position.set(4, 15, -1); s3.rotation.z = -0.5; s3.rotation.x = -0.3; group.add(s3);
             const s4 = new THREE.Mesh(mediumSpike, hairMat);
-            s4.position.set(-8, 11, -1);
-            s4.rotation.z = 1.0;
-            s4.rotation.x = -0.2;
-            s4.scale.set(1, 1, 0.4);
-            group.add(s4);
-
+            s4.position.set(-8, 11, -1); s4.rotation.z = 1.0; s4.rotation.x = -0.2; group.add(s4);
             const s5 = new THREE.Mesh(mediumSpike, hairMat);
-            s5.position.set(8, 11, -1);
-            s5.rotation.z = -1.0;
-            s5.rotation.x = -0.2;
-            s5.scale.set(1, 1, 0.4);
-            group.add(s5);
-
-            // 3. Bangs / Forehead
+            s5.position.set(8, 11, -1); s5.rotation.z = -1.0; s5.rotation.x = -0.2; group.add(s5);
             const b1 = new THREE.Mesh(smallSpike, hairMat);
-            b1.position.set(0, 10, 5); // Forward
-            b1.rotation.x = 0.8; // Pointing down/forward
-            b1.scale.set(0.8, 0.8, 0.4);
-            group.add(b1);
-
+            b1.position.set(0, 10, 5); b1.rotation.x = 0.8; b1.scale.set(0.8, 0.8, 0.4); group.add(b1);
             const b2 = new THREE.Mesh(smallSpike, hairMat);
-            b2.position.set(-3, 11, 4);
-            b2.rotation.x = 0.6;
-            b2.rotation.z = 0.3;
-            b2.scale.set(0.8, 0.8, 0.4);
-            group.add(b2);
-
-            // 4. Back Volume filler
+            b2.position.set(-3, 11, 4); b2.rotation.x = 0.6; b2.rotation.z = 0.3; b2.scale.set(0.8, 0.8, 0.4); group.add(b2);
             const v1 = new THREE.Mesh(mediumSpike, hairMat);
-            v1.position.set(0, 12, -4);
-            v1.rotation.x = -0.8;
-            v1.scale.set(1.5, 0.8, 0.4);
-            group.add(v1);
+            v1.position.set(0, 12, -4); v1.rotation.x = -0.8; v1.scale.set(1.5, 0.8, 0.4); group.add(v1);
         }
 
         // --- NINJA SAGE (NARUTO) ---
@@ -305,13 +283,11 @@ export const GameEngine: React.FC<GameEngineProps> = ({
           const yellowHairMat = new THREE.MeshStandardMaterial({ color: 0xFFD700, roughness: 0.3, transparent, opacity });
           const metalMat = new THREE.MeshStandardMaterial({ color: 0xCCCCCC, roughness: 0.1, metalness: 0.8, transparent, opacity });
           
-          // Plate only (Band removed to fix visual artifacts)
           const plateGeo = geometryRef.current.headbandPlate || new THREE.BoxGeometry(10, 3, 1);
           const plate = new THREE.Mesh(plateGeo, metalMat);
-          plate.position.set(2, 8, 15); // Forehead
+          plate.position.set(2, 8, 15); 
           group.add(plate);
 
-          // Spiky Blonde Hair (simplified spiky look)
           const spikeGeo = geometryRef.current.hairSpikeMedium || new THREE.ConeGeometry(3, 12, 8);
           for(let i=-2; i<=2; i++) {
              const spike = new THREE.Mesh(spikeGeo, yellowHairMat);
@@ -323,59 +299,42 @@ export const GameEngine: React.FC<GameEngineProps> = ({
 
         // --- PIRATE KING (LUFFY) ---
         if (skin.id === 'pirate_king') {
-           const strawMat = new THREE.MeshStandardMaterial({ color: 0xFFD54F, roughness: 0.8, flatShading: false, transparent, opacity }); // SandyBrown
+           const strawMat = new THREE.MeshStandardMaterial({ color: 0xFFD54F, roughness: 0.8, flatShading: false, transparent, opacity }); 
            const redBandMat = new THREE.MeshStandardMaterial({ color: 0xD32F2F, roughness: 0.6, transparent, opacity });
            const hairMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.9, transparent, opacity });
            
-           // 1. Messy Hair Base (Spikes under hat)
            const hairGeo = geometryRef.current.hairSpikeSmall || new THREE.ConeGeometry(2, 8, 8);
            const hairPositions = [
-             {x: 6, y: 7, z: 4, rz: -0.5, rx: 0.5}, // Front Right
-             {x: 6, y: 7, z: -4, rz: -0.5, rx: -0.5}, // Front Left
-             {x: -6, y: 6, z: 6, rz: 0.5, rx: 0.5}, // Back Right
-             {x: -6, y: 6, z: -6, rz: 0.5, rx: -0.5}, // Back Left
-             {x: 0, y: 8, z: 7, rz: 0, rx: 0.8}, // Right Side
-             {x: 0, y: 8, z: -7, rz: 0, rx: -0.8}, // Left Side
+             {x: 6, y: 7, z: 4, rz: -0.5, rx: 0.5}, {x: 6, y: 7, z: -4, rz: -0.5, rx: -0.5},
+             {x: -6, y: 6, z: 6, rz: 0.5, rx: 0.5}, {x: -6, y: 6, z: -6, rz: 0.5, rx: -0.5},
+             {x: 0, y: 8, z: 7, rz: 0, rx: 0.8}, {x: 0, y: 8, z: -7, rz: 0, rx: -0.8},
            ];
-           
            hairPositions.forEach(pos => {
              const spike = new THREE.Mesh(hairGeo, hairMat);
              spike.position.set(pos.x, pos.y, pos.z);
-             spike.rotation.z = pos.rz;
-             spike.rotation.x = pos.rx;
-             spike.scale.set(1.5, 1, 1);
+             spike.rotation.z = pos.rz; spike.rotation.x = pos.rx; spike.scale.set(1.5, 1, 1);
              group.add(spike);
            });
 
-           // 2. Brim
            const brimGeo = geometryRef.current.strawHatBrim || new THREE.CylinderGeometry(24, 24, 1, 32);
            const brim = new THREE.Mesh(brimGeo, strawMat);
-           brim.rotation.x = Math.PI/2;
-           brim.position.set(0, 10, 0);
-           brim.scale.set(1, 0.05, 0.9);
+           brim.rotation.x = Math.PI/2; brim.position.set(0, 10, 0); brim.scale.set(1, 0.05, 0.9);
            group.add(brim);
 
-           // 3. Hat Dome (Round)
            const domeGeo = new THREE.SphereGeometry(9, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2);
            const dome = new THREE.Mesh(domeGeo, strawMat);
-           dome.rotation.x = -Math.PI/2;
-           dome.position.set(0, 10, 0);
-           dome.scale.set(1, 0.7, 1);
+           dome.rotation.x = -Math.PI/2; dome.position.set(0, 10, 0); dome.scale.set(1, 0.7, 1);
            group.add(dome);
 
-           // 4. Red Band
            const bandGeo = new THREE.CylinderGeometry(9.2, 9.2, 2, 32, 1, true);
            const band = new THREE.Mesh(bandGeo, redBandMat);
-           band.rotation.x = Math.PI/2;
-           band.position.set(0, 11, 0);
+           band.rotation.x = Math.PI/2; band.position.set(0, 11, 0);
            group.add(band);
            
-           // 5. Scar
            const scarGeo = new THREE.BoxGeometry(3, 0.3, 0.2);
            const scarMat = new THREE.MeshBasicMaterial({ color: 0x3E2723, transparent, opacity: 0.7 });
            const scar = new THREE.Mesh(scarGeo, scarMat);
-           scar.position.set(6, 2, 2.5); // Under eye
-           scar.rotation.z = -0.2;
+           scar.position.set(6, 2, 2.5); scar.rotation.z = -0.2;
            group.add(scar);
         }
     } 
@@ -390,8 +349,6 @@ export const GameEngine: React.FC<GameEngineProps> = ({
         const eyeMat = new THREE.MeshBasicMaterial({ color: skin.colors.eye, transparent, opacity });
         const wingMat = new THREE.MeshStandardMaterial({ color: skin.colors.wing || 0xffffff, roughness: 0.5, transparent, opacity });
 
-        // Simple Voxel construction (7x7 grid roughly)
-        // Body block
         for(let x=-2; x<=2; x++) {
             for(let y=-2; y<=2; y++) {
                 const mesh = new THREE.Mesh(geo, mat);
@@ -400,23 +357,10 @@ export const GameEngine: React.FC<GameEngineProps> = ({
                 group.add(mesh);
             }
         }
-        // Beak
-        const beak = new THREE.Mesh(geo, beakMat);
-        beak.position.set(3*size, 0, 0);
-        group.add(beak);
-        const beak2 = new THREE.Mesh(geo, beakMat);
-        beak2.position.set(3*size, -1*size, 0);
-        group.add(beak2);
-
-        // Eye
-        const eye = new THREE.Mesh(geo, eyeMat);
-        eye.position.set(1*size, 1*size, size);
-        group.add(eye);
-
-        // Wing
-        const wing = new THREE.Mesh(geo, wingMat);
-        wing.position.set(-1*size, -1*size, size);
-        group.add(wing);
+        const beak = new THREE.Mesh(geo, beakMat); beak.position.set(3*size, 0, 0); group.add(beak);
+        const beak2 = new THREE.Mesh(geo, beakMat); beak2.position.set(3*size, -1*size, 0); group.add(beak2);
+        const eye = new THREE.Mesh(geo, eyeMat); eye.position.set(1*size, 1*size, size); group.add(eye);
+        const wing = new THREE.Mesh(geo, wingMat); wing.position.set(-1*size, -1*size, size); group.add(wing);
     }
 
     // --- Shield Sphere (Hidden by default) ---
@@ -428,19 +372,27 @@ export const GameEngine: React.FC<GameEngineProps> = ({
         group.add(shieldMesh);
     }
 
+    // --- Gun Attachment (Hidden by default) ---
+    if (geometryRef.current && materialRef.current) {
+        const gunGeo = geometryRef.current.gunBarrel || new THREE.CylinderGeometry(2, 2, 8, 16);
+        const gunMesh = new THREE.Mesh(gunGeo, materialRef.current.gunMat);
+        gunMesh.name = 'gun';
+        gunMesh.visible = false;
+        gunMesh.rotation.z = -Math.PI / 2;
+        gunMesh.position.set(5, -5, 10); // Side mounted
+        group.add(gunMesh);
+    }
+
     return group;
   }, [currentSkin]);
 
   // Re-create bird when skin changes or scene is ready
   useEffect(() => {
     if (!sceneReady.current || !sceneRef.current) return;
-    
     if (birdMeshRef.current) {
         sceneRef.current.remove(birdMeshRef.current);
     }
-    
     const newBird = createBirdMesh();
-    
     // Preserve position/rotation
     const width = window.innerWidth;
     const height = window.innerHeight;
@@ -448,7 +400,6 @@ export const GameEngine: React.FC<GameEngineProps> = ({
     newBird.position.x = toWorldX(birdX, width);
     newBird.position.y = toWorldY(birdRef.current.y, height);
     newBird.rotation.z = birdRef.current.rotation;
-    
     sceneRef.current.add(newBird);
     birdMeshRef.current = newBird;
   }, [currentSkin, createBirdMesh]);
@@ -489,53 +440,124 @@ export const GameEngine: React.FC<GameEngineProps> = ({
       speedRef.current += GAME_CONSTANTS.SPEED_INCREMENT * dt;
       const moveSpeed = speedRef.current * dt;
 
-      // Spawn Pipes
-      const spawnInterval = Math.floor(GAME_CONSTANTS.PIPE_SPAWN_RATE * (GAME_CONSTANTS.BASE_PIPE_SPEED / speedRef.current));
-      if (frameCountRef.current % Math.floor(Math.max(30, spawnInterval / timeScaleRef.current)) === 0) {
-        const minPipeHeight = 50;
-        const maxTopPipeHeight = Math.max(minPipeHeight, height - GAME_CONSTANTS.PIPE_GAP - minPipeHeight);
-        let minBound = minPipeHeight;
-        let maxBound = maxTopPipeHeight;
-        if (pipesRef.current.length > 0) {
-            const lastPipe = pipesRef.current[pipesRef.current.length - 1];
-            const timeFactor = (GAME_CONSTANTS.BASE_PIPE_SPEED / speedRef.current);
-            const maxJump = Math.max(80, (height * 0.4) * timeFactor);
-            minBound = Math.max(minPipeHeight, lastPipe.topHeight - maxJump);
-            maxBound = Math.min(maxTopPipeHeight, lastPipe.topHeight + maxJump);
-        } else {
-            minBound = height / 3;
-            maxBound = height / 1.5;
-        }
-        const topHeight = Math.floor(minBound + Math.random() * (maxBound - minBound));
-        const isGlass = Math.random() < GAME_CONSTANTS.GLASS_PIPE_CHANCE;
-        pipesRef.current.push({
-          x: width, topHeight, passed: false, type: isGlass ? 'glass' : 'normal', brokenTop: false, brokenBottom: false
-        });
+      // Socket Sync
+      if (socket) {
+          socket.emit("player_update", {
+              roomId: "default", // Need proper room id passing
+              y: birdRef.current.y,
+              rotation: birdRef.current.rotation,
+              scale: birdRef.current.scale
+          });
       }
 
-      // Spawn Powerups
-      if (frameCountRef.current % Math.floor(GAME_CONSTANTS.POWERUP_SPAWN_RATE / timeScaleRef.current) === 0) {
-         const rand = Math.random();
-         let type: PowerupType = 'shrink'; 
-         if (rand < 0.25) type = 'shrink';
-         else if (rand < 0.5) type = 'grow';
-         else if (rand < 0.7) type = 'shield';
-         else if (rand < 0.85) type = 'slowmo';
-         else type = 'ghost';
+      // --- GUN LOGIC ---
+      if (activePowerupRef.current?.type === 'gun') {
+          if (frameCountRef.current - lastShotFrameRef.current >= GAME_CONSTANTS.GUN_FIRE_RATE) {
+              lastShotFrameRef.current = frameCountRef.current;
+              // Fire
+              const birdX = width * GAME_CONSTANTS.BIRD_X_POSITION;
+              projectilesRef.current.push({
+                  id: Math.random(),
+                  x: birdX + 20,
+                  y: birdRef.current.y - 5,
+                  vx: GAME_CONSTANTS.PROJECTILE_SPEED
+              });
+              audioService.playShoot();
+          }
+      }
 
-         let spawnMinY = height * 0.25;
-         let spawnMaxY = height * 0.75;
-         if (pipesRef.current.length > 0) {
-            const lastPipe = pipesRef.current[pipesRef.current.length - 1];
-            const distFromPipe = Math.abs(width - lastPipe.x);
-            if (distFromPipe < 350) {
-                const padding = 45;
-                spawnMinY = lastPipe.topHeight + padding;
-                spawnMaxY = lastPipe.topHeight + GAME_CONSTANTS.PIPE_GAP - padding;
+      // Move Projectiles & Check Collision
+      for (let i = projectilesRef.current.length - 1; i >= 0; i--) {
+          const proj = projectilesRef.current[i];
+          proj.x += proj.vx * dt;
+          
+          let hit = false;
+          // Pipe Hit
+          for (let j = 0; j < pipesRef.current.length; j++) {
+              const pipe = pipesRef.current[j];
+              if (proj.x > pipe.x && proj.x < pipe.x + GAME_CONSTANTS.PIPE_WIDTH) {
+                  // Hit check Top
+                  if (!pipe.brokenTop && proj.y < pipe.topHeight) {
+                      pipe.brokenTop = true;
+                      hit = true;
+                  }
+                  // Hit check Bottom
+                  else if (!pipe.brokenBottom && proj.y > pipe.topHeight + GAME_CONSTANTS.PIPE_GAP) {
+                      pipe.brokenBottom = true;
+                      hit = true;
+                  }
+                  if (hit) {
+                      scoreRef.current += 2;
+                      setScore(scoreRef.current);
+                      audioService.playExplosion();
+                      triggerEffect();
+                      // Spawn particles at impact
+                      for(let k=0; k<10; k++) {
+                           particlesRef.current.push({
+                              x: proj.x, y: proj.y,
+                              vx: (Math.random()-0.5)*5, vy: (Math.random()-0.5)*5,
+                              life: 20, maxLife: 20, scale: 3, color: 0xFF0000, rotation: 0
+                           });
+                      }
+                      break; 
+                  }
+              }
+          }
+          if (hit || proj.x > width + 100) {
+              projectilesRef.current.splice(i, 1);
+          }
+      }
+
+      // Spawn Pipes (Local only if no socket, or if socket logic allows)
+      if (!socket) {
+        const spawnInterval = Math.floor(GAME_CONSTANTS.PIPE_SPAWN_RATE * (GAME_CONSTANTS.BASE_PIPE_SPEED / speedRef.current));
+        if (frameCountRef.current % Math.floor(Math.max(30, spawnInterval / timeScaleRef.current)) === 0) {
+            const minPipeHeight = 50;
+            const maxTopPipeHeight = Math.max(minPipeHeight, height - GAME_CONSTANTS.PIPE_GAP - minPipeHeight);
+            let minBound = minPipeHeight;
+            let maxBound = maxTopPipeHeight;
+            if (pipesRef.current.length > 0) {
+                const lastPipe = pipesRef.current[pipesRef.current.length - 1];
+                const timeFactor = (GAME_CONSTANTS.BASE_PIPE_SPEED / speedRef.current);
+                const maxJump = Math.max(80, (height * 0.4) * timeFactor);
+                minBound = Math.max(minPipeHeight, lastPipe.topHeight - maxJump);
+                maxBound = Math.min(maxTopPipeHeight, lastPipe.topHeight + maxJump);
+            } else {
+                minBound = height / 3;
+                maxBound = height / 1.5;
             }
-         }
-         const y = spawnMinY + Math.random() * (spawnMaxY - spawnMinY);
-         powerupsRef.current.push({ x: width, y, type, active: true });
+            const topHeight = Math.floor(minBound + Math.random() * (maxBound - minBound));
+            const isGlass = Math.random() < GAME_CONSTANTS.GLASS_PIPE_CHANCE;
+            pipesRef.current.push({
+                x: width, topHeight, passed: false, type: isGlass ? 'glass' : 'normal', brokenTop: false, brokenBottom: false
+            });
+        }
+
+        // Spawn Powerups
+        if (frameCountRef.current % Math.floor(GAME_CONSTANTS.POWERUP_SPAWN_RATE / timeScaleRef.current) === 0) {
+            const rand = Math.random();
+            let type: PowerupType = 'shrink'; 
+            if (rand < 0.2) type = 'shrink';
+            else if (rand < 0.4) type = 'grow';
+            else if (rand < 0.55) type = 'shield';
+            else if (rand < 0.7) type = 'slowmo';
+            else if (rand < 0.85) type = 'gun';
+            else type = 'ghost';
+
+            let spawnMinY = height * 0.25;
+            let spawnMaxY = height * 0.75;
+            if (pipesRef.current.length > 0) {
+                const lastPipe = pipesRef.current[pipesRef.current.length - 1];
+                const distFromPipe = Math.abs(width - lastPipe.x);
+                if (distFromPipe < 350) {
+                    const padding = 45;
+                    spawnMinY = lastPipe.topHeight + padding;
+                    spawnMaxY = lastPipe.topHeight + GAME_CONSTANTS.PIPE_GAP - padding;
+                }
+            }
+            const y = spawnMinY + Math.random() * (spawnMaxY - spawnMinY);
+            powerupsRef.current.push({ x: width, y, type, active: true });
+        }
       }
 
       const birdX = width * GAME_CONSTANTS.BIRD_X_POSITION;
@@ -560,6 +582,7 @@ export const GameEngine: React.FC<GameEngineProps> = ({
                 case 'slowmo': targetTimeScaleRef.current = GAME_CONSTANTS.TIME_SCALE_SLOW; duration = GAME_CONSTANTS.DURATION_SLOWMO; audioService.playSlowMo(); break;
                 case 'shield': duration = GAME_CONSTANTS.DURATION_SHIELD; audioService.playShieldUp(); break;
                 case 'ghost': duration = GAME_CONSTANTS.DURATION_GHOST; audioService.playGhost(); break;
+                case 'gun': duration = GAME_CONSTANTS.DURATION_GUN; audioService.playShieldUp(); break; // Reuse charge sound
             }
             birdRef.current.effectTimer = duration;
             activePowerupRef.current = { type: p.type, timeLeft: duration, totalTime: duration };
@@ -610,8 +633,8 @@ export const GameEngine: React.FC<GameEngineProps> = ({
         const isGhost = activePowerupRef.current?.type === 'ghost';
         if (!isGhost) {
             if (birdX + birdRadius > pipe.x && birdX - birdRadius < pipe.x + GAME_CONSTANTS.PIPE_WIDTH) {
-              const hitTop = birdRef.current.y - birdRadius < pipe.topHeight;
-              const hitBottom = birdRef.current.y + birdRadius > pipe.topHeight + GAME_CONSTANTS.PIPE_GAP;
+              const hitTop = !pipe.brokenTop && birdRef.current.y - birdRadius < pipe.topHeight;
+              const hitBottom = !pipe.brokenBottom && birdRef.current.y + birdRadius > pipe.topHeight + GAME_CONSTANTS.PIPE_GAP;
               if (hitTop || hitBottom) {
                  if (pipe.type === 'glass') {
                    const isFreshBreak = (hitTop && !pipe.brokenTop) || (hitBottom && !pipe.brokenBottom);
@@ -636,6 +659,7 @@ export const GameEngine: React.FC<GameEngineProps> = ({
                    } else {
                        audioService.playCrash();
                        triggerEffect();
+                       if (socket) socket.emit("player_died", { roomId: "default" });
                        setGameState(GameState.GAME_OVER);
                    }
                  }
@@ -653,6 +677,7 @@ export const GameEngine: React.FC<GameEngineProps> = ({
       if (birdRef.current.y + birdRadius >= height || birdRef.current.y - birdRadius <= 0) {
          audioService.playCrash();
          triggerEffect();
+         if (socket) socket.emit("player_died", { roomId: "default" });
          setGameState(GameState.GAME_OVER);
       }
     }
@@ -660,6 +685,7 @@ export const GameEngine: React.FC<GameEngineProps> = ({
     // --- 3D RENDERING SYNC ---
     const isShieldActive = activePowerupRef.current?.type === 'shield';
     const isGhostActive = activePowerupRef.current?.type === 'ghost';
+    const isGunActive = activePowerupRef.current?.type === 'gun';
 
     if (birdMeshRef.current) {
       const birdX = width * GAME_CONSTANTS.BIRD_X_POSITION;
@@ -673,7 +699,7 @@ export const GameEngine: React.FC<GameEngineProps> = ({
       birdMeshRef.current.traverse((child) => {
           if (child instanceof THREE.Mesh) {
              const mat = child.material as THREE.MeshStandardMaterial;
-             if (mat.name !== 'shield') { 
+             if (mat.name !== 'shield' && mat.name !== 'gun') { 
                  mat.opacity = isGhostActive ? 0.3 : 1.0;
                  mat.transparent = true; 
              }
@@ -689,32 +715,93 @@ export const GameEngine: React.FC<GameEngineProps> = ({
               shield.rotation.y += 0.05;
           }
       }
+
+      const gun = birdMeshRef.current.getObjectByName('gun');
+      if (gun) {
+          gun.visible = isGunActive;
+      }
     }
 
     // Sync Particles
-    // Reset all particle meshes to invisible
     particleMeshesRef.current.forEach(m => m.visible = false);
-    // Expand pool if needed
     while (particleMeshesRef.current.length < particlesRef.current.length) {
         const geo = currentSkin.trail === 'pixel_dust' || currentSkin.trail === 'neon_line' ? geometryRef.current!.particleBox : geometryRef.current!.particleSphere;
         const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true }));
         sceneRef.current?.add(mesh);
         particleMeshesRef.current.push(mesh);
     }
-    
-    // Update visible particles
     particlesRef.current.forEach((p, i) => {
         const mesh = particleMeshesRef.current[i];
         mesh.visible = true;
         mesh.position.x = toWorldX(p.x, width);
         mesh.position.y = toWorldY(p.y, height);
-        mesh.position.z = -5; // Behind bird
+        mesh.position.z = -5; 
         const scale = p.scale * (p.life / p.maxLife);
         mesh.scale.set(scale, scale, scale);
         (mesh.material as THREE.MeshBasicMaterial).color.setHex(p.color);
         (mesh.material as THREE.MeshBasicMaterial).opacity = p.life / p.maxLife;
         mesh.rotation.z = p.rotation;
     });
+
+    // Sync Projectiles (Gun)
+    projectileMeshesRef.current.forEach(m => m.visible = false);
+    while (projectileMeshesRef.current.length < projectilesRef.current.length) {
+        // Reuse particle sphere for bullets for now, slightly bigger
+        const mesh = new THREE.Mesh(geometryRef.current!.particleSphere, materialRef.current!.projectile);
+        sceneRef.current?.add(mesh);
+        projectileMeshesRef.current.push(mesh);
+    }
+    projectilesRef.current.forEach((p, i) => {
+        const mesh = projectileMeshesRef.current[i];
+        mesh.visible = true;
+        mesh.position.x = toWorldX(p.x, width);
+        mesh.position.y = toWorldY(p.y, height);
+        mesh.position.z = 2;
+        mesh.scale.set(3, 3, 3);
+    });
+
+    // Sync Remote Players (Multiplayer)
+    if (socket && sceneRef.current) {
+        // Remove disconnected players
+        for (const [id, mesh] of remotePlayerMeshesRef.current) {
+            if (!remotePlayersRef.current.has(id)) {
+                sceneRef.current.remove(mesh);
+                remotePlayerMeshesRef.current.delete(id);
+            }
+        }
+        // Update existing players
+        remotePlayersRef.current.forEach((p, id) => {
+            if (p.isDead) {
+                if (remotePlayerMeshesRef.current.has(id)) {
+                    sceneRef.current?.remove(remotePlayerMeshesRef.current.get(id)!);
+                    remotePlayerMeshesRef.current.delete(id);
+                }
+                return;
+            }
+            
+            let mesh = remotePlayerMeshesRef.current.get(id);
+            if (!mesh) {
+                // Create ghost bird for remote player
+                mesh = createBirdMesh(); 
+                // Force ghost material
+                mesh.traverse((child) => {
+                    if (child instanceof THREE.Mesh) {
+                        const m = child.material as THREE.MeshStandardMaterial;
+                        m.color.setHex(0xaaaaaa);
+                        m.transparent = true;
+                        m.opacity = 0.3;
+                    }
+                });
+                sceneRef.current?.add(mesh);
+                remotePlayerMeshesRef.current.set(id, mesh);
+            }
+            mesh.position.x = toWorldX(width * GAME_CONSTANTS.BIRD_X_POSITION, width);
+            mesh.position.y = toWorldY(p.y, height);
+            mesh.rotation.z = p.rotation;
+            const s = p.scale;
+            mesh.scale.set(s, s, s);
+        });
+    }
 
     // Sync Pipes
     const currentPipes = new Set(pipesRef.current);
@@ -800,6 +887,7 @@ export const GameEngine: React.FC<GameEngineProps> = ({
               case 'slowmo': mat = materialRef.current.pSlow; break;
               case 'shield': mat = materialRef.current.pShield; break;
               case 'ghost': mat = materialRef.current.pGhost; break;
+              case 'gun': mat = materialRef.current.pGun; break;
           }
           mesh = new THREE.Mesh(geo, mat);
           mesh.scale.set(GAME_CONSTANTS.POWERUP_SIZE/2, GAME_CONSTANTS.POWERUP_SIZE/2, GAME_CONSTANTS.POWERUP_SIZE/2); 
@@ -816,7 +904,7 @@ export const GameEngine: React.FC<GameEngineProps> = ({
 
     rendererRef.current.render(sceneRef.current, cameraRef.current);
     requestRef.current = requestAnimationFrame(loop);
-  }, [gameState, setGameState, setScore, triggerEffect, highScore, createBirdMesh, setActivePowerup, currentSkin]);
+  }, [gameState, setGameState, setScore, triggerEffect, highScore, createBirdMesh, setActivePowerup, currentSkin, socket]);
 
   // Initialize Three.js
   useEffect(() => {
@@ -825,7 +913,7 @@ export const GameEngine: React.FC<GameEngineProps> = ({
     const height = window.innerHeight;
 
     const scene = new THREE.Scene();
-    scene.fog = new THREE.FogExp2(0x6366F1, 0.0002); // Reduced fog for better visibility
+    scene.fog = new THREE.FogExp2(0x6366F1, 0.0002); 
 
     const canvas = document.createElement('canvas');
     canvas.width = 2; canvas.height = 512;
@@ -882,7 +970,8 @@ export const GameEngine: React.FC<GameEngineProps> = ({
         hairSpikeSmall: new THREE.ConeGeometry(2, 8, 8),
         strawHatBrim: new THREE.CylinderGeometry(24, 24, 1, 32),
         strawHatTop: new THREE.CylinderGeometry(10, 12, 8, 32),
-        headbandPlate: new THREE.BoxGeometry(10, 3, 1)
+        headbandPlate: new THREE.BoxGeometry(10, 3, 1),
+        gunBarrel: new THREE.CylinderGeometry(2, 2, 8, 16)
     };
     materialRef.current = {
         pipe: new THREE.MeshStandardMaterial({ color: COLORS.PIPE_FILL, roughness: 0.3, metalness: 0.1 }),
@@ -894,8 +983,11 @@ export const GameEngine: React.FC<GameEngineProps> = ({
         pSlow: new THREE.MeshStandardMaterial({ color: COLORS.POWERUP_SLOWMO, roughness: 0.2, metalness: 0.5, emissive: COLORS.POWERUP_SLOWMO, emissiveIntensity: 0.6 }),
         pShield: new THREE.MeshStandardMaterial({ color: COLORS.POWERUP_SHIELD, roughness: 0.2, metalness: 0.5, emissive: COLORS.POWERUP_SHIELD, emissiveIntensity: 0.6 }),
         pGhost: new THREE.MeshStandardMaterial({ color: COLORS.POWERUP_GHOST, roughness: 0.2, metalness: 0.5, emissive: COLORS.POWERUP_GHOST, emissiveIntensity: 0.6 }),
+        pGun: new THREE.MeshStandardMaterial({ color: COLORS.POWERUP_GUN, roughness: 0.2, metalness: 0.5, emissive: COLORS.POWERUP_GUN, emissiveIntensity: 0.6 }),
         shieldEffect: new THREE.MeshPhysicalMaterial({ color: COLORS.SHIELD_GLOW, transmission: 0.5, opacity: 0.4, transparent: true, roughness: 0, metalness: 0.1, emissive: COLORS.SHIELD_GLOW, emissiveIntensity: 0.2 }),
-        particleMat: new THREE.MeshBasicMaterial({ color: 0xffffff })
+        projectile: new THREE.MeshBasicMaterial({ color: COLORS.PROJECTILE }),
+        particleMat: new THREE.MeshBasicMaterial({ color: 0xffffff }),
+        gunMat: new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.3, metalness: 0.8 })
     };
 
     // Pre-create particle pool
@@ -920,14 +1012,44 @@ export const GameEngine: React.FC<GameEngineProps> = ({
     scene.add(birdGroup);
     birdMeshRef.current = birdGroup;
 
+    // Socket Event Listeners
+    if (socket) {
+      socket.on("remote_player_update", (data: RemotePlayer) => {
+          remotePlayersRef.current.set(data.id, data);
+      });
+      socket.on("player_died", (data: {id: string}) => {
+          const p = remotePlayersRef.current.get(data.id);
+          if (p) {
+              p.isDead = true;
+              remotePlayersRef.current.set(data.id, p);
+          }
+      });
+      socket.on("spawn_pipe", (data: { topHeight: number, type: 'normal' | 'glass' }) => {
+          pipesRef.current.push({
+             x: width, topHeight: data.topHeight, passed: false, type: data.type, brokenTop: false, brokenBottom: false
+          });
+      });
+      socket.on("spawn_powerup", (data: { type: PowerupType, yPct: number }) => {
+          powerupsRef.current.push({
+             x: width, y: height * data.yPct, type: data.type, active: true
+          });
+      });
+    }
+
     return () => {
         if (containerRef.current && renderer.domElement) containerRef.current.removeChild(renderer.domElement);
         renderer.dispose();
         geometryRef.current?.pipe.dispose();
         materialRef.current?.pipe.dispose();
         sceneReady.current = false;
+        if (socket) {
+            socket.off("remote_player_update");
+            socket.off("player_died");
+            socket.off("spawn_pipe");
+            socket.off("spawn_powerup");
+        }
     };
-  }, [createBirdMesh]); // Added createBirdMesh as dependency
+  }, [createBirdMesh, socket]);
 
   useEffect(() => {
       const handleResize = () => {

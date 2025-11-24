@@ -24,7 +24,7 @@ export interface Pipe {
   brokenBottom: boolean;
 }
 
-export type PowerupType = 'shrink' | 'grow' | 'slowmo' | 'shield' | 'ghost';
+export type PowerupType = 'shrink' | 'grow' | 'slowmo' | 'shield' | 'ghost' | 'gun';
 
 export interface Powerup {
   x: number;
@@ -37,6 +37,13 @@ export interface ActivePowerup {
   type: PowerupType;
   timeLeft: number; // in milliseconds roughly (frames)
   totalTime: number;
+}
+
+export interface Projectile {
+  x: number;
+  y: number;
+  vx: number;
+  id: number;
 }
 
 export interface GameConfig {
@@ -127,4 +134,15 @@ export interface Debris {
   y: number;
   rotation: number;
   size: number;
+}
+
+// --- MULTIPLAYER ---
+
+export interface RemotePlayer {
+  id: string;
+  username: string;
+  isDead: boolean;
+  y: number;
+  rotation: number;
+  scale: number;
 }

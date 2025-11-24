@@ -1,6 +1,8 @@
 
 
 
+
+
 class AudioController {
   private ctx: AudioContext | null = null;
   private masterGain: GainNode | null = null;
@@ -21,6 +23,10 @@ class AudioController {
     if (this.ctx.state === 'suspended') {
       this.ctx.resume();
     }
+  }
+  
+  setAmbientVolume(vol: number) {
+      // Placeholder for ambient control
   }
 
   playJump() {
@@ -190,6 +196,46 @@ class AudioController {
     if (!this.ctx || !this.masterGain) return;
     this.playPowerupSound(1000, 1000, 'sine', 0.1, 0.5); // Ethereal ping
   }
+
+  playShoot() {
+    if (!this.ctx || !this.masterGain) return;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.connect(gain);
+    gain.connect(this.masterGain);
+    
+    // Pew Pew
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(800, this.ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(200, this.ctx.currentTime + 0.1);
+    
+    gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.1);
+    
+    osc.start();
+    osc.stop(this.ctx.currentTime + 0.1);
+  }
+
+  playExplosion() {
+    if (!this.ctx || !this.masterGain) return;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    
+    // Low noise burst
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(100, this.ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(10, this.ctx.currentTime + 0.2);
+    
+    gain.gain.setValueAtTime(0.4, this.ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.2);
+    
+    osc.start();
+    osc.stop(this.ctx.currentTime + 0.2);
+  }
+  
+  playDangerSurge() {}
+  playSuperMode() {}
+  playLaserCharge() {}
 
   private playPowerupSound(startFreq: number, endFreq: number, type: OscillatorType, duration: number = 0.2, volume: number = 0.3) {
     const osc = this.ctx!.createOscillator();
