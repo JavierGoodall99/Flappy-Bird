@@ -140,7 +140,7 @@ const App: React.FC = () => {
       {/* HUD Score */}
       {(gameState === GameState.PLAYING || gameState === GameState.PAUSED) && (
         <div className="absolute top-10 left-0 right-0 text-center z-10 pointer-events-none">
-          <span className="text-6xl font-black text-white drop-shadow-lg select-none font-['Outfit']">
+          <span className={`text-6xl font-black drop-shadow-lg select-none font-['Outfit'] transition-all text-white`}>
             {score}
           </span>
         </div>

@@ -23,7 +23,7 @@ export const GAME_CONSTANTS = {
   DURATION_SIZE: 300, 
   DURATION_SLOWMO: 180, // 3 seconds
   DURATION_SHIELD: 600, // 10 seconds
-  DURATION_GHOST: 120,  // 2 seconds
+  DURATION_GHOST: 300,  // 5 seconds
   DURATION_GUN: 400, // ~6.5 seconds
 
   SCALE_NORMAL: 1,
@@ -57,7 +57,7 @@ export const COLORS = {
   POWERUP_GUN: '#14B8A6', // Teal 500
   
   SHIELD_GLOW: '#FCD34D', // Amber 300
-  PROJECTILE: '#2DD4BF', // Teal 400
+  PROJECTILE: '#FFFF00', // Yellow Projectiles
 };
 
 // --- ENVIRONMENT CONSTANTS ---
@@ -112,17 +112,6 @@ export const DANGER_CONSTANTS = {
     SKY_BOTTOM: 0x000000,
     SURGE_VIGNETTE: 0xff0000
   }
-};
-
-// --- SUPER MODE CONSTANTS ---
-
-export const SUPER_MODE_CONSTANTS = {
-    THRESHOLD: 20, // Points
-    DURATION: 600, // 10s
-    SPEED_MULT: 1.2,
-    SCORE_MULT: 2,
-    COLORS: [0xFF0000, 0xFFA500, 0xFFFF00, 0x008000, 0x0000FF, 0x4B0082, 0xEE82EE], // Rainbow
-    FOV_WARP: 60,
 };
 
 // --- SKINS CATALOG ---

@@ -135,14 +135,3 @@ export interface Debris {
   rotation: number;
   size: number;
 }
-
-// --- MULTIPLAYER ---
-
-export interface RemotePlayer {
-  id: string;
-  username: string;
-  isDead: boolean;
-  y: number;
-  rotation: number;
-  scale: number;
-}

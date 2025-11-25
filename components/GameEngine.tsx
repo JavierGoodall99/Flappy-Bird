@@ -1,10 +1,9 @@
 
 import React, { useRef, useEffect, useCallback } from 'react';
 import * as THREE from 'three';
-import { GameState, Bird, Pipe, Powerup, PowerupType, ActivePowerup, Skin, Particle, Projectile, RemotePlayer } from '../types';
-import { GAME_CONSTANTS, COLORS, PARTICLE_CONFIG } from '../constants';
+import { GameState, Bird, Pipe, Powerup, PowerupType, ActivePowerup, Skin, Particle, Projectile } from '../types';
+import { GAME_CONSTANTS, COLORS, PARTICLE_CONFIG, SKINS } from '../constants';
 import { audioService } from '../services/audioService';
-import { Socket } from 'socket.io-client';
 
 interface GameEngineProps {
   gameState: GameState;
@@ -14,7 +13,6 @@ interface GameEngineProps {
   highScore: number;
   setActivePowerup: (powerup: ActivePowerup | null) => void;
   currentSkin: Skin;
-  socket?: Socket;
 }
 
 export const GameEngine: React.FC<GameEngineProps> = ({ 
@@ -24,14 +22,14 @@ export const GameEngine: React.FC<GameEngineProps> = ({
   triggerEffect,
   highScore,
   setActivePowerup,
-  currentSkin,
-  socket
+  currentSkin
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const requestRef = useRef<number>(0);
   const frameCountRef = useRef<number>(0);
   
   // Game State Refs
+  const isRoundActiveRef = useRef<boolean>(false); // Waits for first input
   const birdRef = useRef<Bird>({ 
     y: 0, 
     velocity: 0, 
@@ -44,6 +42,7 @@ export const GameEngine: React.FC<GameEngineProps> = ({
   const timeScaleRef = useRef<number>(1.0);
   const targetTimeScaleRef = useRef<number>(1.0);
   const activePowerupRef = useRef<ActivePowerup | null>(null);
+  const bgTextureRef = useRef<THREE.Texture | null>(null);
 
   const pipesRef = useRef<Pipe[]>([]);
   const powerupsRef = useRef<Powerup[]>([]);
@@ -55,9 +54,6 @@ export const GameEngine: React.FC<GameEngineProps> = ({
   const speedRef = useRef<number>(GAME_CONSTANTS.BASE_PIPE_SPEED);
   const prevGameStateRef = useRef<GameState>(gameState);
 
-  // Multiplayer Refs
-  const remotePlayersRef = useRef<Map<string, RemotePlayer>>(new Map());
-  
   // Three.js Refs
   const sceneRef = useRef<THREE.Scene | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
@@ -66,7 +62,6 @@ export const GameEngine: React.FC<GameEngineProps> = ({
   const pipeMeshesRef = useRef<Map<Pipe, THREE.Group>>(new Map());
   const powerupMeshesRef = useRef<Map<Powerup, THREE.Mesh>>(new Map());
   const projectileMeshesRef = useRef<THREE.Mesh[]>([]);
-  const remotePlayerMeshesRef = useRef<Map<string, THREE.Group>>(new Map());
 
   const particleMeshesRef = useRef<THREE.Mesh[]>([]); // Pool of particle meshes
   const sceneReady = useRef<boolean>(false);
@@ -102,7 +97,7 @@ export const GameEngine: React.FC<GameEngineProps> = ({
     pGhost: THREE.MeshStandardMaterial;
     pGun: THREE.MeshStandardMaterial;
     shieldEffect: THREE.MeshPhysicalMaterial;
-    projectile: THREE.MeshBasicMaterial;
+    projectile: THREE.MeshStandardMaterial;
     particleMat: THREE.MeshBasicMaterial;
     gunMat: THREE.MeshStandardMaterial;
   } | null>(null);
@@ -111,9 +106,11 @@ export const GameEngine: React.FC<GameEngineProps> = ({
   const initGame = useCallback(() => {
     const height = window.innerHeight;
     
+    isRoundActiveRef.current = false;
+
     birdRef.current = { 
       y: height / 2, 
-      velocity: 0, 
+      velocity: 0, // Paused start
       rotation: 0,
       scale: GAME_CONSTANTS.SCALE_NORMAL,
       targetScale: GAME_CONSTANTS.SCALE_NORMAL,
@@ -134,6 +131,15 @@ export const GameEngine: React.FC<GameEngineProps> = ({
     
     setScore(0);
 
+    // Restore BG
+    if (sceneRef.current && bgTextureRef.current) {
+        sceneRef.current.background = bgTextureRef.current;
+    }
+    if (cameraRef.current) {
+        cameraRef.current.fov = 40;
+        cameraRef.current.updateProjectionMatrix();
+    }
+
     // Clear 3D objects
     if (sceneRef.current) {
       pipeMeshesRef.current.forEach((group) => sceneRef.current?.remove(group));
@@ -150,6 +156,12 @@ export const GameEngine: React.FC<GameEngineProps> = ({
   // Handle Jump
   const handleJump = useCallback(() => {
     if (gameState !== GameState.PLAYING) return;
+    
+    // First interaction starts the round
+    if (!isRoundActiveRef.current) {
+        isRoundActiveRef.current = true;
+    }
+
     birdRef.current.velocity = GAME_CONSTANTS.JUMP_STRENGTH;
     audioService.playJump();
   }, [gameState]);
@@ -285,8 +297,11 @@ export const GameEngine: React.FC<GameEngineProps> = ({
           
           const plateGeo = geometryRef.current.headbandPlate || new THREE.BoxGeometry(10, 3, 1);
           const plate = new THREE.Mesh(plateGeo, metalMat);
-          plate.position.set(2, 8, 15); 
+          plate.position.set(2, 8, 11); // Closer to head
+          plate.rotation.x = -0.1;
           group.add(plate);
+
+          // Band cylinder removed to fix artifact
 
           const spikeGeo = geometryRef.current.hairSpikeMedium || new THREE.ConeGeometry(3, 12, 8);
           for(let i=-2; i<=2; i++) {
@@ -414,271 +429,286 @@ export const GameEngine: React.FC<GameEngineProps> = ({
     timeScaleRef.current += (targetTimeScaleRef.current - timeScaleRef.current) * 0.1;
     const dt = timeScaleRef.current; 
 
+    // --- START HOVER ANIMATION ---
+    if (gameState === GameState.START) {
+        const time = Date.now() * 0.005;
+        birdRef.current.y = (height / 2) + Math.sin(time) * 15;
+        birdRef.current.rotation = 0;
+    } 
     // --- PHYSICS & LOGIC ---
-    if (gameState === GameState.PLAYING) {
-      frameCountRef.current++;
+    else if (gameState === GameState.PLAYING) {
+      // Get Ready Phase (Hover until input)
+      if (!isRoundActiveRef.current) {
+          const time = Date.now() * 0.005;
+          birdRef.current.y = (height / 2) + Math.sin(time) * 15;
+          birdRef.current.rotation = 0;
+      } else {
+          frameCountRef.current++;
 
-      birdRef.current.velocity += GAME_CONSTANTS.GRAVITY * dt;
-      birdRef.current.y += birdRef.current.velocity * dt;
-      birdRef.current.rotation = Math.min(Math.PI / 4, Math.max(-Math.PI / 4, (birdRef.current.velocity * 0.1)));
+          birdRef.current.velocity += GAME_CONSTANTS.GRAVITY * dt;
+          birdRef.current.y += birdRef.current.velocity * dt;
+          birdRef.current.rotation = Math.min(Math.PI / 4, Math.max(-Math.PI / 4, (birdRef.current.velocity * 0.1)));
 
-      if (birdRef.current.effectTimer > 0) {
-        birdRef.current.effectTimer -= 1 * dt; 
-        if (activePowerupRef.current) {
-             activePowerupRef.current.timeLeft = birdRef.current.effectTimer;
-             setActivePowerup({ ...activePowerupRef.current });
-        }
-        if (birdRef.current.effectTimer <= 0) {
-          birdRef.current.targetScale = GAME_CONSTANTS.SCALE_NORMAL;
-          targetTimeScaleRef.current = GAME_CONSTANTS.TIME_SCALE_NORMAL;
-          activePowerupRef.current = null;
-          setActivePowerup(null);
-        }
-      }
-      
-      birdRef.current.scale += (birdRef.current.targetScale - birdRef.current.scale) * 0.1;
-      speedRef.current += GAME_CONSTANTS.SPEED_INCREMENT * dt;
-      const moveSpeed = speedRef.current * dt;
-
-      // Socket Sync
-      if (socket) {
-          socket.emit("player_update", {
-              roomId: "default", // Need proper room id passing
-              y: birdRef.current.y,
-              rotation: birdRef.current.rotation,
-              scale: birdRef.current.scale
-          });
-      }
-
-      // --- GUN LOGIC ---
-      if (activePowerupRef.current?.type === 'gun') {
-          if (frameCountRef.current - lastShotFrameRef.current >= GAME_CONSTANTS.GUN_FIRE_RATE) {
-              lastShotFrameRef.current = frameCountRef.current;
-              // Fire
-              const birdX = width * GAME_CONSTANTS.BIRD_X_POSITION;
-              projectilesRef.current.push({
-                  id: Math.random(),
-                  x: birdX + 20,
-                  y: birdRef.current.y - 5,
-                  vx: GAME_CONSTANTS.PROJECTILE_SPEED
-              });
-              audioService.playShoot();
+          if (birdRef.current.effectTimer > 0) {
+            birdRef.current.effectTimer -= 1 * dt; 
+            if (activePowerupRef.current) {
+                 activePowerupRef.current.timeLeft = birdRef.current.effectTimer;
+                 setActivePowerup({ ...activePowerupRef.current });
+            }
+            if (birdRef.current.effectTimer <= 0) {
+              birdRef.current.targetScale = GAME_CONSTANTS.SCALE_NORMAL;
+              targetTimeScaleRef.current = GAME_CONSTANTS.TIME_SCALE_NORMAL;
+              activePowerupRef.current = null;
+              setActivePowerup(null);
+            }
           }
-      }
-
-      // Move Projectiles & Check Collision
-      for (let i = projectilesRef.current.length - 1; i >= 0; i--) {
-          const proj = projectilesRef.current[i];
-          proj.x += proj.vx * dt;
           
-          let hit = false;
-          // Pipe Hit
-          for (let j = 0; j < pipesRef.current.length; j++) {
-              const pipe = pipesRef.current[j];
-              if (proj.x > pipe.x && proj.x < pipe.x + GAME_CONSTANTS.PIPE_WIDTH) {
-                  // Hit check Top
-                  if (!pipe.brokenTop && proj.y < pipe.topHeight) {
-                      pipe.brokenTop = true;
-                      hit = true;
-                  }
-                  // Hit check Bottom
-                  else if (!pipe.brokenBottom && proj.y > pipe.topHeight + GAME_CONSTANTS.PIPE_GAP) {
-                      pipe.brokenBottom = true;
-                      hit = true;
-                  }
-                  if (hit) {
-                      scoreRef.current += 2;
-                      setScore(scoreRef.current);
-                      audioService.playExplosion();
-                      triggerEffect();
-                      // Spawn particles at impact
-                      for(let k=0; k<10; k++) {
-                           particlesRef.current.push({
-                              x: proj.x, y: proj.y,
-                              vx: (Math.random()-0.5)*5, vy: (Math.random()-0.5)*5,
-                              life: 20, maxLife: 20, scale: 3, color: 0xFF0000, rotation: 0
-                           });
-                      }
-                      break; 
-                  }
+          birdRef.current.scale += (birdRef.current.targetScale - birdRef.current.scale) * 0.1;
+          speedRef.current += GAME_CONSTANTS.SPEED_INCREMENT * dt;
+          const moveSpeed = (speedRef.current) * dt;
+
+          // --- GUN LOGIC ---
+          if (activePowerupRef.current?.type === 'gun') {
+              if (frameCountRef.current - lastShotFrameRef.current >= GAME_CONSTANTS.GUN_FIRE_RATE) {
+                  lastShotFrameRef.current = frameCountRef.current;
+                  // Fire
+                  const birdX = width * GAME_CONSTANTS.BIRD_X_POSITION;
+                  projectilesRef.current.push({
+                      id: Math.random(),
+                      x: birdX + 20,
+                      y: birdRef.current.y - 5,
+                      vx: GAME_CONSTANTS.PROJECTILE_SPEED
+                  });
+                  audioService.playShoot();
               }
           }
-          if (hit || proj.x > width + 100) {
-              projectilesRef.current.splice(i, 1);
+
+          // Move Projectiles & Check Collision
+          for (let i = projectilesRef.current.length - 1; i >= 0; i--) {
+              const proj = projectilesRef.current[i];
+              proj.x += proj.vx * dt;
+              
+              let hit = false;
+              // Pipe Hit
+              for (let j = 0; j < pipesRef.current.length; j++) {
+                  const pipe = pipesRef.current[j];
+                  if (proj.x > pipe.x && proj.x < pipe.x + GAME_CONSTANTS.PIPE_WIDTH) {
+                      // Hit check Top
+                      if (!pipe.brokenTop && proj.y < pipe.topHeight) {
+                          pipe.brokenTop = true;
+                          hit = true;
+                      }
+                      // Hit check Bottom
+                      else if (!pipe.brokenBottom && proj.y > pipe.topHeight + GAME_CONSTANTS.PIPE_GAP) {
+                          pipe.brokenBottom = true;
+                          hit = true;
+                      }
+                      if (hit) {
+                          scoreRef.current += 2;
+                          setScore(scoreRef.current);
+                          audioService.playExplosion();
+                          triggerEffect();
+                          // Spawn particles at impact
+                          for(let k=0; k<10; k++) {
+                               particlesRef.current.push({
+                                  x: proj.x, y: proj.y,
+                                  vx: (Math.random()-0.5)*5, vy: (Math.random()-0.5)*5,
+                                  life: 20, maxLife: 20, scale: 3, color: 0xFF0000, rotation: 0
+                               });
+                          }
+                          break; 
+                      }
+                  }
+              }
+              if (hit || proj.x > width + 100) {
+                  projectilesRef.current.splice(i, 1);
+              }
           }
-      }
 
-      // Spawn Pipes (Local only if no socket, or if socket logic allows)
-      if (!socket) {
-        const spawnInterval = Math.floor(GAME_CONSTANTS.PIPE_SPAWN_RATE * (GAME_CONSTANTS.BASE_PIPE_SPEED / speedRef.current));
-        if (frameCountRef.current % Math.floor(Math.max(30, spawnInterval / timeScaleRef.current)) === 0) {
-            const minPipeHeight = 50;
-            const maxTopPipeHeight = Math.max(minPipeHeight, height - GAME_CONSTANTS.PIPE_GAP - minPipeHeight);
-            let minBound = minPipeHeight;
-            let maxBound = maxTopPipeHeight;
-            if (pipesRef.current.length > 0) {
-                const lastPipe = pipesRef.current[pipesRef.current.length - 1];
-                const timeFactor = (GAME_CONSTANTS.BASE_PIPE_SPEED / speedRef.current);
-                const maxJump = Math.max(80, (height * 0.4) * timeFactor);
-                minBound = Math.max(minPipeHeight, lastPipe.topHeight - maxJump);
-                maxBound = Math.min(maxTopPipeHeight, lastPipe.topHeight + maxJump);
-            } else {
-                minBound = height / 3;
-                maxBound = height / 1.5;
+          // Spawn Pipes
+          const spawnInterval = Math.floor(GAME_CONSTANTS.PIPE_SPAWN_RATE * (GAME_CONSTANTS.BASE_PIPE_SPEED / speedRef.current));
+          if (frameCountRef.current % Math.floor(Math.max(30, spawnInterval / timeScaleRef.current)) === 0) {
+              const minPipeHeight = 50;
+              const maxTopPipeHeight = Math.max(minPipeHeight, height - GAME_CONSTANTS.PIPE_GAP - minPipeHeight);
+              let minBound = minPipeHeight;
+              let maxBound = maxTopPipeHeight;
+              if (pipesRef.current.length > 0) {
+                  const lastPipe = pipesRef.current[pipesRef.current.length - 1];
+                  const timeFactor = (GAME_CONSTANTS.BASE_PIPE_SPEED / speedRef.current);
+                  const maxJump = Math.max(80, (height * 0.4) * timeFactor);
+                  minBound = Math.max(minPipeHeight, lastPipe.topHeight - maxJump);
+                  maxBound = Math.min(maxTopPipeHeight, lastPipe.topHeight + maxJump);
+              } else {
+                  minBound = height / 3;
+                  maxBound = height / 1.5;
+              }
+              const topHeight = Math.floor(minBound + Math.random() * (maxBound - minBound));
+              const isGlass = Math.random() < GAME_CONSTANTS.GLASS_PIPE_CHANCE;
+              pipesRef.current.push({
+                  x: width, topHeight, passed: false, type: isGlass ? 'glass' : 'normal', brokenTop: false, brokenBottom: false
+              });
+          }
+
+          // Spawn Powerups
+          if (frameCountRef.current % Math.floor(GAME_CONSTANTS.POWERUP_SPAWN_RATE / timeScaleRef.current) === 0) {
+              const rand = Math.random();
+              let type: PowerupType = 'shrink'; 
+              if (rand < 0.2) type = 'shrink';
+              else if (rand < 0.4) type = 'grow';
+              else if (rand < 0.55) type = 'shield';
+              else if (rand < 0.7) type = 'slowmo';
+              else if (rand < 0.85) type = 'gun';
+              else type = 'ghost';
+
+              let spawnMinY = height * 0.25;
+              let spawnMaxY = height * 0.75;
+              if (pipesRef.current.length > 0) {
+                  const lastPipe = pipesRef.current[pipesRef.current.length - 1];
+                  const distFromPipe = Math.abs(width - lastPipe.x);
+                  if (distFromPipe < 350) {
+                      const padding = 45;
+                      spawnMinY = lastPipe.topHeight + padding;
+                      spawnMaxY = lastPipe.topHeight + GAME_CONSTANTS.PIPE_GAP - padding;
+                  }
+              }
+              const y = spawnMinY + Math.random() * (spawnMaxY - spawnMinY);
+              powerupsRef.current.push({ x: width, y, type, active: true });
+          }
+
+          const birdX = width * GAME_CONSTANTS.BIRD_X_POSITION;
+          const birdRadius = (GAME_CONSTANTS.BIRD_RADIUS * birdRef.current.scale) - 2; 
+
+          // Update Powerups
+          for (let i = powerupsRef.current.length - 1; i >= 0; i--) {
+            const p = powerupsRef.current[i];
+            p.x -= moveSpeed;
+            if (p.active) {
+              const dx = p.x - birdX;
+              const dy = p.y - birdRef.current.y;
+              const dist = Math.sqrt(dx*dx + dy*dy);
+              if (dist < birdRadius + GAME_CONSTANTS.POWERUP_SIZE) {
+                p.active = false;
+                let duration = GAME_CONSTANTS.DURATION_SIZE;
+                birdRef.current.targetScale = GAME_CONSTANTS.SCALE_NORMAL;
+                targetTimeScaleRef.current = GAME_CONSTANTS.TIME_SCALE_NORMAL;
+                switch (p.type) {
+                    case 'shrink': birdRef.current.targetScale = GAME_CONSTANTS.SCALE_SHRINK; audioService.playShrink(); break;
+                    case 'grow': birdRef.current.targetScale = GAME_CONSTANTS.SCALE_GROW; audioService.playGrow(); break;
+                    case 'slowmo': targetTimeScaleRef.current = GAME_CONSTANTS.TIME_SCALE_SLOW; duration = GAME_CONSTANTS.DURATION_SLOWMO; audioService.playSlowMo(); break;
+                    case 'shield': duration = GAME_CONSTANTS.DURATION_SHIELD; audioService.playShieldUp(); break;
+                    case 'ghost': duration = GAME_CONSTANTS.DURATION_GHOST; audioService.playGhost(); break;
+                    case 'gun': duration = GAME_CONSTANTS.DURATION_GUN; audioService.playShieldUp(); break; // Reuse charge sound
+                }
+                birdRef.current.effectTimer = duration;
+                activePowerupRef.current = { type: p.type, timeLeft: duration, totalTime: duration };
+                setActivePowerup(activePowerupRef.current);
+              }
             }
-            const topHeight = Math.floor(minBound + Math.random() * (maxBound - minBound));
-            const isGlass = Math.random() < GAME_CONSTANTS.GLASS_PIPE_CHANCE;
-            pipesRef.current.push({
-                x: width, topHeight, passed: false, type: isGlass ? 'glass' : 'normal', brokenTop: false, brokenBottom: false
-            });
-        }
+            if (p.x + GAME_CONSTANTS.POWERUP_SIZE < 0 || !p.active) {
+              powerupsRef.current.splice(i, 1);
+            }
+          }
 
-        // Spawn Powerups
-        if (frameCountRef.current % Math.floor(GAME_CONSTANTS.POWERUP_SPAWN_RATE / timeScaleRef.current) === 0) {
-            const rand = Math.random();
-            let type: PowerupType = 'shrink'; 
-            if (rand < 0.2) type = 'shrink';
-            else if (rand < 0.4) type = 'grow';
-            else if (rand < 0.55) type = 'shield';
-            else if (rand < 0.7) type = 'slowmo';
-            else if (rand < 0.85) type = 'gun';
-            else type = 'ghost';
+          // Update Particles
+          if (currentSkin.trail !== 'none' && (frameCountRef.current % PARTICLE_CONFIG.TRAIL_SPAWN_RATE === 0)) {
+              const pScale = currentSkin.trail === 'pixel_dust' ? 4 : 2;
+              const pLife = 40;
+              let color = currentSkin.trail === 'sparkle' ? 0xFFFF00 : 
+                         currentSkin.trail === 'neon_line' ? (currentSkin.colors.glow || 0x00FFFF) : 0xFFFFFF;
 
-            let spawnMinY = height * 0.25;
-            let spawnMaxY = height * 0.75;
-            if (pipesRef.current.length > 0) {
-                const lastPipe = pipesRef.current[pipesRef.current.length - 1];
-                const distFromPipe = Math.abs(width - lastPipe.x);
-                if (distFromPipe < 350) {
-                    const padding = 45;
-                    spawnMinY = lastPipe.topHeight + padding;
-                    spawnMaxY = lastPipe.topHeight + GAME_CONSTANTS.PIPE_GAP - padding;
+              particlesRef.current.push({
+                  x: birdX - 10,
+                  y: birdRef.current.y + (Math.random() * 10 - 5),
+                  vx: -2 - Math.random(),
+                  vy: (Math.random() - 0.5) * 2,
+                  life: pLife,
+                  maxLife: pLife,
+                  scale: pScale,
+                  color: color,
+                  rotation: Math.random() * Math.PI
+              });
+          }
+
+          // Bullet Trail
+          if (frameCountRef.current % 2 === 0) {
+              projectilesRef.current.forEach(proj => {
+                  particlesRef.current.push({
+                      x: proj.x, y: proj.y,
+                      vx: -2, vy: 0,
+                      life: 10, maxLife: 10, scale: 2,
+                      color: 0xFFFF00, // Yellow trail
+                      rotation: 0
+                  });
+              });
+          }
+
+          for (let i = particlesRef.current.length - 1; i >= 0; i--) {
+              const p = particlesRef.current[i];
+              p.x += p.vx * dt;
+              p.y += p.vy * dt;
+              p.life -= 1 * dt;
+              if (p.life <= 0) {
+                  particlesRef.current.splice(i, 1);
+              }
+          }
+
+          // Move Pipes & Collision
+          for (let i = pipesRef.current.length - 1; i >= 0; i--) {
+            const pipe = pipesRef.current[i];
+            pipe.x -= moveSpeed;
+            if (pipe.x + GAME_CONSTANTS.PIPE_WIDTH < 0) {
+              pipesRef.current.splice(i, 1);
+              continue;
+            }
+            const isGhost = activePowerupRef.current?.type === 'ghost';
+            if (!isGhost) {
+                if (birdX + birdRadius > pipe.x && birdX - birdRadius < pipe.x + GAME_CONSTANTS.PIPE_WIDTH) {
+                  const hitTop = !pipe.brokenTop && birdRef.current.y - birdRadius < pipe.topHeight;
+                  const hitBottom = !pipe.brokenBottom && birdRef.current.y + birdRadius > pipe.topHeight + GAME_CONSTANTS.PIPE_GAP;
+                  if (hitTop || hitBottom) {
+                     if (pipe.type === 'glass') {
+                       const isFreshBreak = (hitTop && !pipe.brokenTop) || (hitBottom && !pipe.brokenBottom);
+                       if (isFreshBreak) {
+                         if (hitTop) pipe.brokenTop = true;
+                         if (hitBottom) pipe.brokenBottom = true;
+                         scoreRef.current += GAME_CONSTANTS.GLASS_BREAK_SCORE;
+                         setScore(scoreRef.current);
+                         audioService.playGlassBreak();
+                         triggerEffect();
+                         birdRef.current.velocity = Math.max(birdRef.current.velocity + GAME_CONSTANTS.GLASS_BREAK_PENALTY, GAME_CONSTANTS.GLASS_BREAK_PENALTY / 2);
+                       }
+                     } else {
+                       const hasShield = activePowerupRef.current?.type === 'shield';
+                       if (hasShield) {
+                           const recoveryTime = 60; 
+                           activePowerupRef.current = { type: 'ghost', timeLeft: recoveryTime, totalTime: recoveryTime };
+                           birdRef.current.effectTimer = recoveryTime;
+                           setActivePowerup({ ...activePowerupRef.current });
+                           audioService.playShieldBreak();
+                           triggerEffect();
+                       } else {
+                           audioService.playCrash();
+                           triggerEffect();
+                           setGameState(GameState.GAME_OVER);
+                       }
+                     }
+                  }
                 }
             }
-            const y = spawnMinY + Math.random() * (spawnMaxY - spawnMinY);
-            powerupsRef.current.push({ x: width, y, type, active: true });
-        }
-      }
-
-      const birdX = width * GAME_CONSTANTS.BIRD_X_POSITION;
-      const birdRadius = (GAME_CONSTANTS.BIRD_RADIUS * birdRef.current.scale) - 2; 
-
-      // Update Powerups
-      for (let i = powerupsRef.current.length - 1; i >= 0; i--) {
-        const p = powerupsRef.current[i];
-        p.x -= moveSpeed;
-        if (p.active) {
-          const dx = p.x - birdX;
-          const dy = p.y - birdRef.current.y;
-          const dist = Math.sqrt(dx*dx + dy*dy);
-          if (dist < birdRadius + GAME_CONSTANTS.POWERUP_SIZE) {
-            p.active = false;
-            let duration = GAME_CONSTANTS.DURATION_SIZE;
-            birdRef.current.targetScale = GAME_CONSTANTS.SCALE_NORMAL;
-            targetTimeScaleRef.current = GAME_CONSTANTS.TIME_SCALE_NORMAL;
-            switch (p.type) {
-                case 'shrink': birdRef.current.targetScale = GAME_CONSTANTS.SCALE_SHRINK; audioService.playShrink(); break;
-                case 'grow': birdRef.current.targetScale = GAME_CONSTANTS.SCALE_GROW; audioService.playGrow(); break;
-                case 'slowmo': targetTimeScaleRef.current = GAME_CONSTANTS.TIME_SCALE_SLOW; duration = GAME_CONSTANTS.DURATION_SLOWMO; audioService.playSlowMo(); break;
-                case 'shield': duration = GAME_CONSTANTS.DURATION_SHIELD; audioService.playShieldUp(); break;
-                case 'ghost': duration = GAME_CONSTANTS.DURATION_GHOST; audioService.playGhost(); break;
-                case 'gun': duration = GAME_CONSTANTS.DURATION_GUN; audioService.playShieldUp(); break; // Reuse charge sound
+            if (!pipe.passed && birdX > pipe.x + GAME_CONSTANTS.PIPE_WIDTH) {
+              pipe.passed = true;
+              let pts = 1;
+              scoreRef.current += pts;
+              setScore(scoreRef.current);
+              audioService.playScore();
             }
-            birdRef.current.effectTimer = duration;
-            activePowerupRef.current = { type: p.type, timeLeft: duration, totalTime: duration };
-            setActivePowerup(activePowerupRef.current);
           }
-        }
-        if (p.x + GAME_CONSTANTS.POWERUP_SIZE < 0 || !p.active) {
-          powerupsRef.current.splice(i, 1);
-        }
-      }
 
-      // Update Particles
-      if (currentSkin.trail !== 'none' && frameCountRef.current % PARTICLE_CONFIG.TRAIL_SPAWN_RATE === 0) {
-          const pScale = currentSkin.trail === 'pixel_dust' ? 4 : 2;
-          const pLife = 40;
-          particlesRef.current.push({
-              x: birdX - 10,
-              y: birdRef.current.y + (Math.random() * 10 - 5),
-              vx: -2 - Math.random(),
-              vy: (Math.random() - 0.5) * 2,
-              life: pLife,
-              maxLife: pLife,
-              scale: pScale,
-              color: currentSkin.trail === 'sparkle' ? 0xFFFF00 : 
-                     currentSkin.trail === 'neon_line' ? (currentSkin.colors.glow || 0x00FFFF) : 0xFFFFFF,
-              rotation: Math.random() * Math.PI
-          });
-      }
-
-      for (let i = particlesRef.current.length - 1; i >= 0; i--) {
-          const p = particlesRef.current[i];
-          p.x += p.vx * dt;
-          p.y += p.vy * dt;
-          p.life -= 1 * dt;
-          if (p.life <= 0) {
-              particlesRef.current.splice(i, 1);
+          if (birdRef.current.y + birdRadius >= height || birdRef.current.y - birdRadius <= 0) {
+             audioService.playCrash();
+             triggerEffect();
+             setGameState(GameState.GAME_OVER);
           }
-      }
-
-      // Move Pipes & Collision
-      for (let i = pipesRef.current.length - 1; i >= 0; i--) {
-        const pipe = pipesRef.current[i];
-        pipe.x -= moveSpeed;
-        if (pipe.x + GAME_CONSTANTS.PIPE_WIDTH < 0) {
-          pipesRef.current.splice(i, 1);
-          continue;
-        }
-        const isGhost = activePowerupRef.current?.type === 'ghost';
-        if (!isGhost) {
-            if (birdX + birdRadius > pipe.x && birdX - birdRadius < pipe.x + GAME_CONSTANTS.PIPE_WIDTH) {
-              const hitTop = !pipe.brokenTop && birdRef.current.y - birdRadius < pipe.topHeight;
-              const hitBottom = !pipe.brokenBottom && birdRef.current.y + birdRadius > pipe.topHeight + GAME_CONSTANTS.PIPE_GAP;
-              if (hitTop || hitBottom) {
-                 if (pipe.type === 'glass') {
-                   const isFreshBreak = (hitTop && !pipe.brokenTop) || (hitBottom && !pipe.brokenBottom);
-                   if (isFreshBreak) {
-                     if (hitTop) pipe.brokenTop = true;
-                     if (hitBottom) pipe.brokenBottom = true;
-                     scoreRef.current += GAME_CONSTANTS.GLASS_BREAK_SCORE;
-                     setScore(scoreRef.current);
-                     audioService.playGlassBreak();
-                     triggerEffect();
-                     birdRef.current.velocity = Math.max(birdRef.current.velocity + GAME_CONSTANTS.GLASS_BREAK_PENALTY, GAME_CONSTANTS.GLASS_BREAK_PENALTY / 2);
-                   }
-                 } else {
-                   const hasShield = activePowerupRef.current?.type === 'shield';
-                   if (hasShield) {
-                       const recoveryTime = 60; 
-                       activePowerupRef.current = { type: 'ghost', timeLeft: recoveryTime, totalTime: recoveryTime };
-                       birdRef.current.effectTimer = recoveryTime;
-                       setActivePowerup({ ...activePowerupRef.current });
-                       audioService.playShieldBreak();
-                       triggerEffect();
-                   } else {
-                       audioService.playCrash();
-                       triggerEffect();
-                       if (socket) socket.emit("player_died", { roomId: "default" });
-                       setGameState(GameState.GAME_OVER);
-                   }
-                 }
-              }
-            }
-        }
-        if (!pipe.passed && birdX > pipe.x + GAME_CONSTANTS.PIPE_WIDTH) {
-          pipe.passed = true;
-          scoreRef.current += 1;
-          setScore(scoreRef.current);
-          audioService.playScore();
-        }
-      }
-
-      if (birdRef.current.y + birdRadius >= height || birdRef.current.y - birdRadius <= 0) {
-         audioService.playCrash();
-         triggerEffect();
-         if (socket) socket.emit("player_died", { roomId: "default" });
-         setGameState(GameState.GAME_OVER);
       }
     }
 
@@ -746,8 +776,11 @@ export const GameEngine: React.FC<GameEngineProps> = ({
     // Sync Projectiles (Gun)
     projectileMeshesRef.current.forEach(m => m.visible = false);
     while (projectileMeshesRef.current.length < projectilesRef.current.length) {
-        // Reuse particle sphere for bullets for now, slightly bigger
         const mesh = new THREE.Mesh(geometryRef.current!.particleSphere, materialRef.current!.projectile);
+        // Add glow mesh
+        const glow = new THREE.Mesh(geometryRef.current!.particleSphere, new THREE.MeshBasicMaterial({ color: 0xFFFFFF, transparent: true, opacity: 0.5 }));
+        glow.scale.set(1.5, 1.5, 1.5);
+        mesh.add(glow);
         sceneRef.current?.add(mesh);
         projectileMeshesRef.current.push(mesh);
     }
@@ -757,51 +790,8 @@ export const GameEngine: React.FC<GameEngineProps> = ({
         mesh.position.x = toWorldX(p.x, width);
         mesh.position.y = toWorldY(p.y, height);
         mesh.position.z = 2;
-        mesh.scale.set(3, 3, 3);
+        mesh.scale.set(6, 6, 6);
     });
-
-    // Sync Remote Players (Multiplayer)
-    if (socket && sceneRef.current) {
-        // Remove disconnected players
-        for (const [id, mesh] of remotePlayerMeshesRef.current) {
-            if (!remotePlayersRef.current.has(id)) {
-                sceneRef.current.remove(mesh);
-                remotePlayerMeshesRef.current.delete(id);
-            }
-        }
-        // Update existing players
-        remotePlayersRef.current.forEach((p, id) => {
-            if (p.isDead) {
-                if (remotePlayerMeshesRef.current.has(id)) {
-                    sceneRef.current?.remove(remotePlayerMeshesRef.current.get(id)!);
-                    remotePlayerMeshesRef.current.delete(id);
-                }
-                return;
-            }
-            
-            let mesh = remotePlayerMeshesRef.current.get(id);
-            if (!mesh) {
-                // Create ghost bird for remote player
-                mesh = createBirdMesh(); 
-                // Force ghost material
-                mesh.traverse((child) => {
-                    if (child instanceof THREE.Mesh) {
-                        const m = child.material as THREE.MeshStandardMaterial;
-                        m.color.setHex(0xaaaaaa);
-                        m.transparent = true;
-                        m.opacity = 0.3;
-                    }
-                });
-                sceneRef.current?.add(mesh);
-                remotePlayerMeshesRef.current.set(id, mesh);
-            }
-            mesh.position.x = toWorldX(width * GAME_CONSTANTS.BIRD_X_POSITION, width);
-            mesh.position.y = toWorldY(p.y, height);
-            mesh.rotation.z = p.rotation;
-            const s = p.scale;
-            mesh.scale.set(s, s, s);
-        });
-    }
 
     // Sync Pipes
     const currentPipes = new Set(pipesRef.current);
@@ -904,7 +894,7 @@ export const GameEngine: React.FC<GameEngineProps> = ({
 
     rendererRef.current.render(sceneRef.current, cameraRef.current);
     requestRef.current = requestAnimationFrame(loop);
-  }, [gameState, setGameState, setScore, triggerEffect, highScore, createBirdMesh, setActivePowerup, currentSkin, socket]);
+  }, [gameState, setGameState, setScore, triggerEffect, highScore, createBirdMesh, setActivePowerup, currentSkin]);
 
   // Initialize Three.js
   useEffect(() => {
@@ -927,6 +917,7 @@ export const GameEngine: React.FC<GameEngineProps> = ({
     }
     const bgTexture = new THREE.CanvasTexture(canvas);
     scene.background = bgTexture;
+    bgTextureRef.current = bgTexture;
 
     const fov = 40;
     const camera = new THREE.PerspectiveCamera(fov, width / height, 0.1, 5000);
@@ -985,7 +976,7 @@ export const GameEngine: React.FC<GameEngineProps> = ({
         pGhost: new THREE.MeshStandardMaterial({ color: COLORS.POWERUP_GHOST, roughness: 0.2, metalness: 0.5, emissive: COLORS.POWERUP_GHOST, emissiveIntensity: 0.6 }),
         pGun: new THREE.MeshStandardMaterial({ color: COLORS.POWERUP_GUN, roughness: 0.2, metalness: 0.5, emissive: COLORS.POWERUP_GUN, emissiveIntensity: 0.6 }),
         shieldEffect: new THREE.MeshPhysicalMaterial({ color: COLORS.SHIELD_GLOW, transmission: 0.5, opacity: 0.4, transparent: true, roughness: 0, metalness: 0.1, emissive: COLORS.SHIELD_GLOW, emissiveIntensity: 0.2 }),
-        projectile: new THREE.MeshBasicMaterial({ color: COLORS.PROJECTILE }),
+        projectile: new THREE.MeshStandardMaterial({ color: 0xFFFFFF, emissive: 0xFFFF00, emissiveIntensity: 2.0 }),
         particleMat: new THREE.MeshBasicMaterial({ color: 0xffffff }),
         gunMat: new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.3, metalness: 0.8 })
     };
@@ -1012,44 +1003,14 @@ export const GameEngine: React.FC<GameEngineProps> = ({
     scene.add(birdGroup);
     birdMeshRef.current = birdGroup;
 
-    // Socket Event Listeners
-    if (socket) {
-      socket.on("remote_player_update", (data: RemotePlayer) => {
-          remotePlayersRef.current.set(data.id, data);
-      });
-      socket.on("player_died", (data: {id: string}) => {
-          const p = remotePlayersRef.current.get(data.id);
-          if (p) {
-              p.isDead = true;
-              remotePlayersRef.current.set(data.id, p);
-          }
-      });
-      socket.on("spawn_pipe", (data: { topHeight: number, type: 'normal' | 'glass' }) => {
-          pipesRef.current.push({
-             x: width, topHeight: data.topHeight, passed: false, type: data.type, brokenTop: false, brokenBottom: false
-          });
-      });
-      socket.on("spawn_powerup", (data: { type: PowerupType, yPct: number }) => {
-          powerupsRef.current.push({
-             x: width, y: height * data.yPct, type: data.type, active: true
-          });
-      });
-    }
-
     return () => {
         if (containerRef.current && renderer.domElement) containerRef.current.removeChild(renderer.domElement);
         renderer.dispose();
         geometryRef.current?.pipe.dispose();
         materialRef.current?.pipe.dispose();
         sceneReady.current = false;
-        if (socket) {
-            socket.off("remote_player_update");
-            socket.off("player_died");
-            socket.off("spawn_pipe");
-            socket.off("spawn_powerup");
-        }
     };
-  }, [createBirdMesh, socket]);
+  }, [createBirdMesh]);
 
   useEffect(() => {
       const handleResize = () => {
