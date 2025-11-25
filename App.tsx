@@ -2,8 +2,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { GameEngine } from './components/GameEngine';
 import { Button } from './components/Button';
-import { GameState, ActivePowerup, SkinId, Skin } from './types';
-import { SKINS } from './constants';
+import { GameState, ActivePowerup, SkinId, Skin, PowerupType } from './types';
+import { SKINS, POWERUP_INFO } from './constants';
 import { audioService } from './services/audioService';
 
 const App: React.FC = () => {
@@ -19,6 +19,10 @@ const App: React.FC = () => {
   const [currentSkinId, setCurrentSkinId] = useState<SkinId>('default');
   const [unlockedSkins, setUnlockedSkins] = useState<SkinId[]>(['default']);
   const [isShopOpen, setIsShopOpen] = useState(false);
+  const [isGuideOpen, setIsGuideOpen] = useState(false);
+
+  // Testing State
+  const [initialPowerup, setInitialPowerup] = useState<PowerupType | null>(null);
 
   useEffect(() => {
     const storedScore = localStorage.getItem('flapai-highscore');
@@ -49,18 +53,22 @@ const App: React.FC = () => {
         localStorage.setItem('flapai-highscore', score.toString());
         setIsNewHighScore(true);
       }
+      // Removed setInitialPowerup(null) to persist test state on death
     }
   }, [gameState, score, highScore]);
 
-  const startGame = useCallback(() => {
+  const startGame = useCallback((forcedPowerup: PowerupType | null = null) => {
     audioService.init();
+    setInitialPowerup(forcedPowerup);
     setGameState(GameState.PLAYING);
     setIsNewHighScore(false);
+    setIsGuideOpen(false);
   }, []);
 
   const resetGame = () => {
     setGameState(GameState.START);
     setIsNewHighScore(false);
+    setInitialPowerup(null);
   };
   
   const togglePause = useCallback(() => {
@@ -83,17 +91,18 @@ const App: React.FC = () => {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (isShopOpen) return; // Disable game controls in shop
+      if (isShopOpen || isGuideOpen) return; // Disable game controls in menus
       if (e.code === 'Escape' || e.code === 'KeyP') togglePause();
       if (e.code === 'Space') {
         e.preventDefault(); 
         if (gameState === GameState.PAUSED) togglePause();
-        else if (gameState === GameState.START || gameState === GameState.GAME_OVER) startGame();
+        // Pass initialPowerup to persist test mode if active
+        else if (gameState === GameState.START || gameState === GameState.GAME_OVER) startGame(initialPowerup);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [togglePause, gameState, startGame, isShopOpen]);
+  }, [togglePause, gameState, startGame, isShopOpen, isGuideOpen, initialPowerup]);
 
   return (
     <div className={`relative w-full h-screen overflow-hidden ${shake ? 'animate-pulse' : ''}`}>
@@ -107,6 +116,7 @@ const App: React.FC = () => {
           highScore={highScore}
           setActivePowerup={setActivePowerup}
           currentSkin={SKINS[currentSkinId]}
+          initialPowerup={initialPowerup}
         />
       </div>
 
@@ -118,19 +128,23 @@ const App: React.FC = () => {
                       ${activePowerup.type === 'shield' ? 'bg-amber-400' : 
                         activePowerup.type === 'slowmo' ? 'bg-violet-500' :
                         activePowerup.type === 'ghost' ? 'bg-pink-500' : 
-                        activePowerup.type === 'shrink' ? 'bg-blue-500' : 'bg-red-500'
+                        activePowerup.type === 'shrink' ? 'bg-blue-500' : 
+                        activePowerup.type === 'fast' ? 'bg-lime-500' : 
+                        activePowerup.type === 'gun' ? 'bg-teal-500' : 'bg-red-500'
                       }`} 
                   />
                   <div className="text-white font-bold text-sm tracking-wider uppercase">
                       {activePowerup.type === 'slowmo' ? 'TIME WARP' : 
                        activePowerup.type === 'shield' ? 'SHIELD ACTIVE' :
                        activePowerup.type === 'ghost' ? 'GHOST MODE' :
-                       activePowerup.type === 'shrink' ? 'TINY BIRD' : 'GIANT BIRD'}
+                       activePowerup.type === 'shrink' ? 'TINY BIRD' : 
+                       activePowerup.type === 'fast' ? 'TURBO BOOST' : 
+                       activePowerup.type === 'gun' ? 'BLASTER' : 'GIANT BIRD'}
                   </div>
                   <div className="w-16 h-1.5 bg-white/20 rounded-full overflow-hidden">
                       <div 
-                        className="h-full bg-white transition-all duration-75 ease-linear"
-                        style={{ width: `${(activePowerup.timeLeft / activePowerup.totalTime) * 100}%` }}
+                        className="h-full bg-white"
+                        style={{ width: `${Math.max(0, (activePowerup.timeLeft / activePowerup.totalTime) * 100)}%` }}
                       />
                   </div>
               </div>
@@ -173,26 +187,69 @@ const App: React.FC = () => {
       )}
 
       {/* Start Screen */}
-      {gameState === GameState.START && !isShopOpen && (
+      {gameState === GameState.START && !isShopOpen && !isGuideOpen && (
         <div className="absolute inset-0 flex items-center justify-center z-20 bg-black/20 backdrop-blur-sm">
-          <div className="glass-panel p-10 rounded-3xl text-center max-w-sm mx-4 shadow-2xl transform transition-all animate-fade-in-up">
+          <div className="glass-panel p-10 rounded-3xl text-center w-full max-w-md mx-4 shadow-2xl transform transition-all animate-fade-in-up">
             <h1 className="text-6xl font-black bg-clip-text text-transparent bg-gradient-to-r from-amber-400 to-orange-600 mb-2 drop-shadow-sm">
               FlapAI
             </h1>
             <div className="text-xl text-slate-200 mb-8 font-light">Arcade Edition</div>
             
-            <div className="flex flex-col gap-4">
-                <Button onClick={startGame} className="w-full">PLAY NOW</Button>
-                <button 
-                  onClick={() => setIsShopOpen(true)}
-                  className="w-full py-3 rounded-full font-bold text-lg bg-white/10 text-white border border-white/20 hover:bg-white/20 transition-all flex items-center justify-center gap-2"
-                >
-                  <span>🎨</span> SKINS
-                </button>
-                <div className="text-white/40 text-sm mt-2">Press Space to Start</div>
+            <div className="flex flex-col gap-8">
+                <Button onClick={() => startGame(null)} className="w-full text-xl py-4 shadow-xl">PLAY NOW</Button>
+                <div className="flex gap-6 w-full">
+                  <button 
+                    onClick={() => setIsShopOpen(true)}
+                    className="flex-1 py-4 rounded-2xl font-bold text-base tracking-wide bg-white/5 text-white border border-white/10 hover:bg-white/15 hover:border-white/30 transition-all flex flex-col items-center justify-center gap-1 group"
+                  >
+                    <span className="text-2xl mb-1 group-hover:scale-110 transition-transform">🎨</span> 
+                    SKINS
+                  </button>
+                  <button 
+                    onClick={() => setIsGuideOpen(true)}
+                    className="flex-1 py-4 rounded-2xl font-bold text-base tracking-wide bg-white/5 text-white border border-white/10 hover:bg-white/15 hover:border-white/30 transition-all flex flex-col items-center justify-center gap-1 group"
+                  >
+                    <span className="text-2xl mb-1 group-hover:scale-110 transition-transform">⚡</span> 
+                    POWERS
+                  </button>
+                </div>
+                <div className="text-white/30 text-xs uppercase tracking-widest mt-[-10px]">Press Space to Start</div>
             </div>
           </div>
         </div>
+      )}
+
+      {/* POWERUP GUIDE */}
+      {isGuideOpen && (
+         <div className="absolute inset-0 z-50 bg-slate-900/90 backdrop-blur-lg flex flex-col items-center justify-center p-6 animate-fade-in">
+             <div className="w-full max-w-lg h-full max-h-[80vh] flex flex-col">
+                <div className="flex justify-between items-center mb-6">
+                    <h2 className="text-3xl font-black text-white">POWER-UPS</h2>
+                    <button onClick={() => setIsGuideOpen(false)} className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-white hover:bg-white/20">✕</button>
+                </div>
+                
+                <div className="flex-1 overflow-y-auto flex flex-col gap-3 no-scrollbar">
+                   {POWERUP_INFO.map(p => (
+                      <div key={p.type} className="bg-white/5 border border-white/10 rounded-2xl p-4 flex items-center gap-4 hover:bg-white/10 transition-colors">
+                          <div className="w-12 h-12 rounded-full shadow-lg flex-shrink-0" style={{ backgroundColor: p.color }}></div>
+                          <div className="flex-1">
+                             <h3 className="text-xl font-bold text-white mb-1">{p.name}</h3>
+                             <p className="text-sm text-slate-300 leading-tight">{p.desc}</p>
+                          </div>
+                          <button 
+                             onClick={() => startGame(p.type as any)}
+                             className="px-4 py-2 bg-white/20 hover:bg-white/30 rounded-full text-xs font-bold text-white tracking-wide border border-white/20 transition-all active:scale-95"
+                          >
+                             TEST
+                          </button>
+                      </div>
+                   ))}
+                </div>
+                <div className="mt-6 text-center text-white/40 text-sm">
+                   Click TEST to start a run with the power-up active!
+                </div>
+             </div>
+         </div>
       )}
 
       {/* SKIN SHOP */}
@@ -204,7 +261,7 @@ const App: React.FC = () => {
                   <button onClick={() => setIsShopOpen(false)} className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-white hover:bg-white/20">✕</button>
               </div>
 
-              <div className="flex-1 overflow-y-auto grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 pb-8">
+              <div className="flex-1 overflow-y-auto grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 pb-8 no-scrollbar">
                  {Object.values(SKINS).map((skin) => {
                      const isUnlocked = unlockedSkins.includes(skin.id);
                      const isEquipped = currentSkinId === skin.id;
@@ -251,7 +308,7 @@ const App: React.FC = () => {
       )}
 
       {/* Game Over Screen */}
-      {gameState === GameState.GAME_OVER && !isShopOpen && (
+      {gameState === GameState.GAME_OVER && !isShopOpen && !isGuideOpen && (
         <div className="absolute inset-0 flex items-center justify-center z-20 bg-slate-900/60 backdrop-blur-md">
           <div className="glass-panel p-8 rounded-3xl text-center w-full max-w-xs mx-4 shadow-2xl border border-white/10 relative">
             <h2 className={`text-4xl font-bold text-white mb-6 tracking-wide`}>GAME OVER</h2>
@@ -270,7 +327,7 @@ const App: React.FC = () => {
             </div>
 
             <div className="flex flex-col gap-3">
-              <Button onClick={startGame}>TRY AGAIN</Button>
+              <Button onClick={() => startGame(initialPowerup)}>TRY AGAIN</Button>
               <Button onClick={resetGame} variant="secondary">HOME</Button>
             </div>
             <div className="text-white/30 text-xs mt-4">Press Space to Restart</div>

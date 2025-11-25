@@ -1,8 +1,5 @@
 
 
-
-
-
 class AudioController {
   private ctx: AudioContext | null = null;
   private masterGain: GainNode | null = null;
@@ -151,6 +148,25 @@ class AudioController {
     
     osc.start();
     osc.stop(this.ctx.currentTime + 1.0);
+  }
+
+  playFastForward() {
+    if (!this.ctx || !this.masterGain) return;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.connect(gain);
+    gain.connect(this.masterGain);
+
+    // Revving up sound
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(100, this.ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(800, this.ctx.currentTime + 0.5);
+
+    gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
+    gain.gain.linearRampToValueAtTime(0.01, this.ctx.currentTime + 0.5);
+
+    osc.start();
+    osc.stop(this.ctx.currentTime + 0.5);
   }
 
   playShieldUp() {

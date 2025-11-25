@@ -24,7 +24,7 @@ export interface Pipe {
   brokenBottom: boolean;
 }
 
-export type PowerupType = 'shrink' | 'grow' | 'slowmo' | 'shield' | 'ghost' | 'gun';
+export type PowerupType = 'shrink' | 'grow' | 'slowmo' | 'shield' | 'ghost' | 'gun' | 'fast';
 
 export interface Powerup {
   x: number;

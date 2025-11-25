@@ -13,6 +13,7 @@ interface GameEngineProps {
   highScore: number;
   setActivePowerup: (powerup: ActivePowerup | null) => void;
   currentSkin: Skin;
+  initialPowerup?: PowerupType | null; // For testing
 }
 
 export const GameEngine: React.FC<GameEngineProps> = ({ 
@@ -22,7 +23,8 @@ export const GameEngine: React.FC<GameEngineProps> = ({
   triggerEffect,
   highScore,
   setActivePowerup,
-  currentSkin
+  currentSkin,
+  initialPowerup
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const requestRef = useRef<number>(0);
@@ -96,6 +98,7 @@ export const GameEngine: React.FC<GameEngineProps> = ({
     pShield: THREE.MeshStandardMaterial;
     pGhost: THREE.MeshStandardMaterial;
     pGun: THREE.MeshStandardMaterial;
+    pFast: THREE.MeshStandardMaterial;
     shieldEffect: THREE.MeshPhysicalMaterial;
     projectile: THREE.MeshStandardMaterial;
     particleMat: THREE.MeshBasicMaterial;
@@ -123,6 +126,7 @@ export const GameEngine: React.FC<GameEngineProps> = ({
     scoreRef.current = 0;
     speedRef.current = GAME_CONSTANTS.BASE_PIPE_SPEED;
     frameCountRef.current = 0;
+    lastShotFrameRef.current = -100; // Reset shot timer so it fires immediately if gun is equipped
     
     timeScaleRef.current = 1.0;
     targetTimeScaleRef.current = 1.0;
@@ -130,6 +134,25 @@ export const GameEngine: React.FC<GameEngineProps> = ({
     setActivePowerup(null);
     
     setScore(0);
+
+    // Apply forced powerup for testing
+    if (initialPowerup) {
+        // Use a very large number for infinite duration during testing
+        let duration = 999999; 
+        
+        switch (initialPowerup) {
+            case 'shrink': birdRef.current.targetScale = GAME_CONSTANTS.SCALE_SHRINK; audioService.playShrink(); break;
+            case 'grow': birdRef.current.targetScale = GAME_CONSTANTS.SCALE_GROW; audioService.playGrow(); break;
+            case 'slowmo': targetTimeScaleRef.current = GAME_CONSTANTS.TIME_SCALE_SLOW; audioService.playSlowMo(); break;
+            case 'fast': targetTimeScaleRef.current = GAME_CONSTANTS.TIME_SCALE_FAST; audioService.playFastForward(); break;
+            case 'shield': audioService.playShieldUp(); break;
+            case 'ghost': audioService.playGhost(); break;
+            case 'gun': audioService.playShieldUp(); break; 
+        }
+        birdRef.current.effectTimer = duration;
+        activePowerupRef.current = { type: initialPowerup, timeLeft: duration, totalTime: duration };
+        setActivePowerup(activePowerupRef.current);
+    }
 
     // Restore BG
     if (sceneRef.current && bgTextureRef.current) {
@@ -151,7 +174,7 @@ export const GameEngine: React.FC<GameEngineProps> = ({
       // Hide all particles
       particleMeshesRef.current.forEach(mesh => mesh.visible = false);
     }
-  }, [setScore, setActivePowerup]);
+  }, [setScore, setActivePowerup, initialPowerup]);
 
   // Handle Jump
   const handleJump = useCallback(() => {
@@ -301,8 +324,6 @@ export const GameEngine: React.FC<GameEngineProps> = ({
           plate.rotation.x = -0.1;
           group.add(plate);
 
-          // Band cylinder removed to fix artifact
-
           const spikeGeo = geometryRef.current.hairSpikeMedium || new THREE.ConeGeometry(3, 12, 8);
           for(let i=-2; i<=2; i++) {
              const spike = new THREE.Mesh(spikeGeo, yellowHairMat);
@@ -331,19 +352,20 @@ export const GameEngine: React.FC<GameEngineProps> = ({
              group.add(spike);
            });
 
-           const brimGeo = geometryRef.current.strawHatBrim || new THREE.CylinderGeometry(24, 24, 1, 32);
+           // Reduced Hat Size
+           const brimGeo = geometryRef.current.strawHatBrim || new THREE.CylinderGeometry(17, 17, 1, 32);
            const brim = new THREE.Mesh(brimGeo, strawMat);
-           brim.rotation.x = Math.PI/2; brim.position.set(0, 10, 0); brim.scale.set(1, 0.05, 0.9);
+           brim.rotation.x = Math.PI/2; brim.position.set(0, 11, 0); brim.scale.set(1, 0.05, 0.9);
            group.add(brim);
 
-           const domeGeo = new THREE.SphereGeometry(9, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2);
+           const domeGeo = new THREE.SphereGeometry(7, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2);
            const dome = new THREE.Mesh(domeGeo, strawMat);
-           dome.rotation.x = -Math.PI/2; dome.position.set(0, 10, 0); dome.scale.set(1, 0.7, 1);
+           dome.rotation.x = -Math.PI/2; dome.position.set(0, 11, 0); dome.scale.set(1, 0.7, 1);
            group.add(dome);
 
-           const bandGeo = new THREE.CylinderGeometry(9.2, 9.2, 2, 32, 1, true);
+           const bandGeo = new THREE.CylinderGeometry(7.2, 7.2, 2, 32, 1, true);
            const band = new THREE.Mesh(bandGeo, redBandMat);
-           band.rotation.x = Math.PI/2; band.position.set(0, 11, 0);
+           band.rotation.x = Math.PI/2; band.position.set(0, 12, 0);
            group.add(band);
            
            const scarGeo = new THREE.BoxGeometry(3, 0.3, 0.2);
@@ -549,15 +571,16 @@ export const GameEngine: React.FC<GameEngineProps> = ({
               });
           }
 
-          // Spawn Powerups
-          if (frameCountRef.current % Math.floor(GAME_CONSTANTS.POWERUP_SPAWN_RATE / timeScaleRef.current) === 0) {
+          // Spawn Powerups (Only spawn if NOT in test mode)
+          if (!initialPowerup && frameCountRef.current % Math.floor(GAME_CONSTANTS.POWERUP_SPAWN_RATE / timeScaleRef.current) === 0) {
               const rand = Math.random();
               let type: PowerupType = 'shrink'; 
               if (rand < 0.2) type = 'shrink';
               else if (rand < 0.4) type = 'grow';
               else if (rand < 0.55) type = 'shield';
               else if (rand < 0.7) type = 'slowmo';
-              else if (rand < 0.85) type = 'gun';
+              else if (rand < 0.8) type = 'gun';
+              else if (rand < 0.9) type = 'fast';
               else type = 'ghost';
 
               let spawnMinY = height * 0.25;
@@ -595,6 +618,7 @@ export const GameEngine: React.FC<GameEngineProps> = ({
                     case 'shrink': birdRef.current.targetScale = GAME_CONSTANTS.SCALE_SHRINK; audioService.playShrink(); break;
                     case 'grow': birdRef.current.targetScale = GAME_CONSTANTS.SCALE_GROW; audioService.playGrow(); break;
                     case 'slowmo': targetTimeScaleRef.current = GAME_CONSTANTS.TIME_SCALE_SLOW; duration = GAME_CONSTANTS.DURATION_SLOWMO; audioService.playSlowMo(); break;
+                    case 'fast': targetTimeScaleRef.current = GAME_CONSTANTS.TIME_SCALE_FAST; duration = GAME_CONSTANTS.DURATION_FAST; audioService.playFastForward(); break;
                     case 'shield': duration = GAME_CONSTANTS.DURATION_SHIELD; audioService.playShieldUp(); break;
                     case 'ghost': duration = GAME_CONSTANTS.DURATION_GHOST; audioService.playGhost(); break;
                     case 'gun': duration = GAME_CONSTANTS.DURATION_GUN; audioService.playShieldUp(); break; // Reuse charge sound
@@ -686,6 +710,20 @@ export const GameEngine: React.FC<GameEngineProps> = ({
                            setActivePowerup({ ...activePowerupRef.current });
                            audioService.playShieldBreak();
                            triggerEffect();
+                           
+                           // Shield Shatter Particles
+                           for(let k=0; k<20; k++) {
+                               const angle = Math.random() * Math.PI * 2;
+                               const speed = 4 + Math.random() * 4;
+                               particlesRef.current.push({
+                                  x: birdX, y: birdRef.current.y,
+                                  vx: Math.cos(angle) * speed,
+                                  vy: Math.sin(angle) * speed,
+                                  life: 30, maxLife: 30, scale: 3, 
+                                  color: parseInt(COLORS.SHIELD_GLOW.replace('#','0x')), 
+                                  rotation: Math.random() * Math.PI
+                               });
+                           }
                        } else {
                            audioService.playCrash();
                            triggerEffect();
@@ -875,6 +913,7 @@ export const GameEngine: React.FC<GameEngineProps> = ({
           switch (p.type) {
               case 'grow': mat = materialRef.current.pGrow; break;
               case 'slowmo': mat = materialRef.current.pSlow; break;
+              case 'fast': mat = materialRef.current.pFast; break;
               case 'shield': mat = materialRef.current.pShield; break;
               case 'ghost': mat = materialRef.current.pGhost; break;
               case 'gun': mat = materialRef.current.pGun; break;
@@ -894,7 +933,7 @@ export const GameEngine: React.FC<GameEngineProps> = ({
 
     rendererRef.current.render(sceneRef.current, cameraRef.current);
     requestRef.current = requestAnimationFrame(loop);
-  }, [gameState, setGameState, setScore, triggerEffect, highScore, createBirdMesh, setActivePowerup, currentSkin]);
+  }, [gameState, setGameState, setScore, triggerEffect, highScore, createBirdMesh, setActivePowerup, currentSkin, initialPowerup]);
 
   // Initialize Three.js
   useEffect(() => {
@@ -959,7 +998,7 @@ export const GameEngine: React.FC<GameEngineProps> = ({
         hairSpikeLarge: new THREE.ConeGeometry(4, 16, 8),
         hairSpikeMedium: new THREE.ConeGeometry(3, 12, 8),
         hairSpikeSmall: new THREE.ConeGeometry(2, 8, 8),
-        strawHatBrim: new THREE.CylinderGeometry(24, 24, 1, 32),
+        strawHatBrim: new THREE.CylinderGeometry(17, 17, 1, 32),
         strawHatTop: new THREE.CylinderGeometry(10, 12, 8, 32),
         headbandPlate: new THREE.BoxGeometry(10, 3, 1),
         gunBarrel: new THREE.CylinderGeometry(2, 2, 8, 16)
@@ -975,6 +1014,7 @@ export const GameEngine: React.FC<GameEngineProps> = ({
         pShield: new THREE.MeshStandardMaterial({ color: COLORS.POWERUP_SHIELD, roughness: 0.2, metalness: 0.5, emissive: COLORS.POWERUP_SHIELD, emissiveIntensity: 0.6 }),
         pGhost: new THREE.MeshStandardMaterial({ color: COLORS.POWERUP_GHOST, roughness: 0.2, metalness: 0.5, emissive: COLORS.POWERUP_GHOST, emissiveIntensity: 0.6 }),
         pGun: new THREE.MeshStandardMaterial({ color: COLORS.POWERUP_GUN, roughness: 0.2, metalness: 0.5, emissive: COLORS.POWERUP_GUN, emissiveIntensity: 0.6 }),
+        pFast: new THREE.MeshStandardMaterial({ color: COLORS.POWERUP_FAST, roughness: 0.2, metalness: 0.5, emissive: COLORS.POWERUP_FAST, emissiveIntensity: 0.6 }),
         shieldEffect: new THREE.MeshPhysicalMaterial({ color: COLORS.SHIELD_GLOW, transmission: 0.5, opacity: 0.4, transparent: true, roughness: 0, metalness: 0.1, emissive: COLORS.SHIELD_GLOW, emissiveIntensity: 0.2 }),
         projectile: new THREE.MeshStandardMaterial({ color: 0xFFFFFF, emissive: 0xFFFF00, emissiveIntensity: 2.0 }),
         particleMat: new THREE.MeshBasicMaterial({ color: 0xffffff }),
@@ -1038,10 +1078,16 @@ export const GameEngine: React.FC<GameEngineProps> = ({
   }, [loop]);
 
   useEffect(() => {
+    // Initialize game logic when entering START state
     if (gameState === GameState.START) {
       initGame();
-    } else if (gameState === GameState.PLAYING && prevGameStateRef.current === GameState.GAME_OVER) {
-      initGame();
+    } 
+    // Initialize game logic when entering PLAYING state from START or GAME_OVER
+    // This ensures powerups selected from the menu (START -> PLAYING) are applied
+    else if (gameState === GameState.PLAYING) {
+       if (prevGameStateRef.current === GameState.START || prevGameStateRef.current === GameState.GAME_OVER) {
+         initGame();
+       }
     }
     prevGameStateRef.current = gameState;
   }, [gameState, initGame]);
