@@ -85,6 +85,7 @@ export const GameEngine: React.FC<GameEngineProps> = ({
     strawHatTop: THREE.CylinderGeometry;
     headbandPlate: THREE.BoxGeometry;
     gunBarrel: THREE.CylinderGeometry;
+    eyebrow: THREE.BoxGeometry;
   } | null>(null);
   
   const materialRef = useRef<{
@@ -103,6 +104,7 @@ export const GameEngine: React.FC<GameEngineProps> = ({
     projectile: THREE.MeshStandardMaterial;
     particleMat: THREE.MeshBasicMaterial;
     gunMat: THREE.MeshStandardMaterial;
+    eyebrow: THREE.MeshStandardMaterial;
   } | null>(null);
 
   // Initialize Game State
@@ -236,6 +238,7 @@ export const GameEngine: React.FC<GameEngineProps> = ({
             emissiveIntensity: isNeon ? 0.5 : 0,
             transparent, opacity 
         });
+        const eyebrowMat = materialRef.current?.eyebrow || new THREE.MeshStandardMaterial({ color: 0x000000, roughness: 0.9 });
 
         const bodyGeo = new THREE.CylinderGeometry(bodyRadius, bodyRadius, 2, 32);
         const body = new THREE.Mesh(bodyGeo, bodyMat);
@@ -251,8 +254,24 @@ export const GameEngine: React.FC<GameEngineProps> = ({
 
         const pupilGeo = new THREE.CircleGeometry(3.5, 32);
         const pupil = new THREE.Mesh(pupilGeo, blackMat);
+        pupil.name = 'pupil'; // Track for animation
         pupil.position.set(8, 5, 1.7);
         group.add(pupil);
+
+        // Eyebrows (New)
+        const browGeo = geometryRef.current.eyebrow || new THREE.BoxGeometry(7, 1.5, 1);
+        const browL = new THREE.Mesh(browGeo, eyebrowMat);
+        browL.name = 'browL';
+        browL.position.set(6, 10, 2);
+        group.add(browL);
+
+        // If we wanted 3D perspective eyes, we'd add a second eye here. 
+        // For the 2D cutout look, we mostly see one side, but let's add the other brow slightly offset for depth if rotated
+        const browR = new THREE.Mesh(browGeo, eyebrowMat);
+        browR.name = 'browR';
+        browR.position.set(6, 10, -2);
+        browR.visible = false; // Hidden in 2D view usually
+        group.add(browR);
 
         if (!isNeon) {
             const cheekMat = new THREE.MeshStandardMaterial({ color: 0xFF8A80, roughness: 0.5, flatShading: true, transparent, opacity });
@@ -764,7 +783,54 @@ export const GameEngine: React.FC<GameEngineProps> = ({
       birdMeshRef.current.scale.set(s, s, s);
       birdMeshRef.current.visible = true;
 
+      // --- FACIAL ANIMATION LOGIC ---
+      let targetBrowRot = 0; // Neutral
+      let targetPupilScale = 1;
+      
+      if (gameState === GameState.GAME_OVER) {
+          // Stunned
+          targetPupilScale = 0.2;
+      } else {
+          // Check Pipe Proximity for Angry
+          const closePipe = pipesRef.current.find(p => p.x > birdX - 50 && p.x < birdX + 150);
+          const isFalling = birdRef.current.velocity > 8;
+          const isFast = speedRef.current > GAME_CONSTANTS.BASE_PIPE_SPEED * 1.3;
+          const isPowered = !!activePowerupRef.current;
+
+          if (isFast) {
+              // Panic/Intense
+              targetBrowRot = -0.5; // Up/Out
+              targetPupilScale = 0.8 + Math.random() * 0.4; // Vibrate
+          } else if (closePipe) {
+              // Angry/Focused
+              targetBrowRot = 0.4; // Down/In
+          } else if (isFalling) {
+              // Wide eyes
+              targetBrowRot = -0.2;
+              targetPupilScale = 1.3;
+          } else if (isPowered) {
+              // Smirk (Asymmetrical handled below?)
+              targetBrowRot = 0.1;
+          }
+      }
+
+      // Apply Facial Transforms
+      const browL = birdMeshRef.current.getObjectByName('browL');
+      if (browL) {
+          browL.rotation.z += (targetBrowRot - browL.rotation.z) * 0.2;
+      }
+      const browR = birdMeshRef.current.getObjectByName('browR');
+      if (browR) {
+          // Mirror rotation
+          browR.rotation.z += (-targetBrowRot - browR.rotation.z) * 0.2;
+      }
+      
       birdMeshRef.current.traverse((child) => {
+          if (child.name === 'pupil') {
+              const currentS = child.scale.x;
+              const newS = currentS + (targetPupilScale - currentS) * 0.2;
+              child.scale.set(newS, newS, 1);
+          }
           if (child instanceof THREE.Mesh) {
              const mat = child.material as THREE.MeshStandardMaterial;
              if (mat.name !== 'shield' && mat.name !== 'gun') { 
@@ -1001,7 +1067,8 @@ export const GameEngine: React.FC<GameEngineProps> = ({
         strawHatBrim: new THREE.CylinderGeometry(17, 17, 1, 32),
         strawHatTop: new THREE.CylinderGeometry(10, 12, 8, 32),
         headbandPlate: new THREE.BoxGeometry(10, 3, 1),
-        gunBarrel: new THREE.CylinderGeometry(2, 2, 8, 16)
+        gunBarrel: new THREE.CylinderGeometry(2, 2, 8, 16),
+        eyebrow: new THREE.BoxGeometry(7, 1.5, 1)
     };
     materialRef.current = {
         pipe: new THREE.MeshStandardMaterial({ color: COLORS.PIPE_FILL, roughness: 0.3, metalness: 0.1 }),
@@ -1018,7 +1085,8 @@ export const GameEngine: React.FC<GameEngineProps> = ({
         shieldEffect: new THREE.MeshPhysicalMaterial({ color: COLORS.SHIELD_GLOW, transmission: 0.5, opacity: 0.4, transparent: true, roughness: 0, metalness: 0.1, emissive: COLORS.SHIELD_GLOW, emissiveIntensity: 0.2 }),
         projectile: new THREE.MeshStandardMaterial({ color: 0xFFFFFF, emissive: 0xFFFF00, emissiveIntensity: 2.0 }),
         particleMat: new THREE.MeshBasicMaterial({ color: 0xffffff }),
-        gunMat: new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.3, metalness: 0.8 })
+        gunMat: new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.3, metalness: 0.8 }),
+        eyebrow: new THREE.MeshStandardMaterial({ color: 0x000000, roughness: 0.9 })
     };
 
     // Pre-create particle pool
