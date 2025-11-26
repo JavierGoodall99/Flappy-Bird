@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { GameEngine } from './components/GameEngine';
 import { Button } from './components/Button';
-import { GameState, ActivePowerup, SkinId, Skin, PowerupType } from './types';
+import { GameState, ActivePowerup, SkinId, Skin, PowerupType, GameMode } from './types';
 import { SKINS, POWERUP_INFO } from './constants';
 import { audioService } from './services/audioService';
 
@@ -15,6 +15,9 @@ const App: React.FC = () => {
   const [shake, setShake] = useState(false);
   const [activePowerup, setActivePowerup] = useState<ActivePowerup | null>(null);
   
+  // Game Mode
+  const [gameMode, setGameMode] = useState<GameMode>('standard');
+
   // Cosmetics State
   const [currentSkinId, setCurrentSkinId] = useState<SkinId>('default');
   const [unlockedSkins, setUnlockedSkins] = useState<SkinId[]>(['default']);
@@ -57,8 +60,9 @@ const App: React.FC = () => {
     }
   }, [gameState, score, highScore]);
 
-  const startGame = useCallback((forcedPowerup: PowerupType | null = null) => {
+  const startGame = useCallback((forcedPowerup: PowerupType | null = null, mode: GameMode = 'standard') => {
     audioService.init();
+    setGameMode(mode);
     setInitialPowerup(forcedPowerup);
     setGameState(GameState.PLAYING);
     setIsNewHighScore(false);
@@ -97,12 +101,12 @@ const App: React.FC = () => {
         e.preventDefault(); 
         if (gameState === GameState.PAUSED) togglePause();
         // Pass initialPowerup to persist test mode if active
-        else if (gameState === GameState.START || gameState === GameState.GAME_OVER) startGame(initialPowerup);
+        else if (gameState === GameState.START || gameState === GameState.GAME_OVER) startGame(initialPowerup, gameMode);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [togglePause, gameState, startGame, isShopOpen, isGuideOpen, initialPowerup]);
+  }, [togglePause, gameState, startGame, isShopOpen, isGuideOpen, initialPowerup, gameMode]);
 
   return (
     <div className={`relative w-full h-screen overflow-hidden ${shake ? 'animate-pulse' : ''}`}>
@@ -117,11 +121,12 @@ const App: React.FC = () => {
           setActivePowerup={setActivePowerup}
           currentSkin={SKINS[currentSkinId]}
           initialPowerup={initialPowerup}
+          gameMode={gameMode}
         />
       </div>
 
       {/* Powerup HUD */}
-      {(gameState === GameState.PLAYING) && activePowerup && (
+      {(gameState === GameState.PLAYING) && activePowerup && gameMode !== 'battle' && (
           <div className="absolute top-24 left-0 right-0 flex justify-center z-10">
               <div className="bg-slate-900/60 backdrop-blur-md rounded-full px-6 py-2 border border-white/20 flex items-center gap-3 shadow-xl">
                   <div className={`w-3 h-3 rounded-full animate-pulse 
@@ -157,6 +162,14 @@ const App: React.FC = () => {
           <span className={`text-6xl font-black drop-shadow-lg select-none font-['Outfit'] transition-all text-white`}>
             {score}
           </span>
+          {gameMode === 'battle' && (
+             <div className="flex justify-center mt-3">
+                <div className="px-5 py-1.5 bg-red-950/40 backdrop-blur-md border border-red-500/30 rounded-full shadow-[0_0_15px_rgba(220,38,38,0.3)] flex items-center gap-2.5">
+                    <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.8)]"></span>
+                    <span className="text-white/90 font-bold tracking-[0.2em] text-xs uppercase drop-shadow-md">BATTLE MODE</span>
+                </div>
+             </div>
+          )}
         </div>
       )}
       
@@ -195,26 +208,34 @@ const App: React.FC = () => {
             </h1>
             <div className="text-xl text-slate-200 mb-8 font-light">Arcade Edition</div>
             
-            <div className="flex flex-col gap-8">
-                <Button onClick={() => startGame(null)} className="w-full text-xl py-4 shadow-xl">PLAY NOW</Button>
-                <div className="flex gap-6 w-full">
-                  <button 
-                    onClick={() => setIsShopOpen(true)}
-                    className="flex-1 py-4 rounded-2xl font-bold text-base tracking-wide bg-white/5 text-white border border-white/10 hover:bg-white/15 hover:border-white/30 transition-all flex flex-col items-center justify-center gap-1 group"
-                  >
-                    <span className="text-2xl mb-1 group-hover:scale-110 transition-transform">🎨</span> 
-                    SKINS
-                  </button>
-                  <button 
-                    onClick={() => setIsGuideOpen(true)}
-                    className="flex-1 py-4 rounded-2xl font-bold text-base tracking-wide bg-white/5 text-white border border-white/10 hover:bg-white/15 hover:border-white/30 transition-all flex flex-col items-center justify-center gap-1 group"
-                  >
-                    <span className="text-2xl mb-1 group-hover:scale-110 transition-transform">⚡</span> 
-                    POWERS
-                  </button>
-                </div>
-                <div className="text-white/30 text-xs uppercase tracking-widest mt-[-10px]">Press Space to Start</div>
+            <div className="flex flex-col gap-4 mb-6">
+                <Button onClick={() => startGame(null, 'standard')} className="w-full text-xl py-4 shadow-xl">PLAY CLASSIC</Button>
+                
+                <button 
+                  onClick={() => startGame(null, 'battle')}
+                  className="w-full py-4 rounded-full font-bold text-lg text-white bg-gradient-to-r from-red-600 to-rose-600 border-b-4 border-red-800 active:scale-95 shadow-lg hover:brightness-110 transition-all flex items-center justify-center gap-2"
+                >
+                  <span>⚔️</span> BATTLE MODE
+                </button>
             </div>
+
+            <div className="flex gap-4 w-full">
+              <button 
+                onClick={() => setIsShopOpen(true)}
+                className="flex-1 py-4 rounded-2xl font-bold text-base tracking-wide bg-white/5 text-white border border-white/10 hover:bg-white/15 hover:border-white/30 transition-all flex flex-col items-center justify-center gap-1 group"
+              >
+                <span className="text-2xl mb-1 group-hover:scale-110 transition-transform">🎨</span> 
+                SKINS
+              </button>
+              <button 
+                onClick={() => setIsGuideOpen(true)}
+                className="flex-1 py-4 rounded-2xl font-bold text-base tracking-wide bg-white/5 text-white border border-white/10 hover:bg-white/15 hover:border-white/30 transition-all flex flex-col items-center justify-center gap-1 group"
+              >
+                <span className="text-2xl mb-1 group-hover:scale-110 transition-transform">⚡</span> 
+                POWERS
+              </button>
+            </div>
+            <div className="text-white/30 text-xs uppercase tracking-widest mt-6">Press Space to Start</div>
           </div>
         </div>
       )}
@@ -237,7 +258,7 @@ const App: React.FC = () => {
                              <p className="text-sm text-slate-300 leading-tight">{p.desc}</p>
                           </div>
                           <button 
-                             onClick={() => startGame(p.type as any)}
+                             onClick={() => startGame(p.type as any, 'standard')}
                              className="px-4 py-2 bg-white/20 hover:bg-white/30 rounded-full text-xs font-bold text-white tracking-wide border border-white/20 transition-all active:scale-95"
                           >
                              TEST
@@ -327,7 +348,7 @@ const App: React.FC = () => {
             </div>
 
             <div className="flex flex-col gap-3">
-              <Button onClick={() => startGame(initialPowerup)}>TRY AGAIN</Button>
+              <Button onClick={() => startGame(initialPowerup, gameMode)}>TRY AGAIN</Button>
               <Button onClick={resetGame} variant="secondary">HOME</Button>
             </div>
             <div className="text-white/30 text-xs mt-4">Press Space to Restart</div>

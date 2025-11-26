@@ -62,7 +62,7 @@ export type SkinId =
   | 'default' | 'neon_blue' | 'neon_pink' | 'pixel_bird' | 'pixel_scout' 
   | 'ninja' | 'robot' | 'ghost' | 'golden'
   | 'magma' | 'ice_breaker' | 'bumblebee' | 'zombie' | 'vampire' | 'bubblegum' | 'toxic' | 'saiyan'
-  | 'ninja_sage' | 'pirate_king';
+  | 'ninja_sage' | 'pirate_king' | 'enemy';
 
 export interface UnlockCondition {
   type: 'default' | 'score' | 'games_played' | 'login' | 'lucky_drop';
@@ -116,7 +116,7 @@ export interface EnvironmentState {
 
 // --- ENDLESS DANGER MODE ---
 
-export type GameMode = 'standard' | 'danger';
+export type GameMode = 'standard' | 'danger' | 'battle';
 
 export type HazardType = 'laser' | 'debris';
 
@@ -134,4 +134,14 @@ export interface Debris {
   y: number;
   rotation: number;
   size: number;
+}
+
+export interface Enemy {
+  id: number;
+  x: number;
+  y: number;
+  velocity: number;
+  targetY: number;
+  hp: number;
+  scale: number;
 }

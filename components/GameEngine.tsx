@@ -1,8 +1,8 @@
 
 import React, { useRef, useEffect, useCallback } from 'react';
 import * as THREE from 'three';
-import { GameState, Bird, Pipe, Powerup, PowerupType, ActivePowerup, Skin, Particle, Projectile } from '../types';
-import { GAME_CONSTANTS, COLORS, PARTICLE_CONFIG } from '../constants';
+import { GameState, Bird, Pipe, Powerup, PowerupType, ActivePowerup, Skin, Particle, Projectile, GameMode, Enemy } from '../types';
+import { GAME_CONSTANTS, COLORS, PARTICLE_CONFIG, BATTLE_CONSTANTS, ENEMY_SKIN } from '../constants';
 import { audioService } from '../services/audioService';
 import { setupThreeScene } from '../utils/threeSetup';
 import { createGeometries, createMaterials } from '../utils/assetManager';
@@ -17,6 +17,7 @@ interface GameEngineProps {
   setActivePowerup: (powerup: ActivePowerup | null) => void;
   currentSkin: Skin;
   initialPowerup?: PowerupType | null; 
+  gameMode: GameMode;
 }
 
 export const GameEngine: React.FC<GameEngineProps> = ({ 
@@ -27,7 +28,8 @@ export const GameEngine: React.FC<GameEngineProps> = ({
   highScore,
   setActivePowerup,
   currentSkin,
-  initialPowerup
+  initialPowerup,
+  gameMode
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const requestRef = useRef<number>(0);
@@ -39,6 +41,7 @@ export const GameEngine: React.FC<GameEngineProps> = ({
   const lastPowerupSpawnFrameRef = useRef<number>(0);
   const lastParticleFrameRef = useRef<number>(0);
   const lastBulletTrailFrameRef = useRef<number>(0);
+  const lastEnemySpawnFrameRef = useRef<number>(0);
   
   const isRoundActiveRef = useRef<boolean>(false); 
   const birdRef = useRef<Bird>({ 
@@ -54,6 +57,7 @@ export const GameEngine: React.FC<GameEngineProps> = ({
   const powerupsRef = useRef<Powerup[]>([]);
   const particlesRef = useRef<Particle[]>([]);
   const projectilesRef = useRef<Projectile[]>([]);
+  const enemiesRef = useRef<Enemy[]>([]);
   const lastShotFrameRef = useRef<number>(0);
 
   const scoreRef = useRef<number>(0);
@@ -68,6 +72,7 @@ export const GameEngine: React.FC<GameEngineProps> = ({
   const pipeMeshesRef = useRef<Map<Pipe, THREE.Group>>(new Map());
   const powerupMeshesRef = useRef<Map<Powerup, THREE.Mesh>>(new Map());
   const projectileMeshesRef = useRef<THREE.Mesh[]>([]);
+  const enemyMeshesRef = useRef<Map<Enemy, THREE.Group>>(new Map());
 
   const particleMeshesRef = useRef<THREE.Mesh[]>([]);
   const sceneReady = useRef<boolean>(false);
@@ -88,20 +93,9 @@ export const GameEngine: React.FC<GameEngineProps> = ({
       scale: GAME_CONSTANTS.SCALE_NORMAL, targetScale: GAME_CONSTANTS.SCALE_NORMAL, effectTimer: 0
     };
     
-    // Pre-spawn first pipe
+    // Reset entities
     pipesRef.current = [];
-    const minPipeHeight = 50;
-    const maxTopPipeHeight = Math.max(minPipeHeight, height - GAME_CONSTANTS.PIPE_GAP - minPipeHeight);
-    const startPipeHeight = Math.floor(minPipeHeight + (maxTopPipeHeight - minPipeHeight) / 2 + (Math.random() * 100 - 50)); 
-    pipesRef.current.push({
-        x: width - 100,
-        topHeight: startPipeHeight,
-        passed: false,
-        type: 'normal',
-        brokenTop: false,
-        brokenBottom: false
-    });
-
+    enemiesRef.current = [];
     powerupsRef.current = [];
     particlesRef.current = [];
     projectilesRef.current = [];
@@ -114,6 +108,7 @@ export const GameEngine: React.FC<GameEngineProps> = ({
     lastPowerupSpawnFrameRef.current = 0;
     lastParticleFrameRef.current = 0;
     lastBulletTrailFrameRef.current = 0;
+    lastEnemySpawnFrameRef.current = 0;
     
     timeScaleRef.current = 1.0;
     targetTimeScaleRef.current = 1.0;
@@ -121,7 +116,27 @@ export const GameEngine: React.FC<GameEngineProps> = ({
     setActivePowerup(null);
     setScore(0);
 
-    if (initialPowerup) {
+    // Initial Spawns based on Mode
+    if (gameMode !== 'battle') {
+        const minPipeHeight = 50;
+        const maxTopPipeHeight = Math.max(minPipeHeight, height - GAME_CONSTANTS.PIPE_GAP - minPipeHeight);
+        const startPipeHeight = Math.floor(minPipeHeight + (maxTopPipeHeight - minPipeHeight) / 2 + (Math.random() * 100 - 50)); 
+        pipesRef.current.push({
+            x: width - 100,
+            topHeight: startPipeHeight,
+            passed: false,
+            type: 'normal',
+            brokenTop: false,
+            brokenBottom: false
+        });
+    }
+
+    if (gameMode === 'battle') {
+        // Force Gun
+        activePowerupRef.current = { type: 'gun', timeLeft: 9999999, totalTime: 9999999 };
+        setActivePowerup(activePowerupRef.current);
+        audioService.playShieldUp();
+    } else if (initialPowerup) {
         let duration = 999999; 
         switch (initialPowerup) {
             case 'shrink': birdRef.current.targetScale = GAME_CONSTANTS.SCALE_SHRINK; audioService.playShrink(); break;
@@ -150,10 +165,12 @@ export const GameEngine: React.FC<GameEngineProps> = ({
       pipeMeshesRef.current.clear();
       powerupMeshesRef.current.forEach((mesh) => sceneRef.current?.remove(mesh));
       powerupMeshesRef.current.clear();
+      enemyMeshesRef.current.forEach((group) => sceneRef.current?.remove(group));
+      enemyMeshesRef.current.clear();
       projectileMeshesRef.current.forEach(mesh => { mesh.visible = false; });
       particleMeshesRef.current.forEach(mesh => mesh.visible = false);
     }
-  }, [setScore, setActivePowerup, initialPowerup]);
+  }, [setScore, setActivePowerup, initialPowerup, gameMode]);
 
   const handleJump = useCallback(() => {
     if (gameState !== GameState.PLAYING) return;
@@ -200,7 +217,7 @@ export const GameEngine: React.FC<GameEngineProps> = ({
           birdRef.current.y += birdRef.current.velocity * dt;
           birdRef.current.rotation = Math.min(Math.PI / 4, Math.max(-Math.PI / 4, (birdRef.current.velocity * 0.1)));
 
-          if (birdRef.current.effectTimer > 0) {
+          if (gameMode !== 'battle' && birdRef.current.effectTimer > 0) {
             birdRef.current.effectTimer -= 1 * dt; 
             if (activePowerupRef.current) {
                  activePowerupRef.current.timeLeft = birdRef.current.effectTimer;
@@ -220,6 +237,7 @@ export const GameEngine: React.FC<GameEngineProps> = ({
           speedRef.current += GAME_CONSTANTS.SPEED_INCREMENT * dt;
           const moveSpeed = (speedRef.current) * dt;
 
+          // --- WEAPONS SYSTEM ---
           if (activePowerupRef.current?.type === 'gun') {
               if (frameCountRef.current - lastShotFrameRef.current >= GAME_CONSTANTS.GUN_FIRE_RATE) {
                   lastShotFrameRef.current = frameCountRef.current;
@@ -237,91 +255,176 @@ export const GameEngine: React.FC<GameEngineProps> = ({
           for (let i = projectilesRef.current.length - 1; i >= 0; i--) {
               const proj = projectilesRef.current[i];
               proj.x += proj.vx * dt;
-              
               let hit = false;
-              for (let j = 0; j < pipesRef.current.length; j++) {
-                  const pipe = pipesRef.current[j];
-                  if (proj.x > pipe.x && proj.x < pipe.x + GAME_CONSTANTS.PIPE_WIDTH) {
-                      if (!pipe.brokenTop && proj.y < pipe.topHeight) {
-                          pipe.brokenTop = true; hit = true;
-                      } else if (!pipe.brokenBottom && proj.y > pipe.topHeight + GAME_CONSTANTS.PIPE_GAP) {
-                          pipe.brokenBottom = true; hit = true;
-                      }
-                      if (hit) {
-                          scoreRef.current += 2;
-                          setScore(scoreRef.current);
-                          audioService.playExplosion();
-                          triggerEffect();
-                          for(let k=0; k<10; k++) {
-                               particlesRef.current.push({
-                                  x: proj.x, y: proj.y,
-                                  vx: (Math.random()-0.5)*5, vy: (Math.random()-0.5)*5,
-                                  life: 20, maxLife: 20, scale: 3, color: 0xFF0000, rotation: 0
-                               });
+              
+              // Projectile vs Pipe
+              if (gameMode !== 'battle') {
+                  for (let j = 0; j < pipesRef.current.length; j++) {
+                      const pipe = pipesRef.current[j];
+                      if (proj.x > pipe.x && proj.x < pipe.x + GAME_CONSTANTS.PIPE_WIDTH) {
+                          if (!pipe.brokenTop && proj.y < pipe.topHeight) {
+                              pipe.brokenTop = true; hit = true;
+                          } else if (!pipe.brokenBottom && proj.y > pipe.topHeight + GAME_CONSTANTS.PIPE_GAP) {
+                              pipe.brokenBottom = true; hit = true;
                           }
-                          break; 
+                          if (hit) {
+                              scoreRef.current += 2;
+                              setScore(scoreRef.current);
+                              audioService.playExplosion();
+                              triggerEffect();
+                              for(let k=0; k<10; k++) {
+                                  particlesRef.current.push({
+                                      x: proj.x, y: proj.y,
+                                      vx: (Math.random()-0.5)*5, vy: (Math.random()-0.5)*5,
+                                      life: 20, maxLife: 20, scale: 3, color: 0xFF0000, rotation: 0
+                                  });
+                              }
+                              break; 
+                          }
                       }
                   }
               }
+
+              // Projectile vs Enemy
+              if (gameMode === 'battle' && !hit) {
+                  for (let j = enemiesRef.current.length - 1; j >= 0; j--) {
+                      const enemy = enemiesRef.current[j];
+                      const dx = proj.x - enemy.x;
+                      const dy = proj.y - enemy.y;
+                      const dist = Math.sqrt(dx*dx + dy*dy);
+                      if (dist < BATTLE_CONSTANTS.ENEMY_SIZE + 10) {
+                          hit = true;
+                          enemy.hp--;
+                          if (enemy.hp <= 0) {
+                              scoreRef.current += BATTLE_CONSTANTS.ENEMY_SCORE;
+                              setScore(scoreRef.current);
+                              enemiesRef.current.splice(j, 1);
+                              audioService.playExplosion();
+                              triggerEffect();
+                              // Explosion
+                              for(let k=0; k<15; k++) {
+                                  particlesRef.current.push({
+                                      x: enemy.x, y: enemy.y,
+                                      vx: (Math.random()-0.5)*8, vy: (Math.random()-0.5)*8,
+                                      life: 25, maxLife: 25, scale: 4, color: 0xFF4400, rotation: 0
+                                  });
+                              }
+                          }
+                          break;
+                      }
+                  }
+              }
+
               if (hit || proj.x > width + 100) {
                   projectilesRef.current.splice(i, 1);
               }
           }
 
-          const spawnInterval = Math.floor(GAME_CONSTANTS.PIPE_SPAWN_RATE * (GAME_CONSTANTS.BASE_PIPE_SPEED / speedRef.current));
-          const spawnRate = Math.floor(Math.max(30, spawnInterval / timeScaleRef.current));
-          
-          if (frameCountRef.current - lastPipeSpawnFrameRef.current >= spawnRate) {
-              lastPipeSpawnFrameRef.current = frameCountRef.current;
-              const minPipeHeight = 50;
-              const maxTopPipeHeight = Math.max(minPipeHeight, height - GAME_CONSTANTS.PIPE_GAP - minPipeHeight);
-              let minBound = minPipeHeight;
-              let maxBound = maxTopPipeHeight;
-              if (pipesRef.current.length > 0) {
-                  const lastPipe = pipesRef.current[pipesRef.current.length - 1];
-                  const timeFactor = (GAME_CONSTANTS.BASE_PIPE_SPEED / speedRef.current);
-                  const maxJump = Math.max(80, (height * 0.4) * timeFactor);
-                  minBound = Math.max(minPipeHeight, lastPipe.topHeight - maxJump);
-                  maxBound = Math.min(maxTopPipeHeight, lastPipe.topHeight + maxJump);
-              } else {
-                  minBound = height / 3;
-                  maxBound = height / 1.5;
+          // --- ENEMY SPAWNING (BATTLE MODE) ---
+          if (gameMode === 'battle') {
+              if (frameCountRef.current - lastEnemySpawnFrameRef.current >= BATTLE_CONSTANTS.ENEMY_SPAWN_RATE) {
+                  lastEnemySpawnFrameRef.current = frameCountRef.current;
+                  const padding = 50;
+                  const spawnY = padding + Math.random() * (height - padding * 2);
+                  enemiesRef.current.push({
+                      id: Math.random(),
+                      x: width + 50,
+                      y: spawnY,
+                      velocity: BATTLE_CONSTANTS.ENEMY_SPEED + (Math.random() * 2),
+                      targetY: spawnY,
+                      hp: BATTLE_CONSTANTS.ENEMY_HP,
+                      scale: 1.0
+                  });
               }
-              const topHeight = Math.floor(minBound + Math.random() * (maxBound - minBound));
-              const isGlass = Math.random() < GAME_CONSTANTS.GLASS_PIPE_CHANCE;
-              pipesRef.current.push({
-                  x: width, topHeight, passed: false, type: isGlass ? 'glass' : 'normal', brokenTop: false, brokenBottom: false
-              });
-          }
 
-          const powerupRate = Math.floor(GAME_CONSTANTS.POWERUP_SPAWN_RATE / timeScaleRef.current);
-          if (!initialPowerup && frameCountRef.current - lastPowerupSpawnFrameRef.current >= powerupRate) {
-              lastPowerupSpawnFrameRef.current = frameCountRef.current;
-              const rand = Math.random();
-              let type: PowerupType = 'shrink'; 
-              if (rand < 0.2) type = 'shrink';
-              else if (rand < 0.4) type = 'grow';
-              else if (rand < 0.55) type = 'shield';
-              else if (rand < 0.7) type = 'slowmo';
-              else if (rand < 0.8) type = 'gun';
-              else if (rand < 0.9) type = 'fast';
-              else type = 'ghost';
+              const birdX = width * GAME_CONSTANTS.BIRD_X_POSITION;
+              const birdRadius = GAME_CONSTANTS.BIRD_RADIUS * birdRef.current.scale;
 
-              let spawnMinY = height * 0.25;
-              let spawnMaxY = height * 0.75;
-              if (pipesRef.current.length > 0) {
-                  const lastPipe = pipesRef.current[pipesRef.current.length - 1];
-                  const distFromPipe = Math.abs(width - lastPipe.x);
-                  if (distFromPipe < 350) {
-                      const padding = 45;
-                      spawnMinY = lastPipe.topHeight + padding;
-                      spawnMaxY = lastPipe.topHeight + GAME_CONSTANTS.PIPE_GAP - padding;
+              for (let i = enemiesRef.current.length - 1; i >= 0; i--) {
+                  const enemy = enemiesRef.current[i];
+                  enemy.x -= enemy.velocity * dt;
+                  
+                  // Sine wave movement
+                  enemy.y = enemy.targetY + Math.sin(frameCountRef.current * 0.05 + enemy.id * 10) * 50;
+                  
+                  if (enemy.x < -100) {
+                      enemiesRef.current.splice(i, 1);
+                      continue;
+                  }
+
+                  // Collision Player vs Enemy
+                  const dx = enemy.x - birdX;
+                  const dy = enemy.y - birdRef.current.y;
+                  const dist = Math.sqrt(dx*dx + dy*dy);
+                  if (dist < birdRadius + BATTLE_CONSTANTS.ENEMY_SIZE) {
+                      audioService.playCrash();
+                      triggerEffect();
+                      setGameState(GameState.GAME_OVER);
                   }
               }
-              const y = spawnMinY + Math.random() * (spawnMaxY - spawnMinY);
-              powerupsRef.current.push({ x: width, y, type, active: true });
           }
 
+          // --- PIPE SPAWNING (STANDARD MODE) ---
+          if (gameMode !== 'battle') {
+              const spawnInterval = Math.floor(GAME_CONSTANTS.PIPE_SPAWN_RATE * (GAME_CONSTANTS.BASE_PIPE_SPEED / speedRef.current));
+              const spawnRate = Math.floor(Math.max(30, spawnInterval / timeScaleRef.current));
+              
+              if (frameCountRef.current - lastPipeSpawnFrameRef.current >= spawnRate) {
+                  lastPipeSpawnFrameRef.current = frameCountRef.current;
+                  const minPipeHeight = 50;
+                  const maxTopPipeHeight = Math.max(minPipeHeight, height - GAME_CONSTANTS.PIPE_GAP - minPipeHeight);
+                  let minBound = minPipeHeight;
+                  let maxBound = maxTopPipeHeight;
+                  if (pipesRef.current.length > 0) {
+                      const lastPipe = pipesRef.current[pipesRef.current.length - 1];
+                      const timeFactor = (GAME_CONSTANTS.BASE_PIPE_SPEED / speedRef.current);
+                      const maxJump = Math.max(80, (height * 0.4) * timeFactor);
+                      minBound = Math.max(minPipeHeight, lastPipe.topHeight - maxJump);
+                      maxBound = Math.min(maxTopPipeHeight, lastPipe.topHeight + maxJump);
+                  } else {
+                      minBound = height / 3;
+                      maxBound = height / 1.5;
+                  }
+                  const topHeight = Math.floor(minBound + Math.random() * (maxBound - minBound));
+                  const isGlass = Math.random() < GAME_CONSTANTS.GLASS_PIPE_CHANCE;
+                  pipesRef.current.push({
+                      x: width, topHeight, passed: false, type: isGlass ? 'glass' : 'normal', brokenTop: false, brokenBottom: false
+                  });
+              }
+          }
+
+          // --- POWERUP SPAWNING ---
+          if (gameMode !== 'battle') {
+              const powerupRate = Math.floor(GAME_CONSTANTS.POWERUP_SPAWN_RATE / timeScaleRef.current);
+              if (!initialPowerup && frameCountRef.current - lastPowerupSpawnFrameRef.current >= powerupRate) {
+                  lastPowerupSpawnFrameRef.current = frameCountRef.current;
+                  const rand = Math.random();
+                  let type: PowerupType = 'shrink'; 
+                  if (rand < 0.2) type = 'shrink';
+                  else if (rand < 0.4) type = 'grow';
+                  else if (rand < 0.55) type = 'shield';
+                  else if (rand < 0.7) type = 'slowmo';
+                  else if (rand < 0.8) type = 'gun';
+                  else if (rand < 0.9) type = 'fast';
+                  else type = 'ghost';
+
+                  let spawnMinY = height * 0.25;
+                  let spawnMaxY = height * 0.75;
+                  if (pipesRef.current.length > 0) {
+                      const lastPipe = pipesRef.current[pipesRef.current.length - 1];
+                      const distFromPipe = Math.abs(width - lastPipe.x);
+                      if (distFromPipe < 350) {
+                          const padding = 45;
+                          spawnMinY = lastPipe.topHeight + padding;
+                          spawnMaxY = lastPipe.topHeight + GAME_CONSTANTS.PIPE_GAP - padding;
+                      }
+                  }
+                  const y = spawnMinY + Math.random() * (spawnMaxY - spawnMinY);
+                  powerupsRef.current.push({ x: width, y, type, active: true });
+              }
+          }
+
+          // Powerup Collision
           const birdX = width * GAME_CONSTANTS.BIRD_X_POSITION;
           const birdRadius = (GAME_CONSTANTS.BIRD_RADIUS * birdRef.current.scale) - 2; 
 
@@ -356,6 +459,7 @@ export const GameEngine: React.FC<GameEngineProps> = ({
             }
           }
 
+          // Particle Updates
           if (currentSkin.trail !== 'none' && (frameCountRef.current - lastParticleFrameRef.current >= PARTICLE_CONFIG.TRAIL_SPAWN_RATE)) {
               lastParticleFrameRef.current = frameCountRef.current;
               const pScale = currentSkin.trail === 'pixel_dust' ? 4 : 2;
@@ -399,6 +503,7 @@ export const GameEngine: React.FC<GameEngineProps> = ({
               }
           }
 
+          // Pipe Updates
           for (let i = pipesRef.current.length - 1; i >= 0; i--) {
             const pipe = pipesRef.current[i];
             pipe.x -= moveSpeed;
@@ -532,7 +637,6 @@ export const GameEngine: React.FC<GameEngineProps> = ({
       if (shield) {
           shield.visible = isShieldActive;
           if (isShieldActive) {
-              // Removed pulsing effect for stability
               shield.scale.set(1.4, 1.4, 1.4);
               shield.rotation.y += 0.02; // Slower rotation
           }
@@ -541,6 +645,32 @@ export const GameEngine: React.FC<GameEngineProps> = ({
       const gun = birdMeshRef.current.getObjectByName('gun');
       if (gun) gun.visible = isGunActive;
     }
+
+    // Render Enemies
+    const currentEnemies = new Set(enemiesRef.current);
+    for (const [enemy, group] of enemyMeshesRef.current.entries()) {
+        if (!currentEnemies.has(enemy)) {
+            sceneRef.current?.remove(group);
+            enemyMeshesRef.current.delete(enemy);
+        }
+    }
+    
+    enemiesRef.current.forEach(enemy => {
+        let group = enemyMeshesRef.current.get(enemy);
+        if (!group) {
+            group = createBirdMesh(ENEMY_SKIN, geometryRef.current, materialRef.current);
+            // Flip enemy to face left
+            group.rotation.y = Math.PI;
+            sceneRef.current?.add(group);
+            enemyMeshesRef.current.set(enemy, group);
+        }
+        group.position.x = toWorldX(enemy.x, width);
+        group.position.y = toWorldY(enemy.y, height);
+        // Tilt forward as they fly
+        group.rotation.z = 0.2;
+        group.scale.set(1.2, 1.2, 1.2);
+    });
+
 
     particleMeshesRef.current.forEach(m => m.visible = false);
     while (particleMeshesRef.current.length < particlesRef.current.length) {
@@ -680,7 +810,7 @@ export const GameEngine: React.FC<GameEngineProps> = ({
 
     rendererRef.current.render(sceneRef.current, cameraRef.current);
     requestRef.current = requestAnimationFrame(loop);
-  }, [gameState, setGameState, setScore, triggerEffect, highScore, setActivePowerup, currentSkin, initialPowerup]);
+  }, [gameState, setGameState, setScore, triggerEffect, highScore, setActivePowerup, currentSkin, initialPowerup, gameMode]);
 
   useEffect(() => {
     if (!containerRef.current) return;

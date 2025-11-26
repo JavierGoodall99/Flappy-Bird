@@ -1,4 +1,5 @@
 
+
 import { Skin } from './types';
 
 export const GAME_CONSTANTS = {
@@ -36,7 +37,7 @@ export const GAME_CONSTANTS = {
   TIME_SCALE_FAST: 1.25,
   
   // Gun Stats
-  GUN_FIRE_RATE: 20, // Frames between shots
+  GUN_FIRE_RATE: 15, // Faster fire rate for battle
   PROJECTILE_SPEED: 12,
 };
 
@@ -125,6 +126,26 @@ export const DANGER_CONSTANTS = {
     SKY_BOTTOM: 0x000000,
     SURGE_VIGNETTE: 0xff0000
   }
+};
+
+// --- BATTLE MODE CONSTANTS ---
+
+export const BATTLE_CONSTANTS = {
+    ENEMY_SPAWN_RATE: 45, // Frames
+    ENEMY_SPEED: 6,
+    ENEMY_SCORE: 10,
+    ENEMY_HP: 1,
+    ENEMY_SIZE: 20,
+};
+
+export const ENEMY_SKIN: Skin = {
+    id: 'enemy',
+    name: 'Invader',
+    rarity: 'Common',
+    modelType: 'standard',
+    trail: 'smoke',
+    unlockCondition: { type: 'default', value: 0, description: '' },
+    colors: { body: 0xD32F2F, wing: 0x212121, beak: 0x000000, eye: 0xFF0000 }
 };
 
 // --- SKINS CATALOG ---
