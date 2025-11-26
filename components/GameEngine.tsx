@@ -216,6 +216,9 @@ export const GameEngine: React.FC<GameEngineProps> = ({
           birdRef.current.velocity += GAME_CONSTANTS.GRAVITY * dt;
           birdRef.current.y += birdRef.current.velocity * dt;
           birdRef.current.rotation = Math.min(Math.PI / 4, Math.max(-Math.PI / 4, (birdRef.current.velocity * 0.1)));
+          
+          const birdX = width * GAME_CONSTANTS.BIRD_X_POSITION; // Defines player X position for this frame
+          const birdRadius = GAME_CONSTANTS.BIRD_RADIUS * birdRef.current.scale;
 
           if (gameMode !== 'battle' && birdRef.current.effectTimer > 0) {
             birdRef.current.effectTimer -= 1 * dt; 
@@ -237,11 +240,74 @@ export const GameEngine: React.FC<GameEngineProps> = ({
           speedRef.current += GAME_CONSTANTS.SPEED_INCREMENT * dt;
           const moveSpeed = (speedRef.current) * dt;
 
+          // --- ENEMY SPAWNING & UPDATE (BATTLE MODE) ---
+          // Executed BEFORE Weapons System so projectiles check against updated positions (Fixes sync/hitbox issues)
+          if (gameMode === 'battle') {
+            const currentScore = scoreRef.current;
+            
+            // GLOBAL DIFFICULTY SCALING
+            const MAX_SPEED_BONUS = 4;
+            const globalSpeedBonus = Math.min(MAX_SPEED_BONUS, (currentScore / 50) * 0.5); 
+            
+            const spawnRateReduction = Math.min(20, Math.floor(currentScore / 40)); 
+            const currentSpawnRate = Math.max(25, BATTLE_CONSTANTS.ENEMY_SPAWN_RATE - spawnRateReduction);
+
+            if (frameCountRef.current - lastEnemySpawnFrameRef.current >= currentSpawnRate) {
+                lastEnemySpawnFrameRef.current = frameCountRef.current;
+                const padding = 50;
+                const spawnY = padding + Math.random() * (height - padding * 2);
+
+                const hpBonus = Math.floor(currentScore / 100);
+                const scaleBonus = Math.min(0.8, hpBonus * 0.1);
+
+                enemiesRef.current.push({
+                    id: Math.random(),
+                    x: width + 50,
+                    y: spawnY,
+                    velocity: BATTLE_CONSTANTS.ENEMY_SPEED + (Math.random() * 2), 
+                    targetY: spawnY,
+                    hp: BATTLE_CONSTANTS.ENEMY_HP + hpBonus,
+                    scale: 1.0 + scaleBonus
+                });
+            }
+
+            for (let i = enemiesRef.current.length - 1; i >= 0; i--) {
+                const enemy = enemiesRef.current[i];
+                // Move enemy
+                enemy.x -= (enemy.velocity + globalSpeedBonus) * dt;
+                
+                // Dynamic Sine wave movement
+                const weaveIntensity = 50 + Math.min(50, currentScore / 10);
+                enemy.y = enemy.targetY + Math.sin(frameCountRef.current * 0.05 + enemy.id * 10) * weaveIntensity;
+                
+                if (enemy.x < -100) {
+                    enemiesRef.current.splice(i, 1);
+                    continue;
+                }
+
+                // Collision Player vs Enemy
+                const dx = enemy.x - birdX;
+                const dy = enemy.y - birdRef.current.y;
+                const dist = Math.sqrt(dx*dx + dy*dy);
+                const enemyRadius = BATTLE_CONSTANTS.ENEMY_SIZE * enemy.scale;
+                
+                if (dist < birdRadius + enemyRadius) {
+                    audioService.playCrash();
+                    triggerEffect();
+                    setGameState(GameState.GAME_OVER);
+                }
+            }
+          }
+
           // --- WEAPONS SYSTEM ---
           if (activePowerupRef.current?.type === 'gun') {
-              if (frameCountRef.current - lastShotFrameRef.current >= GAME_CONSTANTS.GUN_FIRE_RATE) {
+              let fireRate = GAME_CONSTANTS.GUN_FIRE_RATE;
+              if (gameMode === 'battle') {
+                  fireRate = Math.max(8, GAME_CONSTANTS.GUN_FIRE_RATE - Math.floor(scoreRef.current / 150));
+              }
+
+              if (frameCountRef.current - lastShotFrameRef.current >= fireRate) {
                   lastShotFrameRef.current = frameCountRef.current;
-                  const birdX = width * GAME_CONSTANTS.BIRD_X_POSITION;
                   projectilesRef.current.push({
                       id: Math.random(),
                       x: birdX + 20,
@@ -254,6 +320,7 @@ export const GameEngine: React.FC<GameEngineProps> = ({
 
           for (let i = projectilesRef.current.length - 1; i >= 0; i--) {
               const proj = projectilesRef.current[i];
+              const prevProjX = proj.x; // Store previous X for tunneling check
               proj.x += proj.vx * dt;
               let hit = false;
               
@@ -292,9 +359,28 @@ export const GameEngine: React.FC<GameEngineProps> = ({
                       const dx = proj.x - enemy.x;
                       const dy = proj.y - enemy.y;
                       const dist = Math.sqrt(dx*dx + dy*dy);
-                      if (dist < BATTLE_CONSTANTS.ENEMY_SIZE + 10) {
+                      // Increased hitbox padding from 15 to 20 for more generous hits
+                      const enemyHitRadius = (BATTLE_CONSTANTS.ENEMY_SIZE * enemy.scale) + 20;
+                      
+                      // Tunneling check for high speeds:
+                      // 1. Is projectile vertically aligned with enemy?
+                      const isYAligned = Math.abs(dy) < enemyHitRadius;
+                      // 2. Did projectile cross enemy x-plane this frame?
+                      // We compare Projectile's movement (prev->curr) against the Enemy's CURRENT position (which was just updated).
+                      const hasCrossedX = (proj.x >= enemy.x - enemyHitRadius) && (prevProjX <= enemy.x + enemyHitRadius);
+                      
+                      if (dist < enemyHitRadius || (isYAligned && hasCrossedX)) {
                           hit = true;
                           enemy.hp--;
+                          // Impact effect
+                          for(let k=0; k<3; k++) {
+                              particlesRef.current.push({
+                                  x: proj.x, y: proj.y,
+                                  vx: (Math.random()-0.5)*5, vy: (Math.random()-0.5)*5,
+                                  life: 10, maxLife: 10, scale: 2, color: 0xFFFFFF, rotation: 0
+                              });
+                          }
+
                           if (enemy.hp <= 0) {
                               scoreRef.current += BATTLE_CONSTANTS.ENEMY_SCORE;
                               setScore(scoreRef.current);
@@ -317,50 +403,6 @@ export const GameEngine: React.FC<GameEngineProps> = ({
 
               if (hit || proj.x > width + 100) {
                   projectilesRef.current.splice(i, 1);
-              }
-          }
-
-          // --- ENEMY SPAWNING (BATTLE MODE) ---
-          if (gameMode === 'battle') {
-              if (frameCountRef.current - lastEnemySpawnFrameRef.current >= BATTLE_CONSTANTS.ENEMY_SPAWN_RATE) {
-                  lastEnemySpawnFrameRef.current = frameCountRef.current;
-                  const padding = 50;
-                  const spawnY = padding + Math.random() * (height - padding * 2);
-                  enemiesRef.current.push({
-                      id: Math.random(),
-                      x: width + 50,
-                      y: spawnY,
-                      velocity: BATTLE_CONSTANTS.ENEMY_SPEED + (Math.random() * 2),
-                      targetY: spawnY,
-                      hp: BATTLE_CONSTANTS.ENEMY_HP,
-                      scale: 1.0
-                  });
-              }
-
-              const birdX = width * GAME_CONSTANTS.BIRD_X_POSITION;
-              const birdRadius = GAME_CONSTANTS.BIRD_RADIUS * birdRef.current.scale;
-
-              for (let i = enemiesRef.current.length - 1; i >= 0; i--) {
-                  const enemy = enemiesRef.current[i];
-                  enemy.x -= enemy.velocity * dt;
-                  
-                  // Sine wave movement
-                  enemy.y = enemy.targetY + Math.sin(frameCountRef.current * 0.05 + enemy.id * 10) * 50;
-                  
-                  if (enemy.x < -100) {
-                      enemiesRef.current.splice(i, 1);
-                      continue;
-                  }
-
-                  // Collision Player vs Enemy
-                  const dx = enemy.x - birdX;
-                  const dy = enemy.y - birdRef.current.y;
-                  const dist = Math.sqrt(dx*dx + dy*dy);
-                  if (dist < birdRadius + BATTLE_CONSTANTS.ENEMY_SIZE) {
-                      audioService.playCrash();
-                      triggerEffect();
-                      setGameState(GameState.GAME_OVER);
-                  }
               }
           }
 
@@ -425,8 +467,7 @@ export const GameEngine: React.FC<GameEngineProps> = ({
           }
 
           // Powerup Collision
-          const birdX = width * GAME_CONSTANTS.BIRD_X_POSITION;
-          const birdRadius = (GAME_CONSTANTS.BIRD_RADIUS * birdRef.current.scale) - 2; 
+          const birdCollideRadius = (GAME_CONSTANTS.BIRD_RADIUS * birdRef.current.scale) - 2; 
 
           for (let i = powerupsRef.current.length - 1; i >= 0; i--) {
             const p = powerupsRef.current[i];
@@ -435,7 +476,7 @@ export const GameEngine: React.FC<GameEngineProps> = ({
               const dx = p.x - birdX;
               const dy = p.y - birdRef.current.y;
               const dist = Math.sqrt(dx*dx + dy*dy);
-              if (dist < birdRadius + GAME_CONSTANTS.POWERUP_SIZE) {
+              if (dist < birdCollideRadius + GAME_CONSTANTS.POWERUP_SIZE) {
                 p.active = false;
                 let duration = GAME_CONSTANTS.DURATION_SIZE;
                 birdRef.current.targetScale = GAME_CONSTANTS.SCALE_NORMAL;
@@ -513,9 +554,9 @@ export const GameEngine: React.FC<GameEngineProps> = ({
             }
             const isGhost = activePowerupRef.current?.type === 'ghost';
             if (!isGhost) {
-                if (birdX + birdRadius > pipe.x && birdX - birdRadius < pipe.x + GAME_CONSTANTS.PIPE_WIDTH) {
-                  const hitTop = !pipe.brokenTop && birdRef.current.y - birdRadius < pipe.topHeight;
-                  const hitBottom = !pipe.brokenBottom && birdRef.current.y + birdRadius > pipe.topHeight + GAME_CONSTANTS.PIPE_GAP;
+                if (birdX + birdCollideRadius > pipe.x && birdX - birdCollideRadius < pipe.x + GAME_CONSTANTS.PIPE_WIDTH) {
+                  const hitTop = !pipe.brokenTop && birdRef.current.y - birdCollideRadius < pipe.topHeight;
+                  const hitBottom = !pipe.brokenBottom && birdRef.current.y + birdCollideRadius > pipe.topHeight + GAME_CONSTANTS.PIPE_GAP;
                   if (hitTop || hitBottom) {
                      if (pipe.type === 'glass') {
                        const isFreshBreak = (hitTop && !pipe.brokenTop) || (hitBottom && !pipe.brokenBottom);
@@ -567,7 +608,7 @@ export const GameEngine: React.FC<GameEngineProps> = ({
             }
           }
 
-          if (birdRef.current.y + birdRadius >= height || birdRef.current.y - birdRadius <= 0) {
+          if (birdRef.current.y + birdCollideRadius >= height || birdRef.current.y - birdCollideRadius <= 0) {
              audioService.playCrash();
              triggerEffect();
              setGameState(GameState.GAME_OVER);
@@ -668,7 +709,10 @@ export const GameEngine: React.FC<GameEngineProps> = ({
         group.position.y = toWorldY(enemy.y, height);
         // Tilt forward as they fly
         group.rotation.z = 0.2;
-        group.scale.set(1.2, 1.2, 1.2);
+        
+        // Scale based on difficulty/type
+        const s = 1.2 * enemy.scale;
+        group.scale.set(s, s, s);
     });
 
 
