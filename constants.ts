@@ -1,5 +1,4 @@
 
-
 import { Skin } from './types';
 
 export const GAME_CONSTANTS = {
@@ -37,8 +36,8 @@ export const GAME_CONSTANTS = {
   TIME_SCALE_FAST: 1.25,
   
   // Gun Stats
-  GUN_FIRE_RATE: 15, // Faster fire rate for battle
-  PROJECTILE_SPEED: 12,
+  GUN_FIRE_RATE: 20, // Slightly faster single shot base rate
+  PROJECTILE_SPEED: 9,
 };
 
 export const COLORS = {
@@ -62,6 +61,7 @@ export const COLORS = {
   
   SHIELD_GLOW: '#FFFFFF', // Changed to White
   PROJECTILE: '#FFFF00', // Yellow Projectiles
+  BOSS_PROJECTILE: '#FF0000',
 };
 
 export const POWERUP_INFO = [
@@ -97,7 +97,7 @@ export const BIOME_CONFIG = {
   },
   Underwater: {
     bgTop: 0x1e40af, // Blue 800
-    bgBottom: 0x172554, // Blue 950
+    bgBottom: 0x172554, // Blue 900
     pipeColor: 0x1e3a8a, // Blue 900
     particleType: 'bubbles',
   }
@@ -136,6 +136,11 @@ export const BATTLE_CONSTANTS = {
     ENEMY_SCORE: 10,
     ENEMY_HP: 1,
     ENEMY_SIZE: 20,
+    BOSS_INTERVAL: 250, // Score points between bosses (Increased from 100)
+    BOSS_BASE_HP: 40,
+    BOSS_SIZE: 70,
+    BOSS_ATTACK_RATE: 90, // Frames
+    BOSS_PROJECTILE_SPEED: 7,
 };
 
 export const ENEMY_SKIN: Skin = {
@@ -146,6 +151,16 @@ export const ENEMY_SKIN: Skin = {
     trail: 'smoke',
     unlockCondition: { type: 'default', value: 0, description: '' },
     colors: { body: 0xD32F2F, wing: 0x212121, beak: 0x000000, eye: 0xFF0000 }
+};
+
+export const BOSS_SKIN: Skin = {
+    id: 'boss',
+    name: 'Dreadnought',
+    rarity: 'Legendary',
+    modelType: 'standard',
+    trail: 'ghost_trail',
+    unlockCondition: { type: 'default', value: 0, description: '' },
+    colors: { body: 0x222222, wing: 0x660000, beak: 0xFF0000, eye: 0xFF0000 }
 };
 
 // --- SKINS CATALOG ---

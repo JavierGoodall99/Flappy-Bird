@@ -232,6 +232,25 @@ class AudioController {
     osc.stop(this.ctx.currentTime + 0.1);
   }
 
+  playBossShoot() {
+    if (!this.ctx || !this.masterGain) return;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.connect(gain);
+    gain.connect(this.masterGain);
+
+    // Deep heavy pew
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(200, this.ctx.currentTime);
+    osc.frequency.linearRampToValueAtTime(50, this.ctx.currentTime + 0.3);
+
+    gain.gain.setValueAtTime(0.5, this.ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.3);
+
+    osc.start();
+    osc.stop(this.ctx.currentTime + 0.3);
+  }
+
   playExplosion() {
     if (!this.ctx || !this.masterGain) return;
     const osc = this.ctx.createOscillator();

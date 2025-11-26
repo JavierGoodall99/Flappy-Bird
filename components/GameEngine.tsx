@@ -1,8 +1,8 @@
 
 import React, { useRef, useEffect, useCallback } from 'react';
 import * as THREE from 'three';
-import { GameState, Bird, Pipe, Powerup, PowerupType, ActivePowerup, Skin, Particle, Projectile, GameMode, Enemy } from '../types';
-import { GAME_CONSTANTS, COLORS, PARTICLE_CONFIG, BATTLE_CONSTANTS, ENEMY_SKIN } from '../constants';
+import { GameState, Bird, Pipe, Powerup, PowerupType, ActivePowerup, Skin, Particle, Projectile, GameMode, Enemy, Boss, BossProjectile } from '../types';
+import { GAME_CONSTANTS, COLORS, PARTICLE_CONFIG, BATTLE_CONSTANTS, ENEMY_SKIN, BOSS_SKIN } from '../constants';
 import { audioService } from '../services/audioService';
 import { setupThreeScene } from '../utils/threeSetup';
 import { createGeometries, createMaterials } from '../utils/assetManager';
@@ -18,6 +18,40 @@ interface GameEngineProps {
   currentSkin: Skin;
   initialPowerup?: PowerupType | null; 
   gameMode: GameMode;
+  setBossActive: (active: boolean, hp: number, maxHp: number) => void;
+}
+
+// Collision helper for high speed objects
+function pointToSegmentDistance(px: number, py: number, x1: number, y1: number, x2: number, y2: number) {
+  const A = px - x1;
+  const B = py - y1;
+  const C = x2 - x1;
+  const D = y2 - y1;
+
+  const dot = A * C + B * D;
+  const len_sq = C * C + D * D;
+  let param = -1;
+  if (len_sq !== 0) // in case of 0 length line
+      param = dot / len_sq;
+
+  let xx, yy;
+
+  if (param < 0) {
+    xx = x1;
+    yy = y1;
+  }
+  else if (param > 1) {
+    xx = x2;
+    yy = y2;
+  }
+  else {
+    xx = x1 + param * C;
+    yy = y1 + param * D;
+  }
+
+  const dx = px - xx;
+  const dy = py - yy;
+  return Math.sqrt(dx * dx + dy * dy);
 }
 
 export const GameEngine: React.FC<GameEngineProps> = ({ 
@@ -29,7 +63,8 @@ export const GameEngine: React.FC<GameEngineProps> = ({
   setActivePowerup,
   currentSkin,
   initialPowerup,
-  gameMode
+  gameMode,
+  setBossActive
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const requestRef = useRef<number>(0);
@@ -57,8 +92,11 @@ export const GameEngine: React.FC<GameEngineProps> = ({
   const powerupsRef = useRef<Powerup[]>([]);
   const particlesRef = useRef<Particle[]>([]);
   const projectilesRef = useRef<Projectile[]>([]);
+  const bossProjectilesRef = useRef<BossProjectile[]>([]);
   const enemiesRef = useRef<Enemy[]>([]);
+  const bossRef = useRef<Boss>({ active: false, x: 0, y: 0, hp: 0, maxHp: 0, phase: 0, targetY: 0, attackTimer: 0 });
   const lastShotFrameRef = useRef<number>(0);
+  const nextBossScoreRef = useRef<number>(BATTLE_CONSTANTS.BOSS_INTERVAL);
 
   const scoreRef = useRef<number>(0);
   const speedRef = useRef<number>(GAME_CONSTANTS.BASE_PIPE_SPEED);
@@ -72,7 +110,9 @@ export const GameEngine: React.FC<GameEngineProps> = ({
   const pipeMeshesRef = useRef<Map<Pipe, THREE.Group>>(new Map());
   const powerupMeshesRef = useRef<Map<Powerup, THREE.Mesh>>(new Map());
   const projectileMeshesRef = useRef<THREE.Mesh[]>([]);
+  const bossProjectileMeshesRef = useRef<THREE.Mesh[]>([]);
   const enemyMeshesRef = useRef<Map<Enemy, THREE.Group>>(new Map());
+  const bossMeshRef = useRef<THREE.Group | null>(null);
 
   const particleMeshesRef = useRef<THREE.Mesh[]>([]);
   const sceneReady = useRef<boolean>(false);
@@ -81,7 +121,7 @@ export const GameEngine: React.FC<GameEngineProps> = ({
   const geometryRef = useRef<any>(null);
   const materialRef = useRef<any>(null);
 
-  const initGame = useCallback(() => {
+  const initGame = useCallback((spawnEntities: boolean = false) => {
     const height = window.innerHeight;
     const width = window.innerWidth;
     
@@ -99,10 +139,15 @@ export const GameEngine: React.FC<GameEngineProps> = ({
     powerupsRef.current = [];
     particlesRef.current = [];
     projectilesRef.current = [];
+    bossProjectilesRef.current = [];
+    bossRef.current = { active: false, x: width + 200, y: height/2, hp: 0, maxHp: 0, phase: 0, targetY: height/2, attackTimer: 0 };
+    setBossActive(false, 0, 0);
+
     scoreRef.current = 0;
     speedRef.current = GAME_CONSTANTS.BASE_PIPE_SPEED;
     frameCountRef.current = 0;
     lastShotFrameRef.current = -100;
+    nextBossScoreRef.current = BATTLE_CONSTANTS.BOSS_INTERVAL;
     
     lastPipeSpawnFrameRef.current = 0;
     lastPowerupSpawnFrameRef.current = 0;
@@ -116,40 +161,42 @@ export const GameEngine: React.FC<GameEngineProps> = ({
     setActivePowerup(null);
     setScore(0);
 
-    // Initial Spawns based on Mode
-    if (gameMode !== 'battle') {
-        const minPipeHeight = 50;
-        const maxTopPipeHeight = Math.max(minPipeHeight, height - GAME_CONSTANTS.PIPE_GAP - minPipeHeight);
-        const startPipeHeight = Math.floor(minPipeHeight + (maxTopPipeHeight - minPipeHeight) / 2 + (Math.random() * 100 - 50)); 
-        pipesRef.current.push({
-            x: width - 100,
-            topHeight: startPipeHeight,
-            passed: false,
-            type: 'normal',
-            brokenTop: false,
-            brokenBottom: false
-        });
-    }
-
-    if (gameMode === 'battle') {
-        // Force Gun
-        activePowerupRef.current = { type: 'gun', timeLeft: 9999999, totalTime: 9999999 };
-        setActivePowerup(activePowerupRef.current);
-        audioService.playShieldUp();
-    } else if (initialPowerup) {
-        let duration = 999999; 
-        switch (initialPowerup) {
-            case 'shrink': birdRef.current.targetScale = GAME_CONSTANTS.SCALE_SHRINK; audioService.playShrink(); break;
-            case 'grow': birdRef.current.targetScale = GAME_CONSTANTS.SCALE_GROW; audioService.playGrow(); break;
-            case 'slowmo': targetTimeScaleRef.current = GAME_CONSTANTS.TIME_SCALE_SLOW; audioService.playSlowMo(); break;
-            case 'fast': targetTimeScaleRef.current = GAME_CONSTANTS.TIME_SCALE_FAST; audioService.playFastForward(); break;
-            case 'shield': audioService.playShieldUp(); break;
-            case 'ghost': audioService.playGhost(); break;
-            case 'gun': audioService.playShieldUp(); break; 
+    // Initial Spawns based on Mode - Only if gameplay is starting
+    if (spawnEntities) {
+        if (gameMode !== 'battle') {
+            const minPipeHeight = 50;
+            const maxTopPipeHeight = Math.max(minPipeHeight, height - GAME_CONSTANTS.PIPE_GAP - minPipeHeight);
+            const startPipeHeight = Math.floor(minPipeHeight + (maxTopPipeHeight - minPipeHeight) / 2 + (Math.random() * 100 - 50)); 
+            pipesRef.current.push({
+                x: width - 100,
+                topHeight: startPipeHeight,
+                passed: false,
+                type: 'normal',
+                brokenTop: false,
+                brokenBottom: false
+            });
         }
-        birdRef.current.effectTimer = duration;
-        activePowerupRef.current = { type: initialPowerup, timeLeft: duration, totalTime: duration };
-        setActivePowerup(activePowerupRef.current);
+
+        if (gameMode === 'battle') {
+            // Force Gun
+            activePowerupRef.current = { type: 'gun', timeLeft: 9999999, totalTime: 9999999 };
+            setActivePowerup(activePowerupRef.current);
+            audioService.playShieldUp();
+        } else if (initialPowerup) {
+            let duration = 999999; 
+            switch (initialPowerup) {
+                case 'shrink': birdRef.current.targetScale = GAME_CONSTANTS.SCALE_SHRINK; audioService.playShrink(); break;
+                case 'grow': birdRef.current.targetScale = GAME_CONSTANTS.SCALE_GROW; audioService.playGrow(); break;
+                case 'slowmo': targetTimeScaleRef.current = GAME_CONSTANTS.TIME_SCALE_SLOW; audioService.playSlowMo(); break;
+                case 'fast': targetTimeScaleRef.current = GAME_CONSTANTS.TIME_SCALE_FAST; audioService.playFastForward(); break;
+                case 'shield': audioService.playShieldUp(); break;
+                case 'ghost': audioService.playGhost(); break;
+                case 'gun': audioService.playShieldUp(); break; 
+            }
+            birdRef.current.effectTimer = duration;
+            activePowerupRef.current = { type: initialPowerup, timeLeft: duration, totalTime: duration };
+            setActivePowerup(activePowerupRef.current);
+        }
     }
 
     if (sceneRef.current && bgTextureRef.current) {
@@ -167,10 +214,12 @@ export const GameEngine: React.FC<GameEngineProps> = ({
       powerupMeshesRef.current.clear();
       enemyMeshesRef.current.forEach((group) => sceneRef.current?.remove(group));
       enemyMeshesRef.current.clear();
+      if (bossMeshRef.current) { sceneRef.current.remove(bossMeshRef.current); bossMeshRef.current = null; }
       projectileMeshesRef.current.forEach(mesh => { mesh.visible = false; });
+      bossProjectileMeshesRef.current.forEach(mesh => { mesh.visible = false; });
       particleMeshesRef.current.forEach(mesh => mesh.visible = false);
     }
-  }, [setScore, setActivePowerup, initialPowerup, gameMode]);
+  }, [setScore, setActivePowerup, initialPowerup, gameMode, setBossActive]);
 
   const handleJump = useCallback(() => {
     if (gameState !== GameState.PLAYING) return;
@@ -212,6 +261,10 @@ export const GameEngine: React.FC<GameEngineProps> = ({
           birdRef.current.rotation = 0;
       } else {
           frameCountRef.current += dt;
+          
+          // Capture prev boss pos before update
+          const prevBossX = bossRef.current.x;
+          const prevBossY = bossRef.current.y;
 
           birdRef.current.velocity += GAME_CONSTANTS.GRAVITY * dt;
           birdRef.current.y += birdRef.current.velocity * dt;
@@ -241,10 +294,24 @@ export const GameEngine: React.FC<GameEngineProps> = ({
           const moveSpeed = (speedRef.current) * dt;
 
           // --- ENEMY SPAWNING & UPDATE (BATTLE MODE) ---
-          // Executed BEFORE Weapons System so projectiles check against updated positions (Fixes sync/hitbox issues)
           if (gameMode === 'battle') {
             const currentScore = scoreRef.current;
             
+            // BOSS SPAWN CHECK
+            if (!bossRef.current.active && currentScore >= nextBossScoreRef.current && enemiesRef.current.length === 0) {
+                 bossRef.current.active = true;
+                 bossRef.current.x = width + 200;
+                 bossRef.current.y = height / 2;
+                 const difficultyMultiplier = Math.floor(currentScore / BATTLE_CONSTANTS.BOSS_INTERVAL);
+                 bossRef.current.maxHp = BATTLE_CONSTANTS.BOSS_BASE_HP * difficultyMultiplier;
+                 bossRef.current.hp = bossRef.current.maxHp;
+                 bossRef.current.targetY = height / 2;
+                 bossRef.current.attackTimer = BATTLE_CONSTANTS.BOSS_ATTACK_RATE;
+                 
+                 audioService.playDangerSurge();
+                 setBossActive(true, bossRef.current.hp, bossRef.current.maxHp);
+            }
+
             // GLOBAL DIFFICULTY SCALING
             const MAX_SPEED_BONUS = 4;
             const globalSpeedBonus = Math.min(MAX_SPEED_BONUS, (currentScore / 50) * 0.5); 
@@ -252,13 +319,14 @@ export const GameEngine: React.FC<GameEngineProps> = ({
             const spawnRateReduction = Math.min(20, Math.floor(currentScore / 40)); 
             const currentSpawnRate = Math.max(25, BATTLE_CONSTANTS.ENEMY_SPAWN_RATE - spawnRateReduction);
 
-            if (frameCountRef.current - lastEnemySpawnFrameRef.current >= currentSpawnRate) {
+            // Spawn Normal Enemies only if Boss is NOT active AND NOT pending
+            if (!bossRef.current.active && currentScore < nextBossScoreRef.current && frameCountRef.current - lastEnemySpawnFrameRef.current >= currentSpawnRate) {
                 lastEnemySpawnFrameRef.current = frameCountRef.current;
                 const padding = 50;
                 const spawnY = padding + Math.random() * (height - padding * 2);
 
-                const hpBonus = Math.floor(currentScore / 100);
-                const scaleBonus = Math.min(0.8, hpBonus * 0.1);
+                const hpBonus = 0; // REMOVED HP SCALING: Standard enemies always 1 HP to ensure 1-shot kills
+                const scaleBonus = Math.min(0.8, Math.floor(currentScore / 100) * 0.1);
 
                 enemiesRef.current.push({
                     id: Math.random(),
@@ -271,9 +339,122 @@ export const GameEngine: React.FC<GameEngineProps> = ({
                 });
             }
 
+            // Update Boss
+            if (bossRef.current.active) {
+                const boss = bossRef.current;
+                
+                // Entry phase
+                if (boss.x > width * 0.8) {
+                    boss.x -= 3 * dt;
+                    boss.y += (birdRef.current.y - boss.y) * 0.05 * dt; // Tracking entry
+                } else {
+                    // Battle Phase: Smooth Tracking Movement
+                    const targetY = birdRef.current.y;
+                    // Increased damping for smoother movement (less twitchy)
+                    boss.y += (targetY - boss.y) * 0.04 * dt; 
+                    
+                    // Simple hover effect, disconnected from unstable frame count
+                    boss.y += Math.sin(now * 0.002) * 1 * dt;
+                    
+                    // Stable X position instead of wobbling
+                    const targetX = width * 0.8;
+                    boss.x += (targetX - boss.x) * 0.05 * dt;
+
+                    // Clamp boss Y to stay on screen
+                    boss.y = Math.max(100, Math.min(height - 100, boss.y));
+
+                    // BOSS ATTACK LOGIC
+                    boss.attackTimer -= 1 * dt;
+                    if (boss.attackTimer <= 0) {
+                        boss.attackTimer = Math.max(40, BATTLE_CONSTANTS.BOSS_ATTACK_RATE - (Math.floor(currentScore/200)*10));
+                        
+                        // Phase 2 (Low HP) -> Spread Shot
+                        const isLowHp = boss.hp < boss.maxHp * 0.5;
+                        
+                        const spawnProjectile = (vy: number) => {
+                            bossProjectilesRef.current.push({
+                                id: Math.random(),
+                                x: boss.x - 60,
+                                y: boss.y,
+                                vx: -BATTLE_CONSTANTS.BOSS_PROJECTILE_SPEED,
+                                vy: vy
+                            });
+                        };
+
+                        if (isLowHp) {
+                             // Triple Shot
+                             spawnProjectile(0);
+                             spawnProjectile(1.5);
+                             spawnProjectile(-1.5);
+                        } else {
+                             // Tracking Shot logic
+                             const dy = birdRef.current.y - boss.y;
+                             const dx = birdX - boss.x;
+                             const angle = Math.atan2(dy, dx);
+                             const speed = BATTLE_CONSTANTS.BOSS_PROJECTILE_SPEED;
+                             bossProjectilesRef.current.push({
+                                id: Math.random(),
+                                x: boss.x - 60,
+                                y: boss.y,
+                                vx: Math.cos(angle) * speed,
+                                vy: Math.sin(angle) * speed
+                             });
+                        }
+                        audioService.playBossShoot();
+                    }
+                }
+
+                // Player vs Boss Body Collision
+                const dx = boss.x - birdX;
+                const dy = boss.y - birdRef.current.y;
+                const dist = Math.sqrt(dx*dx + dy*dy);
+                if (dist < birdRadius + BATTLE_CONSTANTS.BOSS_SIZE) {
+                    audioService.playCrash();
+                    triggerEffect();
+                    setGameState(GameState.GAME_OVER);
+                }
+            }
+
+            // Update Boss Projectiles
+            for (let i = bossProjectilesRef.current.length - 1; i >= 0; i--) {
+                const proj = bossProjectilesRef.current[i];
+                proj.x += proj.vx * dt;
+                proj.y += proj.vy * dt;
+
+                // Collision with Player
+                const dx = proj.x - birdX;
+                const dy = proj.y - birdRef.current.y;
+                const dist = Math.sqrt(dx*dx + dy*dy);
+                
+                // Hitbox for projectile roughly 10px radius
+                if (dist < birdRadius + 10) {
+                    // Check Shield
+                    if (activePowerupRef.current?.type === 'shield') {
+                        // Shield Break Logic
+                         const recoveryTime = 60; 
+                         activePowerupRef.current = { type: 'ghost', timeLeft: recoveryTime, totalTime: recoveryTime };
+                         birdRef.current.effectTimer = recoveryTime;
+                         setActivePowerup({ ...activePowerupRef.current });
+                         audioService.playShieldBreak();
+                         triggerEffect();
+                         bossProjectilesRef.current.splice(i, 1);
+                         continue;
+                    } else {
+                        audioService.playCrash();
+                        triggerEffect();
+                        setGameState(GameState.GAME_OVER);
+                    }
+                }
+
+                if (proj.x < -100 || proj.y < -100 || proj.y > height + 100) {
+                    bossProjectilesRef.current.splice(i, 1);
+                }
+            }
+
             for (let i = enemiesRef.current.length - 1; i >= 0; i--) {
                 const enemy = enemiesRef.current[i];
                 // Move enemy
+                const globalSpeedBonus = Math.min(4, (scoreRef.current / 50) * 0.5); // Re-calculate or pass down, safety re-calc
                 enemy.x -= (enemy.velocity + globalSpeedBonus) * dt;
                 
                 // Dynamic Sine wave movement
@@ -303,25 +484,40 @@ export const GameEngine: React.FC<GameEngineProps> = ({
           if (activePowerupRef.current?.type === 'gun') {
               let fireRate = GAME_CONSTANTS.GUN_FIRE_RATE;
               if (gameMode === 'battle') {
-                  fireRate = Math.max(8, GAME_CONSTANTS.GUN_FIRE_RATE - Math.floor(scoreRef.current / 150));
+                  // Keep fire rate moderate, no rapid fire upgrades
+                  fireRate = Math.max(20, GAME_CONSTANTS.GUN_FIRE_RATE - Math.floor(scoreRef.current / 500));
               }
 
               if (frameCountRef.current - lastShotFrameRef.current >= fireRate) {
                   lastShotFrameRef.current = frameCountRef.current;
-                  projectilesRef.current.push({
-                      id: Math.random(),
-                      x: birdX + 20,
-                      y: birdRef.current.y - 5,
-                      vx: GAME_CONSTANTS.PROJECTILE_SPEED
-                  });
+                  
+                  // Projectile speed scales with score to ensure distant enemies can be hit as game speeds up
+                  // Reduced max speed bonus since base speed was lowered and user felt it was too fast
+                  const speedBonus = Math.min(10, Math.floor(scoreRef.current / 50)); 
+                  const pSpeed = GAME_CONSTANTS.PROJECTILE_SPEED + speedBonus;
+                  
+                  const spawnProjectile = (offsetY: number, vy: number) => {
+                      projectilesRef.current.push({
+                          id: Math.random(),
+                          x: birdX + 20,
+                          y: birdRef.current.y + offsetY,
+                          vx: pSpeed,
+                          vy: vy
+                      });
+                  };
+
+                  spawnProjectile(-5, 0);
                   audioService.playShoot();
               }
           }
 
           for (let i = projectilesRef.current.length - 1; i >= 0; i--) {
               const proj = projectilesRef.current[i];
-              const prevProjX = proj.x; // Store previous X for tunneling check
+              const prevProjX = proj.x;
+              const prevProjY = proj.y;
+              
               proj.x += proj.vx * dt;
+              proj.y += proj.vy * dt;
               let hit = false;
               
               // Projectile vs Pipe
@@ -352,52 +548,131 @@ export const GameEngine: React.FC<GameEngineProps> = ({
                   }
               }
 
-              // Projectile vs Enemy
+              // Projectile vs Enemy / Boss
               if (gameMode === 'battle' && !hit) {
-                  for (let j = enemiesRef.current.length - 1; j >= 0; j--) {
-                      const enemy = enemiesRef.current[j];
-                      const dx = proj.x - enemy.x;
-                      const dy = proj.y - enemy.y;
-                      const dist = Math.sqrt(dx*dx + dy*dy);
-                      // Increased hitbox padding from 15 to 20 for more generous hits
-                      const enemyHitRadius = (BATTLE_CONSTANTS.ENEMY_SIZE * enemy.scale) + 20;
-                      
-                      // Tunneling check for high speeds:
-                      // 1. Is projectile vertically aligned with enemy?
-                      const isYAligned = Math.abs(dy) < enemyHitRadius;
-                      // 2. Did projectile cross enemy x-plane this frame?
-                      // We compare Projectile's movement (prev->curr) against the Enemy's CURRENT position (which was just updated).
-                      const hasCrossedX = (proj.x >= enemy.x - enemyHitRadius) && (prevProjX <= enemy.x + enemyHitRadius);
-                      
-                      if (dist < enemyHitRadius || (isYAligned && hasCrossedX)) {
-                          hit = true;
-                          enemy.hp--;
-                          // Impact effect
-                          for(let k=0; k<3; k++) {
-                              particlesRef.current.push({
-                                  x: proj.x, y: proj.y,
-                                  vx: (Math.random()-0.5)*5, vy: (Math.random()-0.5)*5,
-                                  life: 10, maxLife: 10, scale: 2, color: 0xFFFFFF, rotation: 0
-                              });
-                          }
+                  // Check Boss Collision
+                  if (bossRef.current.active) {
+                      const boss = bossRef.current;
+                      // Only check collision if boss is somewhat on screen
+                      if (boss.x < width - 10) { // Strict on-screen check for Boss
+                        // RELATIVE VELOCITY COLLISION DETECTION (Swept Collision Check)
+                        // Transform to reference frame where Boss is stationary at (0,0)
+                        // This ensures hit detection works even if bullet and boss pass each other in 1 frame
+                        
+                        // Relative Start Vector
+                        const relStartX = prevProjX - prevBossX;
+                        const relStartY = prevProjY - prevBossY;
+                        
+                        // Relative End Vector
+                        const relEndX = proj.x - boss.x;
+                        const relEndY = proj.y - boss.y;
+                        
+                        // Check if the relative segment passes close to the "stationary" boss at (0,0)
+                        const dist = pointToSegmentDistance(0, 0, relStartX, relStartY, relEndX, relEndY);
+                        
+                        if (dist < BATTLE_CONSTANTS.BOSS_SIZE + 20) {
+                            hit = true;
+                            boss.hp--;
+                            setBossActive(true, boss.hp, boss.maxHp);
+                            
+                            // Boss Hit Effect
+                            for(let k=0; k<2; k++) {
+                                particlesRef.current.push({
+                                    x: proj.x, y: proj.y,
+                                    vx: (Math.random()-0.5)*8, vy: (Math.random()-0.5)*8,
+                                    life: 15, maxLife: 15, scale: 3, color: 0xFF0000, rotation: 0
+                                });
+                            }
 
-                          if (enemy.hp <= 0) {
-                              scoreRef.current += BATTLE_CONSTANTS.ENEMY_SCORE;
-                              setScore(scoreRef.current);
-                              enemiesRef.current.splice(j, 1);
-                              audioService.playExplosion();
-                              triggerEffect();
-                              // Explosion
-                              for(let k=0; k<15; k++) {
-                                  particlesRef.current.push({
-                                      x: enemy.x, y: enemy.y,
-                                      vx: (Math.random()-0.5)*8, vy: (Math.random()-0.5)*8,
-                                      life: 25, maxLife: 25, scale: 4, color: 0xFF4400, rotation: 0
-                                  });
-                              }
-                          }
-                          break;
+                            if (boss.hp <= 0) {
+                                // Boss Defeated
+                                boss.active = false;
+                                setBossActive(false, 0, 0);
+                                scoreRef.current += 50; // Bonus for boss
+                                setScore(scoreRef.current);
+                                
+                                // Schedule next boss relative to the NEW score (after bonus)
+                                nextBossScoreRef.current = scoreRef.current + BATTLE_CONSTANTS.BOSS_INTERVAL;
+
+                                audioService.playExplosion();
+                                triggerEffect();
+                                bossProjectilesRef.current = []; // Clear boss bullets on kill
+                                // Huge Explosion
+                                for(let k=0; k<40; k++) {
+                                    particlesRef.current.push({
+                                        x: boss.x + (Math.random()-0.5)*50, y: boss.y + (Math.random()-0.5)*50,
+                                        vx: (Math.random()-0.5)*15, vy: (Math.random()-0.5)*15,
+                                        life: 40, maxLife: 40, scale: 6, color: 0xFFA500, rotation: 0
+                                    });
+                                }
+                            }
+                        }
                       }
+                  }
+
+                  // Check Normal Enemy Collision
+                  if (!hit) {
+                    const globalSpeedBonus = Math.min(4, (scoreRef.current / 50) * 0.5);
+                    const weaveIntensity = 50 + Math.min(50, scoreRef.current / 10);
+                    
+                    for (let j = enemiesRef.current.length - 1; j >= 0; j--) {
+                        const enemy = enemiesRef.current[j];
+                        
+                        // Prevent hitting enemies that aren't in viewport yet
+                        if (enemy.x > width) continue; 
+
+                        const enemyHitRadius = (BATTLE_CONSTANTS.ENEMY_SIZE * enemy.scale) + 35; // Increased hit radius for better feel
+
+                        // RELATIVE VELOCITY COLLISION DETECTION (Swept Collision Check)
+                        // 1. Reconstruct Previous Enemy Position for this frame
+                        // We must use the time from start of frame (frameCount - dt)
+                        const enemySpeedPerFrame = (enemy.velocity + globalSpeedBonus) * dt;
+                        const prevEnemyX = enemy.x + enemySpeedPerFrame; // Enemy moves left, so prev was to the right
+                        const prevEnemyY = enemy.targetY + Math.sin((frameCountRef.current - dt) * 0.05 + enemy.id * 10) * weaveIntensity;
+
+                        // 2. Calculate Relative Motion Vectors (Relative to stationary Enemy at 0,0)
+                        const relStartX = prevProjX - prevEnemyX;
+                        const relStartY = prevProjY - prevEnemyY;
+                        
+                        const relEndX = proj.x - enemy.x;
+                        const relEndY = proj.y - enemy.y;
+
+                        // 3. Check Distance from Origin (0,0) to Relative Motion Segment
+                        const sweptDist = pointToSegmentDistance(0, 0, relStartX, relStartY, relEndX, relEndY);
+                        
+                        // 4. Secondary Check: Simple Overlap (in case swept misses due to frame skip or math edge case)
+                        const simpleDx = proj.x - enemy.x;
+                        const simpleDy = proj.y - enemy.y;
+                        const simpleDist = Math.sqrt(simpleDx*simpleDx + simpleDy*simpleDy);
+
+                        if (sweptDist < enemyHitRadius || simpleDist < enemyHitRadius) {
+                            hit = true;
+                            enemy.hp--;
+                            for(let k=0; k<3; k++) {
+                                particlesRef.current.push({
+                                    x: proj.x, y: proj.y,
+                                    vx: (Math.random()-0.5)*5, vy: (Math.random()-0.5)*5,
+                                    life: 10, maxLife: 10, scale: 2, color: 0xFFFFFF, rotation: 0
+                                });
+                            }
+
+                            if (enemy.hp <= 0) {
+                                scoreRef.current += BATTLE_CONSTANTS.ENEMY_SCORE;
+                                setScore(scoreRef.current);
+                                enemiesRef.current.splice(j, 1);
+                                audioService.playExplosion();
+                                triggerEffect();
+                                for(let k=0; k<15; k++) {
+                                    particlesRef.current.push({
+                                        x: enemy.x, y: enemy.y,
+                                        vx: (Math.random()-0.5)*8, vy: (Math.random()-0.5)*8,
+                                        life: 25, maxLife: 25, scale: 4, color: 0xFF4400, rotation: 0
+                                    });
+                                }
+                            }
+                            break;
+                        }
+                    }
                   }
               }
 
@@ -715,6 +990,39 @@ export const GameEngine: React.FC<GameEngineProps> = ({
         group.scale.set(s, s, s);
     });
 
+    // Render Boss
+    if (bossRef.current.active) {
+        if (!bossMeshRef.current) {
+            bossMeshRef.current = createBirdMesh(BOSS_SKIN, geometryRef.current, materialRef.current);
+            bossMeshRef.current.rotation.y = Math.PI; // Face left
+            sceneRef.current?.add(bossMeshRef.current);
+        }
+        bossMeshRef.current.visible = true;
+        bossMeshRef.current.position.x = toWorldX(bossRef.current.x, width);
+        bossMeshRef.current.position.y = toWorldY(bossRef.current.y, height);
+        bossMeshRef.current.scale.set(5, 5, 5); // Boss is HUGE
+        bossMeshRef.current.rotation.z = Math.sin(frameCountRef.current * 0.05) * 0.1;
+
+        // Personality: Angry Brows
+        const browL = bossMeshRef.current.getObjectByName('browL');
+        const browR = bossMeshRef.current.getObjectByName('browR');
+        if (browL) browL.rotation.z = 0.5; // Angry
+        if (browR) browR.rotation.z = -0.5; // Angry
+
+        // Personality: Pulse when low HP
+        if (bossRef.current.hp < bossRef.current.maxHp * 0.3) {
+             const shake = (Math.random() - 0.5) * 10;
+             bossMeshRef.current.position.x += shake;
+             bossMeshRef.current.position.y += shake;
+             
+             // Flash Red (rough approx using scale pulsing as visual distress)
+             const pulse = 5 + Math.sin(now * 0.02) * 0.5;
+             bossMeshRef.current.scale.set(pulse, pulse, pulse);
+        }
+    } else if (bossMeshRef.current) {
+        bossMeshRef.current.visible = false;
+    }
+
 
     particleMeshesRef.current.forEach(m => m.visible = false);
     while (particleMeshesRef.current.length < particlesRef.current.length) {
@@ -736,6 +1044,7 @@ export const GameEngine: React.FC<GameEngineProps> = ({
         mesh.rotation.z = p.rotation;
     });
 
+    // Render Player Projectiles
     projectileMeshesRef.current.forEach(m => m.visible = false);
     while (projectileMeshesRef.current.length < projectilesRef.current.length) {
         const mesh = new THREE.Mesh(geometryRef.current!.particleSphere, materialRef.current!.projectile);
@@ -752,6 +1061,28 @@ export const GameEngine: React.FC<GameEngineProps> = ({
         mesh.position.y = toWorldY(p.y, height);
         mesh.position.z = 2;
         mesh.scale.set(6, 6, 6);
+    });
+
+    // Render Boss Projectiles
+    bossProjectileMeshesRef.current.forEach(m => m.visible = false);
+    while (bossProjectileMeshesRef.current.length < bossProjectilesRef.current.length) {
+        const mesh = new THREE.Mesh(geometryRef.current!.orb, materialRef.current!.bossProjectile);
+        // Add ominous glow
+        const glow = new THREE.Mesh(geometryRef.current!.particleSphere, new THREE.MeshBasicMaterial({ color: 0xFF0000, transparent: true, opacity: 0.4 }));
+        glow.scale.set(2.0, 2.0, 2.0);
+        mesh.add(glow);
+        sceneRef.current?.add(mesh);
+        bossProjectileMeshesRef.current.push(mesh);
+    }
+    bossProjectilesRef.current.forEach((p, i) => {
+        const mesh = bossProjectileMeshesRef.current[i];
+        mesh.visible = true;
+        mesh.position.x = toWorldX(p.x, width);
+        mesh.position.y = toWorldY(p.y, height);
+        mesh.position.z = 5;
+        mesh.rotation.z += 0.1;
+        mesh.rotation.x += 0.1;
+        mesh.scale.set(10, 10, 10);
     });
 
     const currentPipes = new Set(pipesRef.current);
@@ -854,7 +1185,7 @@ export const GameEngine: React.FC<GameEngineProps> = ({
 
     rendererRef.current.render(sceneRef.current, cameraRef.current);
     requestRef.current = requestAnimationFrame(loop);
-  }, [gameState, setGameState, setScore, triggerEffect, highScore, setActivePowerup, currentSkin, initialPowerup, gameMode]);
+  }, [gameState, setGameState, setScore, triggerEffect, highScore, setActivePowerup, currentSkin, initialPowerup, gameMode, setBossActive]);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -943,11 +1274,11 @@ export const GameEngine: React.FC<GameEngineProps> = ({
 
   useEffect(() => {
     if (gameState === GameState.START) {
-      initGame();
+      initGame(false);
     } 
     else if (gameState === GameState.PLAYING) {
        if (prevGameStateRef.current === GameState.START || prevGameStateRef.current === GameState.GAME_OVER) {
-         initGame();
+         initGame(true);
        }
     }
     prevGameStateRef.current = gameState;

@@ -197,6 +197,29 @@ export const createBirdMesh = (skin: Skin, geometries: any, materials: any) => {
            scar.position.set(6, 2, 2.5); scar.rotation.z = -0.2;
            group.add(scar);
         }
+
+        // --- BOSS CROWN ---
+        if (skin.id === 'boss') {
+            const crownMat = new THREE.MeshStandardMaterial({
+                color: 0xFFD700,
+                roughness: 0.3,
+                metalness: 0.8,
+                transparent, opacity
+            });
+            const spikeGeo = new THREE.ConeGeometry(2, 6, 4);
+            const baseGeo = new THREE.CylinderGeometry(6, 6, 1.5, 8);
+            
+            const base = new THREE.Mesh(baseGeo, crownMat);
+            base.position.set(0, 15, 0);
+            group.add(base);
+
+            for(let i=0; i<4; i++) {
+                const spike = new THREE.Mesh(spikeGeo, crownMat);
+                const angle = (i / 4) * Math.PI * 2;
+                spike.position.set(Math.cos(angle)*4, 18, Math.sin(angle)*4);
+                group.add(spike);
+            }
+        }
     } 
     // --- PIXEL / VOXEL MODEL ---
     else if (skin.modelType === 'pixel') {

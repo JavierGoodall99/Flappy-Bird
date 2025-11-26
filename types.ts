@@ -43,6 +43,15 @@ export interface Projectile {
   x: number;
   y: number;
   vx: number;
+  vy: number;
+  id: number;
+}
+
+export interface BossProjectile {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
   id: number;
 }
 
@@ -62,7 +71,7 @@ export type SkinId =
   | 'default' | 'neon_blue' | 'neon_pink' | 'pixel_bird' | 'pixel_scout' 
   | 'ninja' | 'robot' | 'ghost' | 'golden'
   | 'magma' | 'ice_breaker' | 'bumblebee' | 'zombie' | 'vampire' | 'bubblegum' | 'toxic' | 'saiyan'
-  | 'ninja_sage' | 'pirate_king' | 'enemy';
+  | 'ninja_sage' | 'pirate_king' | 'enemy' | 'boss';
 
 export interface UnlockCondition {
   type: 'default' | 'score' | 'games_played' | 'login' | 'lucky_drop';
@@ -144,4 +153,15 @@ export interface Enemy {
   targetY: number;
   hp: number;
   scale: number;
+}
+
+export interface Boss {
+  active: boolean;
+  x: number;
+  y: number;
+  hp: number;
+  maxHp: number;
+  phase: number;
+  targetY: number;
+  attackTimer: number;
 }

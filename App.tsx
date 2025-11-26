@@ -17,6 +17,7 @@ const App: React.FC = () => {
   
   // Game Mode
   const [gameMode, setGameMode] = useState<GameMode>('standard');
+  const [bossInfo, setBossInfo] = useState<{ active: boolean; hp: number; maxHp: number }>({ active: false, hp: 0, maxHp: 0 });
 
   // Cosmetics State
   const [currentSkinId, setCurrentSkinId] = useState<SkinId>('default');
@@ -56,7 +57,7 @@ const App: React.FC = () => {
         localStorage.setItem('flapai-highscore', score.toString());
         setIsNewHighScore(true);
       }
-      // Removed setInitialPowerup(null) to persist test state on death
+      setBossInfo({ active: false, hp: 0, maxHp: 0 });
     }
   }, [gameState, score, highScore]);
 
@@ -67,12 +68,14 @@ const App: React.FC = () => {
     setGameState(GameState.PLAYING);
     setIsNewHighScore(false);
     setIsGuideOpen(false);
+    setBossInfo({ active: false, hp: 0, maxHp: 0 });
   }, []);
 
   const resetGame = () => {
     setGameState(GameState.START);
     setIsNewHighScore(false);
     setInitialPowerup(null);
+    setBossInfo({ active: false, hp: 0, maxHp: 0 });
   };
   
   const togglePause = useCallback(() => {
@@ -122,6 +125,7 @@ const App: React.FC = () => {
           currentSkin={SKINS[currentSkinId]}
           initialPowerup={initialPowerup}
           gameMode={gameMode}
+          setBossActive={(active, hp, maxHp) => setBossInfo({ active, hp, maxHp })}
         />
       </div>
 
@@ -154,6 +158,27 @@ const App: React.FC = () => {
                   </div>
               </div>
           </div>
+      )}
+
+      {/* BOSS HUD */}
+      {bossInfo.active && (
+         <div className="absolute top-28 left-0 right-0 flex justify-center z-20 animate-fade-in-up">
+            <div className="w-full max-w-md px-4">
+               <div className="bg-slate-900/80 backdrop-blur-md p-3 rounded-xl border border-red-500/50 shadow-2xl">
+                   <div className="flex justify-between items-center mb-1">
+                      <span className="text-red-500 font-black tracking-widest text-xs uppercase">WARNING: GIANT BIRD DETECTED</span>
+                      <span className="text-white font-bold text-xs">{Math.ceil(bossInfo.hp)} / {bossInfo.maxHp}</span>
+                   </div>
+                   <div className="w-full h-4 bg-slate-800 rounded-full overflow-hidden border border-white/10 relative">
+                      <div className="absolute inset-0 bg-red-900/50"></div>
+                      <div 
+                         className="h-full bg-gradient-to-r from-red-600 to-red-500 transition-all duration-200"
+                         style={{ width: `${(bossInfo.hp / bossInfo.maxHp) * 100}%` }}
+                      ></div>
+                   </div>
+               </div>
+            </div>
+         </div>
       )}
 
       {/* HUD Score */}
@@ -203,10 +228,10 @@ const App: React.FC = () => {
       {gameState === GameState.START && !isShopOpen && !isGuideOpen && (
         <div className="absolute inset-0 flex items-center justify-center z-20 bg-black/20 backdrop-blur-sm">
           <div className="glass-panel p-10 rounded-3xl text-center w-full max-w-md mx-4 shadow-2xl transform transition-all animate-fade-in-up">
-            <h1 className="text-6xl font-black bg-clip-text text-transparent bg-gradient-to-r from-amber-400 to-orange-600 mb-2 drop-shadow-sm">
+            <h1 className="text-7xl font-black text-white mb-2 drop-shadow-xl tracking-tighter italic transform -rotate-2">
               Fliply
             </h1>
-            <div className="text-xl text-slate-200 mb-8 font-light">Arcade Edition</div>
+            <div className="text-amber-400 font-bold tracking-widest uppercase mb-8 text-sm">Arcade Edition</div>
             
             <div className="flex flex-col gap-4 mb-6">
                 <Button onClick={() => startGame(null, 'standard')} className="w-full text-xl py-4 shadow-xl">PLAY CLASSIC</Button>

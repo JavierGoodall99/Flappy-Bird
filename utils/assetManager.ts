@@ -54,6 +54,7 @@ export const createMaterials = () => {
             depthWrite: false 
         }),
         projectile: new THREE.MeshStandardMaterial({ color: 0xFFFFFF, emissive: 0xFFFF00, emissiveIntensity: 2.0 }),
+        bossProjectile: new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xFF0000, emissiveIntensity: 3.0 }),
         particleMat: new THREE.MeshBasicMaterial({ color: 0xffffff }),
         gunMat: new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.3, metalness: 0.8 }),
         eyebrow: new THREE.MeshStandardMaterial({ color: 0x000000, roughness: 0.9 })
