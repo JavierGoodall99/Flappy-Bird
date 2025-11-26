@@ -191,7 +191,7 @@ const App: React.FC = () => {
         <div className="absolute inset-0 flex items-center justify-center z-20 bg-black/20 backdrop-blur-sm">
           <div className="glass-panel p-10 rounded-3xl text-center w-full max-w-md mx-4 shadow-2xl transform transition-all animate-fade-in-up">
             <h1 className="text-6xl font-black bg-clip-text text-transparent bg-gradient-to-r from-amber-400 to-orange-600 mb-2 drop-shadow-sm">
-              FlapAI
+              Fliply
             </h1>
             <div className="text-xl text-slate-200 mb-8 font-light">Arcade Edition</div>
             
