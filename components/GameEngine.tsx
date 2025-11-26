@@ -117,6 +117,7 @@ export const GameEngine: React.FC<GameEngineProps> = ({
   // Initialize Game State
   const initGame = useCallback(() => {
     const height = window.innerHeight;
+    const width = window.innerWidth;
     
     isRoundActiveRef.current = false;
     lastTimeRef.current = performance.now();
@@ -129,7 +130,22 @@ export const GameEngine: React.FC<GameEngineProps> = ({
       targetScale: GAME_CONSTANTS.SCALE_NORMAL,
       effectTimer: 0
     };
+    
+    // Pre-spawn first pipe so it is visible
     pipesRef.current = [];
+    const minPipeHeight = 50;
+    const maxTopPipeHeight = Math.max(minPipeHeight, height - GAME_CONSTANTS.PIPE_GAP - minPipeHeight);
+    // Fair start: Center-ish
+    const startPipeHeight = Math.floor(minPipeHeight + (maxTopPipeHeight - minPipeHeight) / 2 + (Math.random() * 100 - 50)); 
+    pipesRef.current.push({
+        x: width - 100,
+        topHeight: startPipeHeight,
+        passed: false,
+        type: 'normal',
+        brokenTop: false,
+        brokenBottom: false
+    });
+
     powerupsRef.current = [];
     particlesRef.current = [];
     projectilesRef.current = [];
@@ -416,7 +432,9 @@ export const GameEngine: React.FC<GameEngineProps> = ({
         const mat = new THREE.MeshStandardMaterial({ color: skin.colors.body, roughness: 0.5, transparent, opacity });
         const beakMat = new THREE.MeshStandardMaterial({ color: skin.colors.beak, roughness: 0.5, transparent, opacity });
         const eyeMat = new THREE.MeshBasicMaterial({ color: skin.colors.eye, transparent, opacity });
+        const pupilMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent, opacity });
         const wingMat = new THREE.MeshStandardMaterial({ color: skin.colors.wing || 0xffffff, roughness: 0.5, transparent, opacity });
+        const browMat = new THREE.MeshStandardMaterial({ color: 0x000000 });
 
         for(let x=-2; x<=2; x++) {
             for(let y=-2; y<=2; y++) {
@@ -428,8 +446,18 @@ export const GameEngine: React.FC<GameEngineProps> = ({
         }
         const beak = new THREE.Mesh(geo, beakMat); beak.position.set(3*size, 0, 0); group.add(beak);
         const beak2 = new THREE.Mesh(geo, beakMat); beak2.position.set(3*size, -1*size, 0); group.add(beak2);
+        
         const eye = new THREE.Mesh(geo, eyeMat); eye.position.set(1*size, 1*size, size); group.add(eye);
+        const pupil = new THREE.Mesh(geo, pupilMat); pupil.position.set(1.5*size, 1*size, 1.5*size); 
+        pupil.scale.set(0.5, 0.5, 0.5); pupil.name = 'pupil'; group.add(pupil);
+
         const wing = new THREE.Mesh(geo, wingMat); wing.position.set(-1*size, -1*size, size); group.add(wing);
+
+        // Pixel Brows
+        const browL = new THREE.Mesh(geo, browMat);
+        browL.name = 'browL';
+        browL.position.set(1*size, 2.5*size, size);
+        group.add(browL);
     }
 
     // --- Shield Sphere (Hidden by default) ---
@@ -828,33 +856,33 @@ export const GameEngine: React.FC<GameEngineProps> = ({
       birdMeshRef.current.visible = true;
 
       // --- FACIAL ANIMATION LOGIC ---
-      let targetBrowRot = 0; // Neutral
+      let targetBrowRot = 0; // Neutral (Rotation on Z axis)
       let targetPupilScale = 1;
       
       if (gameState === GameState.GAME_OVER) {
-          // Stunned
+          // Stunned: Tiny pupils, flat brows
           targetPupilScale = 0.2;
       } else {
           // Check Pipe Proximity for Angry
-          const closePipe = pipesRef.current.find(p => p.x > birdX - 50 && p.x < birdX + 150);
-          const isFalling = birdRef.current.velocity > 8;
+          const closePipe = pipesRef.current.find(p => p.x > birdX - 50 && p.x < birdX + 200);
+          const isFalling = birdRef.current.velocity > 6;
           const isFast = speedRef.current > GAME_CONSTANTS.BASE_PIPE_SPEED * 1.3;
           const isPowered = !!activePowerupRef.current;
 
           if (isFast) {
-              // Panic/Intense
-              targetBrowRot = -0.5; // Up/Out
-              targetPupilScale = 0.8 + Math.random() * 0.4; // Vibrate
+              // Panic/Intense: Brows up/out, vibrating pupils
+              targetBrowRot = -0.4; // Up
+              targetPupilScale = 0.8 + Math.sin(Date.now() * 0.05) * 0.2; // Vibrate
           } else if (closePipe) {
-              // Angry/Focused
-              targetBrowRot = 0.4; // Down/In
+              // Angry/Focused: Brows down/in
+              targetBrowRot = 0.4;
           } else if (isFalling) {
-              // Wide eyes
+              // Wide eyes: Brows slightly up
               targetBrowRot = -0.2;
-              targetPupilScale = 1.3;
+              targetPupilScale = 1.25;
           } else if (isPowered) {
-              // Smirk (Asymmetrical handled below?)
-              targetBrowRot = 0.1;
+              // Confident
+              targetBrowRot = -0.3; 
           }
       }
 
@@ -863,9 +891,10 @@ export const GameEngine: React.FC<GameEngineProps> = ({
       if (browL) {
           browL.rotation.z += (targetBrowRot - browL.rotation.z) * 0.2;
       }
+      // Note: browR is hidden in standard model, but we animate it if visible or future use
       const browR = birdMeshRef.current.getObjectByName('browR');
       if (browR) {
-          // Mirror rotation
+          // Mirror logic: If Left rotates +Z (Down-In), Right should rotate -Z (Down-In)
           browR.rotation.z += (-targetBrowRot - browR.rotation.z) * 0.2;
       }
       

@@ -33,7 +33,7 @@ export const GAME_CONSTANTS = {
   
   TIME_SCALE_NORMAL: 1.0,
   TIME_SCALE_SLOW: 0.5,
-  TIME_SCALE_FAST: 1.5,
+  TIME_SCALE_FAST: 1.25,
   
   // Gun Stats
   GUN_FIRE_RATE: 20, // Frames between shots
@@ -69,7 +69,7 @@ export const POWERUP_INFO = [
   { type: 'shield', name: 'Shield', desc: 'Survive one fatal collision. Breaks upon impact.', color: COLORS.POWERUP_SHIELD },
   { type: 'ghost', name: 'Ghost Mode', desc: 'Phase through pipes for 5 seconds. Still die to ground.', color: COLORS.POWERUP_GHOST },
   { type: 'slowmo', name: 'Time Warp', desc: 'Slows down time by 50% for 3 seconds.', color: COLORS.POWERUP_SLOWMO },
-  { type: 'fast', name: 'Turbo Boost', desc: 'Speeds up time by 50% for 5 seconds. Hold on tight!', color: COLORS.POWERUP_FAST },
+  { type: 'fast', name: 'Turbo Boost', desc: 'Speeds up time by 25% for 5 seconds. Hold on tight!', color: COLORS.POWERUP_FAST },
   { type: 'gun', name: 'Blaster', desc: 'Auto-fire plasma bolts that destroy pipes for points.', color: COLORS.POWERUP_GUN },
 ];
 
