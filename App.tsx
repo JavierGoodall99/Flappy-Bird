@@ -122,10 +122,10 @@ const App: React.FC = () => {
 
       {/* Powerup HUD */}
       {(gameState === GameState.PLAYING) && activePowerup && (
-          <div className="absolute top-24 left-0 right-0 flex justify-center z-10 animate-bounce-short">
+          <div className="absolute top-24 left-0 right-0 flex justify-center z-10">
               <div className="bg-slate-900/60 backdrop-blur-md rounded-full px-6 py-2 border border-white/20 flex items-center gap-3 shadow-xl">
                   <div className={`w-3 h-3 rounded-full animate-pulse 
-                      ${activePowerup.type === 'shield' ? 'bg-amber-400' : 
+                      ${activePowerup.type === 'shield' ? 'bg-white shadow-[0_0_8px_rgba(255,255,255,0.6)]' : 
                         activePowerup.type === 'slowmo' ? 'bg-violet-500' :
                         activePowerup.type === 'ghost' ? 'bg-pink-500' : 
                         activePowerup.type === 'shrink' ? 'bg-blue-500' : 

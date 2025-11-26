@@ -532,9 +532,9 @@ export const GameEngine: React.FC<GameEngineProps> = ({
       if (shield) {
           shield.visible = isShieldActive;
           if (isShieldActive) {
-              const pulse = 1.4 + Math.sin(Date.now() * 0.01) * 0.1;
-              shield.scale.set(pulse, pulse, pulse);
-              shield.rotation.y += 0.05;
+              // Removed pulsing effect for stability
+              shield.scale.set(1.4, 1.4, 1.4);
+              shield.rotation.y += 0.02; // Slower rotation
           }
       }
 

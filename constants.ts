@@ -54,12 +54,12 @@ export const COLORS = {
   POWERUP_SHRINK: '#3B82F6', // Blue 500
   POWERUP_GROW: '#EF4444', // Red 500
   POWERUP_SLOWMO: '#8B5CF6', // Violet 500
-  POWERUP_SHIELD: '#F59E0B', // Amber 500
+  POWERUP_SHIELD: '#FFFFFF', // Changed to White to match pause button aesthetic
   POWERUP_GHOST: '#EC4899', // Pink 500
   POWERUP_GUN: '#14B8A6', // Teal 500
   POWERUP_FAST: '#84CC16', // Lime 500
   
-  SHIELD_GLOW: '#FCD34D', // Amber 300
+  SHIELD_GLOW: '#FFFFFF', // Changed to White
   PROJECTILE: '#FFFF00', // Yellow Projectiles
 };
 
