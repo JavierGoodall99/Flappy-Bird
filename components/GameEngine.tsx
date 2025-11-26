@@ -29,6 +29,13 @@ export const GameEngine: React.FC<GameEngineProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const requestRef = useRef<number>(0);
   const frameCountRef = useRef<number>(0);
+  const lastTimeRef = useRef<number>(0);
+  
+  // Spawn Timing Refs (Frame Independent)
+  const lastPipeSpawnFrameRef = useRef<number>(0);
+  const lastPowerupSpawnFrameRef = useRef<number>(0);
+  const lastParticleFrameRef = useRef<number>(0);
+  const lastBulletTrailFrameRef = useRef<number>(0);
   
   // Game State Refs
   const isRoundActiveRef = useRef<boolean>(false); // Waits for first input
@@ -112,6 +119,7 @@ export const GameEngine: React.FC<GameEngineProps> = ({
     const height = window.innerHeight;
     
     isRoundActiveRef.current = false;
+    lastTimeRef.current = performance.now();
 
     birdRef.current = { 
       y: height / 2, 
@@ -129,6 +137,11 @@ export const GameEngine: React.FC<GameEngineProps> = ({
     speedRef.current = GAME_CONSTANTS.BASE_PIPE_SPEED;
     frameCountRef.current = 0;
     lastShotFrameRef.current = -100; // Reset shot timer so it fires immediately if gun is equipped
+    
+    lastPipeSpawnFrameRef.current = 0;
+    lastPowerupSpawnFrameRef.current = 0;
+    lastParticleFrameRef.current = 0;
+    lastBulletTrailFrameRef.current = 0;
     
     timeScaleRef.current = 1.0;
     targetTimeScaleRef.current = 1.0;
@@ -467,8 +480,23 @@ export const GameEngine: React.FC<GameEngineProps> = ({
     const width = window.innerWidth;
     const height = window.innerHeight;
     
-    timeScaleRef.current += (targetTimeScaleRef.current - timeScaleRef.current) * 0.1;
-    const dt = timeScaleRef.current; 
+    // DELTA TIME CALCULATION
+    const now = performance.now();
+    if (!lastTimeRef.current) lastTimeRef.current = now;
+    // Cap delta at 100ms to prevent huge jumps (e.g. from tab switch pause)
+    const rawDeltaMS = Math.min(now - lastTimeRef.current, 100); 
+    lastTimeRef.current = now;
+    
+    // Normalize to 60 FPS (approx 16.666ms per frame)
+    // If running at 60fps, rawDeltaFactor is ~1.0
+    // If running at 120fps, rawDeltaFactor is ~0.5
+    const rawDeltaFactor = rawDeltaMS / 16.666;
+    
+    // Apply Game Time Scale (Slow-mo / Turbo)
+    timeScaleRef.current += (targetTimeScaleRef.current - timeScaleRef.current) * (0.1 * rawDeltaFactor);
+    
+    // Final delta to use for all movement/physics
+    const dt = rawDeltaFactor * timeScaleRef.current;
 
     // --- START HOVER ANIMATION ---
     if (gameState === GameState.START) {
@@ -484,7 +512,7 @@ export const GameEngine: React.FC<GameEngineProps> = ({
           birdRef.current.y = (height / 2) + Math.sin(time) * 15;
           birdRef.current.rotation = 0;
       } else {
-          frameCountRef.current++;
+          frameCountRef.current += dt;
 
           birdRef.current.velocity += GAME_CONSTANTS.GRAVITY * dt;
           birdRef.current.y += birdRef.current.velocity * dt;
@@ -504,12 +532,16 @@ export const GameEngine: React.FC<GameEngineProps> = ({
             }
           }
           
-          birdRef.current.scale += (birdRef.current.targetScale - birdRef.current.scale) * 0.1;
+          // Smooth scale transition
+          const scaleLerp = 0.1 * rawDeltaFactor;
+          birdRef.current.scale += (birdRef.current.targetScale - birdRef.current.scale) * scaleLerp;
+          
           speedRef.current += GAME_CONSTANTS.SPEED_INCREMENT * dt;
           const moveSpeed = (speedRef.current) * dt;
 
           // --- GUN LOGIC ---
           if (activePowerupRef.current?.type === 'gun') {
+              // frameCount is now floating point, check accumulated time
               if (frameCountRef.current - lastShotFrameRef.current >= GAME_CONSTANTS.GUN_FIRE_RATE) {
                   lastShotFrameRef.current = frameCountRef.current;
                   // Fire
@@ -567,8 +599,14 @@ export const GameEngine: React.FC<GameEngineProps> = ({
           }
 
           // Spawn Pipes
+          // Adjust spawn interval based on speed to maintain distance, scaled by timeScale
           const spawnInterval = Math.floor(GAME_CONSTANTS.PIPE_SPAWN_RATE * (GAME_CONSTANTS.BASE_PIPE_SPEED / speedRef.current));
-          if (frameCountRef.current % Math.floor(Math.max(30, spawnInterval / timeScaleRef.current)) === 0) {
+          // Normalized frame accumulation check
+          const spawnRate = Math.floor(Math.max(30, spawnInterval / timeScaleRef.current));
+          
+          if (frameCountRef.current - lastPipeSpawnFrameRef.current >= spawnRate) {
+              lastPipeSpawnFrameRef.current = frameCountRef.current;
+              
               const minPipeHeight = 50;
               const maxTopPipeHeight = Math.max(minPipeHeight, height - GAME_CONSTANTS.PIPE_GAP - minPipeHeight);
               let minBound = minPipeHeight;
@@ -591,7 +629,10 @@ export const GameEngine: React.FC<GameEngineProps> = ({
           }
 
           // Spawn Powerups (Only spawn if NOT in test mode)
-          if (!initialPowerup && frameCountRef.current % Math.floor(GAME_CONSTANTS.POWERUP_SPAWN_RATE / timeScaleRef.current) === 0) {
+          const powerupRate = Math.floor(GAME_CONSTANTS.POWERUP_SPAWN_RATE / timeScaleRef.current);
+          if (!initialPowerup && frameCountRef.current - lastPowerupSpawnFrameRef.current >= powerupRate) {
+              lastPowerupSpawnFrameRef.current = frameCountRef.current;
+              
               const rand = Math.random();
               let type: PowerupType = 'shrink'; 
               if (rand < 0.2) type = 'shrink';
@@ -653,7 +694,9 @@ export const GameEngine: React.FC<GameEngineProps> = ({
           }
 
           // Update Particles
-          if (currentSkin.trail !== 'none' && (frameCountRef.current % PARTICLE_CONFIG.TRAIL_SPAWN_RATE === 0)) {
+          if (currentSkin.trail !== 'none' && (frameCountRef.current - lastParticleFrameRef.current >= PARTICLE_CONFIG.TRAIL_SPAWN_RATE)) {
+              lastParticleFrameRef.current = frameCountRef.current;
+              
               const pScale = currentSkin.trail === 'pixel_dust' ? 4 : 2;
               const pLife = 40;
               let color = currentSkin.trail === 'sparkle' ? 0xFFFF00 : 
@@ -673,7 +716,8 @@ export const GameEngine: React.FC<GameEngineProps> = ({
           }
 
           // Bullet Trail
-          if (frameCountRef.current % 2 === 0) {
+          if (frameCountRef.current - lastBulletTrailFrameRef.current >= 2) {
+              lastBulletTrailFrameRef.current = frameCountRef.current;
               projectilesRef.current.forEach(proj => {
                   particlesRef.current.push({
                       x: proj.x, y: proj.y,
