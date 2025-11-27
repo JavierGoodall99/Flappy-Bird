@@ -3,7 +3,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { GameEngine } from './components/GameEngine';
 import { Button } from './components/Button';
 import { GameState, ActivePowerup, SkinId, Skin, PowerupType, GameMode } from './types';
-import { SKINS, POWERUP_INFO } from './constants';
+import { SKINS, POWERUP_INFO, WEAPON_LOADOUTS } from './constants';
 import { audioService } from './services/audioService';
 
 const App: React.FC = () => {
@@ -30,6 +30,7 @@ const App: React.FC = () => {
   const [unlockedSkins, setUnlockedSkins] = useState<SkinId[]>(['default']);
   const [isShopOpen, setIsShopOpen] = useState(false);
   const [isGuideOpen, setIsGuideOpen] = useState(false);
+  const [isWeaponSelectOpen, setIsWeaponSelectOpen] = useState(false);
 
   // Testing State
   const [initialPowerup, setInitialPowerup] = useState<PowerupType | null>(null);
@@ -96,6 +97,7 @@ const App: React.FC = () => {
     setGameState(GameState.PLAYING);
     setIsNewHighScore(false);
     setIsGuideOpen(false);
+    setIsWeaponSelectOpen(false);
     setBossInfo({ active: false, hp: 0, maxHp: 0 });
   }, []);
 
@@ -126,7 +128,7 @@ const App: React.FC = () => {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (isShopOpen || isGuideOpen) return; // Disable game controls in menus
+      if (isShopOpen || isGuideOpen || isWeaponSelectOpen) return; // Disable game controls in menus
       if (e.code === 'Escape' || e.code === 'KeyP') togglePause();
       if (e.code === 'Space') {
         e.preventDefault(); 
@@ -137,7 +139,23 @@ const App: React.FC = () => {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [togglePause, gameState, startGame, isShopOpen, isGuideOpen, initialPowerup, gameMode]);
+  }, [togglePause, gameState, startGame, isShopOpen, isGuideOpen, isWeaponSelectOpen, initialPowerup, gameMode]);
+
+  const getPowerupName = (p: ActivePowerup) => {
+      if (p.type === 'slowmo') return 'TIME WARP';
+      if (p.type === 'shield') return 'SHIELD ACTIVE';
+      if (p.type === 'ghost') return 'GHOST MODE';
+      if (p.type === 'shrink') return 'TINY BIRD';
+      if (p.type === 'fast') return 'TURBO BOOST';
+      if (p.type === 'grow') return 'GIANT BIRD';
+      
+      // Weapon Names
+      if (p.type === 'gun') return 'BLASTER';
+      if (p.type === 'gun_spread') return 'TRI-SHOT';
+      if (p.type === 'gun_rapid') return 'VULCAN';
+      
+      return 'POWER UP';
+  };
 
   return (
     <div className={`relative w-full h-screen overflow-hidden ${shake ? 'animate-pulse' : ''}`}>
@@ -158,7 +176,7 @@ const App: React.FC = () => {
       </div>
 
       {/* Powerup HUD */}
-      {(gameState === GameState.PLAYING) && activePowerup && gameMode !== 'battle' && (
+      {(gameState === GameState.PLAYING) && activePowerup && (
           <div className="absolute top-20 md:top-24 left-0 right-0 flex justify-center z-10 pointer-events-none">
               <div className="bg-slate-900/60 backdrop-blur-md rounded-full px-6 py-2 border border-white/20 flex items-center gap-3 shadow-xl">
                   <div className={`w-3 h-3 rounded-full animate-pulse 
@@ -167,16 +185,11 @@ const App: React.FC = () => {
                         activePowerup.type === 'ghost' ? 'bg-pink-500' : 
                         activePowerup.type === 'shrink' ? 'bg-blue-500' : 
                         activePowerup.type === 'fast' ? 'bg-lime-500' : 
-                        activePowerup.type === 'gun' ? 'bg-teal-500' : 'bg-red-500'
+                        activePowerup.type.startsWith('gun') ? 'bg-teal-500' : 'bg-red-500'
                       }`} 
                   />
                   <div className="text-white font-bold text-sm tracking-wider uppercase">
-                      {activePowerup.type === 'slowmo' ? 'TIME WARP' : 
-                       activePowerup.type === 'shield' ? 'SHIELD ACTIVE' :
-                       activePowerup.type === 'ghost' ? 'GHOST MODE' :
-                       activePowerup.type === 'shrink' ? 'TINY BIRD' : 
-                       activePowerup.type === 'fast' ? 'TURBO BOOST' : 
-                       activePowerup.type === 'gun' ? 'BLASTER' : 'GIANT BIRD'}
+                      {getPowerupName(activePowerup)}
                   </div>
                   <div className="w-16 h-1.5 bg-white/20 rounded-full overflow-hidden">
                       <div 
@@ -253,7 +266,7 @@ const App: React.FC = () => {
       )}
 
       {/* Start Screen */}
-      {gameState === GameState.START && !isShopOpen && !isGuideOpen && (
+      {gameState === GameState.START && !isShopOpen && !isGuideOpen && !isWeaponSelectOpen && (
         <div className="absolute inset-0 flex items-center justify-center z-20 bg-black/20 backdrop-blur-sm">
           <div className="glass-panel p-6 md:p-10 rounded-3xl text-center w-full max-w-md mx-4 shadow-2xl transform transition-all animate-fade-in-up max-h-[90vh] overflow-y-auto no-scrollbar">
             <h1 className="text-5xl md:text-7xl font-black text-white mb-2 drop-shadow-xl tracking-tighter italic transform -rotate-2">
@@ -265,7 +278,7 @@ const App: React.FC = () => {
                 <Button onClick={() => startGame(null, 'standard')} className="w-full text-lg md:text-xl py-3 md:py-4 shadow-xl">PLAY CLASSIC</Button>
                 
                 <button 
-                  onClick={() => startGame(null, 'battle')}
+                  onClick={() => setIsWeaponSelectOpen(true)}
                   className="w-full py-3 md:py-4 rounded-full font-bold text-base md:text-lg text-white bg-gradient-to-r from-red-600 to-rose-600 border-b-4 border-red-800 active:scale-95 shadow-lg hover:brightness-110 transition-all flex items-center justify-center gap-2"
                 >
                   <span>⚔️</span> BATTLE MODE
@@ -291,6 +304,45 @@ const App: React.FC = () => {
             <div className="text-white/30 text-xs uppercase tracking-widest mt-4 md:mt-6">Press Space to Start</div>
           </div>
         </div>
+      )}
+
+      {/* WEAPON SELECTOR */}
+      {isWeaponSelectOpen && (
+          <div className="absolute inset-0 z-50 bg-slate-900/90 backdrop-blur-lg flex flex-col items-center justify-center p-6 animate-fade-in">
+              <div className="w-full max-w-4xl flex flex-col items-center">
+                  <div className="flex justify-between items-center w-full max-w-2xl mb-8">
+                     <h2 className="text-3xl md:text-4xl font-black text-white italic tracking-tighter">CHOOSE YOUR WEAPON</h2>
+                     <button onClick={() => setIsWeaponSelectOpen(false)} className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-white hover:bg-white/20">✕</button>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-5xl">
+                      {WEAPON_LOADOUTS.map((weapon) => (
+                          <div 
+                             key={weapon.id}
+                             onClick={() => startGame(weapon.id as any, 'battle')}
+                             className="bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/30 rounded-3xl p-6 cursor-pointer transition-all hover:-translate-y-2 group"
+                          >
+                             <div 
+                                className="w-16 h-16 rounded-2xl mb-4 shadow-lg flex items-center justify-center text-3xl transition-transform group-hover:scale-110"
+                                style={{ backgroundColor: weapon.color }}
+                             >
+                                {weapon.id === 'gun' ? '🔫' : weapon.id === 'gun_spread' ? '🦅' : '🌪️'}
+                             </div>
+                             <h3 className="text-2xl font-bold text-white mb-2">{weapon.name}</h3>
+                             <p className="text-sm text-slate-300 mb-4 h-10">{weapon.description}</p>
+                             
+                             <div className="bg-black/20 rounded-xl p-3 mb-4">
+                                 <div className="text-xs font-mono text-white/70 whitespace-pre-wrap">{weapon.stats}</div>
+                             </div>
+
+                             <div className="w-full py-3 bg-white/10 rounded-xl text-center font-bold text-sm tracking-widest text-white group-hover:bg-white/20 transition-colors uppercase">
+                                 Select
+                             </div>
+                          </div>
+                      ))}
+                  </div>
+              </div>
+          </div>
       )}
 
       {/* POWERUP GUIDE */}
@@ -382,7 +434,7 @@ const App: React.FC = () => {
       )}
 
       {/* Game Over Screen */}
-      {gameState === GameState.GAME_OVER && !isShopOpen && !isGuideOpen && (
+      {gameState === GameState.GAME_OVER && !isShopOpen && !isGuideOpen && !isWeaponSelectOpen && (
         <div className="absolute inset-0 flex items-center justify-center z-20 bg-slate-900/60 backdrop-blur-md">
           <div className="glass-panel p-6 md:p-8 rounded-3xl text-center w-full max-w-xs mx-4 shadow-2xl border border-white/10 relative max-h-[90vh] overflow-y-auto no-scrollbar">
             <h2 className={`text-3xl md:text-4xl font-bold text-white mb-4 md:mb-6 tracking-wide`}>GAME OVER</h2>

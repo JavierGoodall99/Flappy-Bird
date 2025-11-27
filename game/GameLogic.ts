@@ -1,6 +1,6 @@
 
 import { GameState, Bird, Pipe, Powerup, ActivePowerup, Particle, Projectile, BossProjectile, Enemy, Boss, GameMode, PowerupType } from '../types';
-import { GAME_CONSTANTS, COLORS, PARTICLE_CONFIG, BATTLE_CONSTANTS } from '../constants';
+import { GAME_CONSTANTS, COLORS, PARTICLE_CONFIG, BATTLE_CONSTANTS, WEAPON_LOADOUTS } from '../constants';
 import { audioService } from '../services/audioService';
 import { pointToSegmentDistance } from '../utils/collision';
 
@@ -111,12 +111,23 @@ export class GameLogic {
         }
 
         if (this.gameMode === 'battle') {
-            this.activePowerup = { type: 'gun', timeLeft: 9999999, totalTime: 9999999 };
+            // Check if initialPowerup is a weapon (from loadout selection), else default to gun
+            const weaponType = (this.initialPowerup && this.initialPowerup.startsWith('gun')) 
+                ? this.initialPowerup 
+                : 'gun';
+            
+            this.activePowerup = { type: weaponType, timeLeft: 9999999, totalTime: 9999999 };
             this.callbacks.setActivePowerup(this.activePowerup);
             audioService.playShieldUp();
         } else if (this.initialPowerup) {
+            let type = this.initialPowerup;
+            if (type === 'random') {
+                const types: PowerupType[] = ['shrink', 'grow', 'slowmo', 'fast', 'shield', 'ghost', 'gun'];
+                type = types[Math.floor(Math.random() * types.length)];
+            }
+            
             let duration = 999999; 
-            switch (this.initialPowerup) {
+            switch (type) {
                 case 'shrink': this.bird.targetScale = GAME_CONSTANTS.SCALE_SHRINK; audioService.playShrink(); break;
                 case 'grow': this.bird.targetScale = GAME_CONSTANTS.SCALE_GROW; audioService.playGrow(); break;
                 case 'slowmo': this.targetTimeScale = GAME_CONSTANTS.TIME_SCALE_SLOW; audioService.playSlowMo(); break;
@@ -126,7 +137,7 @@ export class GameLogic {
                 case 'gun': audioService.playShieldUp(); break; 
             }
             this.bird.effectTimer = duration;
-            this.activePowerup = { type: this.initialPowerup, timeLeft: duration, totalTime: duration };
+            this.activePowerup = { type: type, timeLeft: duration, totalTime: duration };
             this.callbacks.setActivePowerup(this.activePowerup);
         }
     }
@@ -208,7 +219,7 @@ export class GameLogic {
     }
 
     // --- WEAPONS SYSTEM ---
-    if (this.activePowerup?.type === 'gun') {
+    if (this.activePowerup?.type.startsWith('gun')) {
         this.spawnWeapons(dt, width, birdX);
     }
 
@@ -403,23 +414,60 @@ export class GameLogic {
   }
 
   private spawnWeapons(dt: number, width: number, birdX: number) {
-      let fireRate = GAME_CONSTANTS.GUN_FIRE_RATE;
+      if (!this.activePowerup) return;
+      const type = this.activePowerup.type;
+      
+      // Determine Base Rates
+      let baseRate = 45;
+      if (type === 'gun_spread') baseRate = 70;
+      if (type === 'gun_rapid') baseRate = 20;
+
+      let fireRate = baseRate;
       if (this.gameMode === 'battle') {
-          // Changed to max 30 to prevent it becoming a laser beam too fast, starting at base 45
-          fireRate = Math.max(30, GAME_CONSTANTS.GUN_FIRE_RATE - Math.floor(this.score / 500));
+          // Scale down rate by score, but keep a minimum relative to the base rate
+          // For every 500 score, reduce delay by ~10% of base rate
+          const reduction = Math.floor(this.score / 500) * (baseRate / 10);
+          fireRate = Math.max(baseRate * 0.5, baseRate - reduction);
+      } else {
+          fireRate = GAME_CONSTANTS.GUN_FIRE_RATE;
       }
 
       if (this.frameCount - this.lastShotFrame >= fireRate) {
           this.lastShotFrame = this.frameCount;
+          
           const speedBonus = Math.min(10, Math.floor(this.score / 50)); 
           const pSpeed = GAME_CONSTANTS.PROJECTILE_SPEED + speedBonus;
-          this.projectiles.push({
-              id: Math.random(),
-              x: birdX + 20,
-              y: this.bird.y - 5,
-              vx: pSpeed,
-              vy: 0
-          });
+          
+          const weaponDef = WEAPON_LOADOUTS.find(w => w.id === type) || WEAPON_LOADOUTS[0];
+          const color = parseInt(weaponDef.color.replace('#', '0x'));
+
+          if (type === 'gun_spread') {
+               // Spread Shot: 3 bullets
+               this.projectiles.push({
+                   id: Math.random(), x: birdX + 20, y: this.bird.y - 5,
+                   vx: pSpeed, vy: 0, color
+               });
+               this.projectiles.push({
+                   id: Math.random(), x: birdX + 20, y: this.bird.y - 5,
+                   vx: pSpeed * 0.95, vy: 2, color
+               });
+               this.projectiles.push({
+                   id: Math.random(), x: birdX + 20, y: this.bird.y - 5,
+                   vx: pSpeed * 0.95, vy: -2, color
+               });
+          } else if (type === 'gun_rapid') {
+               // Rapid Shot: Slightly randomized Y
+               this.projectiles.push({
+                   id: Math.random(), x: birdX + 20, y: this.bird.y - 5 + (Math.random()*10 - 5),
+                   vx: pSpeed * 1.1, vy: 0, color
+               });
+          } else {
+               // Standard Blaster
+               this.projectiles.push({
+                  id: Math.random(), x: birdX + 20, y: this.bird.y - 5,
+                  vx: pSpeed, vy: 0, color
+              });
+          }
           audioService.playShoot();
       }
   }
@@ -592,13 +640,14 @@ export class GameLogic {
           this.lastPowerupSpawnFrame = this.frameCount;
           const rand = Math.random();
           let type: PowerupType = 'shrink'; 
-          if (rand < 0.2) type = 'shrink';
-          else if (rand < 0.4) type = 'grow';
-          else if (rand < 0.55) type = 'shield';
-          else if (rand < 0.7) type = 'slowmo';
-          else if (rand < 0.8) type = 'gun';
-          else if (rand < 0.9) type = 'fast';
-          else type = 'ghost';
+          if (rand < 0.15) type = 'shrink';
+          else if (rand < 0.3) type = 'grow';
+          else if (rand < 0.45) type = 'shield';
+          else if (rand < 0.55) type = 'slowmo';
+          else if (rand < 0.65) type = 'gun';
+          else if (rand < 0.75) type = 'fast';
+          else if (rand < 0.85) type = 'ghost';
+          else type = 'random'; // ~15% chance for mystery box
 
           let spawnMinY = height * 0.25;
           let spawnMaxY = height * 0.75;
@@ -626,10 +675,19 @@ export class GameLogic {
           const dist = Math.sqrt(dx*dx + dy*dy);
           if (dist < birdCollideRadius + GAME_CONSTANTS.POWERUP_SIZE) {
             p.active = false;
+            
+            // Resolve Mystery Box first
+            let effectiveType = p.type;
+            if (effectiveType === 'random') {
+                const types: PowerupType[] = ['shrink', 'grow', 'slowmo', 'fast', 'shield', 'ghost', 'gun'];
+                effectiveType = types[Math.floor(Math.random() * types.length)];
+            }
+            
             let duration = GAME_CONSTANTS.DURATION_SIZE;
             this.bird.targetScale = GAME_CONSTANTS.SCALE_NORMAL;
             this.targetTimeScale = GAME_CONSTANTS.TIME_SCALE_NORMAL;
-            switch (p.type) {
+            
+            switch (effectiveType) {
                 case 'shrink': this.bird.targetScale = GAME_CONSTANTS.SCALE_SHRINK; audioService.playShrink(); break;
                 case 'grow': this.bird.targetScale = GAME_CONSTANTS.SCALE_GROW; audioService.playGrow(); break;
                 case 'slowmo': this.targetTimeScale = GAME_CONSTANTS.TIME_SCALE_SLOW; duration = GAME_CONSTANTS.DURATION_SLOWMO; audioService.playSlowMo(); break;
@@ -639,7 +697,7 @@ export class GameLogic {
                 case 'gun': duration = GAME_CONSTANTS.DURATION_GUN; audioService.playShieldUp(); break;
             }
             this.bird.effectTimer = duration;
-            this.activePowerup = { type: p.type, timeLeft: duration, totalTime: duration };
+            this.activePowerup = { type: effectiveType, timeLeft: duration, totalTime: duration };
             this.callbacks.setActivePowerup(this.activePowerup);
           }
         }
@@ -678,7 +736,7 @@ export class GameLogic {
                   x: proj.x, y: proj.y,
                   vx: -2, vy: 0,
                   life: 10, maxLife: 10, scale: 2,
-                  color: 0xFFFF00,
+                  color: proj.color || 0xFFFF00, // Use projectile color
                   rotation: 0
               });
           });

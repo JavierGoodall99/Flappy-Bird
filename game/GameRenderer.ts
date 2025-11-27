@@ -181,7 +181,7 @@ export class GameRenderer {
     
     const isGhostActive = gameLogic.activePowerup?.type === 'ghost';
     const isShieldActive = gameLogic.activePowerup?.type === 'shield';
-    const isGunActive = gameLogic.activePowerup?.type === 'gun';
+    const isGunActive = gameLogic.activePowerup?.type.startsWith('gun');
 
     this.birdMesh.traverse((child) => {
         if (child.name === 'pupil') {
@@ -200,14 +200,14 @@ export class GameRenderer {
     
     const shield = this.birdMesh.getObjectByName('shield');
     if (shield) {
-        shield.visible = isShieldActive;
+        shield.visible = !!isShieldActive;
         if (isShieldActive) {
             shield.scale.set(1.4, 1.4, 1.4);
             shield.rotation.y += 0.02; 
         }
     }
     const gun = this.birdMesh.getObjectByName('gun');
-    if (gun) gun.visible = isGunActive;
+    if (gun) gun.visible = !!isGunActive;
 
     // Render Enemies
     const currentEnemies = new Set(enemies);
@@ -342,6 +342,7 @@ export class GameRenderer {
               case 'shield': mat = this.material.pShield; break;
               case 'ghost': mat = this.material.pGhost; break;
               case 'gun': mat = this.material.pGun; break;
+              case 'random': mat = this.material.pRandom; break;
           }
           mesh = new THREE.Mesh(geo, mat);
           mesh.scale.set(GAME_CONSTANTS.POWERUP_SIZE/2, GAME_CONSTANTS.POWERUP_SIZE/2, GAME_CONSTANTS.POWERUP_SIZE/2); 
@@ -379,8 +380,9 @@ export class GameRenderer {
     // Projectiles
     this.projectileMeshes.forEach(m => m.visible = false);
     while (this.projectileMeshes.length < gameLogic.projectiles.length) {
-        const mesh = new THREE.Mesh(this.geometry.particleSphere, this.material.projectile);
+        const mesh = new THREE.Mesh(this.geometry.particleSphere, this.material.projectile.clone()); // CLONE MATERIAL FOR UNIQUE COLOR
         const glow = new THREE.Mesh(this.geometry.particleSphere, new THREE.MeshBasicMaterial({ color: 0xFFFFFF, transparent: true, opacity: 0.5 }));
+        glow.name = 'glow';
         glow.scale.set(1.5, 1.5, 1.5);
         mesh.add(glow);
         this.scene.add(mesh);
@@ -393,6 +395,17 @@ export class GameRenderer {
         mesh.position.y = toWorldY(p.y);
         mesh.position.z = 2;
         mesh.scale.set(6, 6, 6);
+        
+        // Update Color
+        const mat = mesh.material as THREE.MeshStandardMaterial;
+        const col = p.color || 0xFFFF00;
+        mat.color.setHex(col);
+        mat.emissive.setHex(col);
+        
+        const glow = mesh.getObjectByName('glow') as THREE.Mesh;
+        if (glow) {
+            (glow.material as THREE.MeshBasicMaterial).color.setHex(col);
+        }
     });
 
     // Boss Projectiles

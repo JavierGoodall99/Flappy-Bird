@@ -62,6 +62,7 @@ export const COLORS = {
   POWERUP_GHOST: '#EC4899', // Pink 500
   POWERUP_GUN: '#14B8A6', // Teal 500
   POWERUP_FAST: '#84CC16', // Lime 500
+  POWERUP_RANDOM: '#F59E0B', // Amber 500 (Gold)
   
   SHIELD_GLOW: '#FFFFFF', // Changed to White
   PROJECTILE: '#FFFF00', // Yellow Projectiles
@@ -69,6 +70,7 @@ export const COLORS = {
 };
 
 export const POWERUP_INFO = [
+  { type: 'random', name: 'Mystery Box', desc: 'Gives you a random power-up. Good luck!', color: COLORS.POWERUP_RANDOM },
   { type: 'shrink', name: 'Tiny Bird', desc: 'Shrinks you to 60% size. Easier to fit through gaps.', color: COLORS.POWERUP_SHRINK },
   { type: 'grow', name: 'Giant Bird', desc: 'Makes you 150% bigger. Harder to dodge! (Risk/Reward)', color: COLORS.POWERUP_GROW },
   { type: 'shield', name: 'Shield', desc: 'Survive one fatal collision. Breaks upon impact.', color: COLORS.POWERUP_SHIELD },
@@ -76,6 +78,12 @@ export const POWERUP_INFO = [
   { type: 'slowmo', name: 'Time Warp', desc: 'Slows down time by 40% for 3 seconds.', color: COLORS.POWERUP_SLOWMO },
   { type: 'fast', name: 'Turbo Boost', desc: 'Speeds up time by 40% for 5 seconds. Hold on tight!', color: COLORS.POWERUP_FAST },
   { type: 'gun', name: 'Blaster', desc: 'Auto-fire plasma bolts that destroy pipes for points.', color: COLORS.POWERUP_GUN },
+];
+
+export const WEAPON_LOADOUTS = [
+  { id: 'gun', name: 'Plasma Blaster', description: 'Standard rapid-fire energy weapon. Reliable & balanced.', color: '#14B8A6', stats: 'Fire Rate: ⭐⭐⭐ Damage: ⭐⭐' },
+  { id: 'gun_spread', name: 'Tri-Shot', description: 'Fires 3 projectiles in a wide spread. Crowd control.', color: '#F97316', stats: 'Fire Rate: ⭐⭐ Spread: ⭐⭐⭐⭐⭐' },
+  { id: 'gun_rapid', name: 'Vulcan Cannon', description: 'Extreme fire rate. Melts bosses but eats accuracy.', color: '#8B5CF6', stats: 'Fire Rate: ⭐⭐⭐⭐⭐ Accuracy: ⭐' }
 ];
 
 // --- ENVIRONMENT CONSTANTS ---

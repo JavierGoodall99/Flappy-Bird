@@ -37,6 +37,7 @@ export const createMaterials = () => {
         pGhost: new THREE.MeshStandardMaterial({ color: COLORS.POWERUP_GHOST, roughness: 0.2, metalness: 0.5, emissive: COLORS.POWERUP_GHOST, emissiveIntensity: 0.6 }),
         pGun: new THREE.MeshStandardMaterial({ color: COLORS.POWERUP_GUN, roughness: 0.2, metalness: 0.5, emissive: COLORS.POWERUP_GUN, emissiveIntensity: 0.6 }),
         pFast: new THREE.MeshStandardMaterial({ color: COLORS.POWERUP_FAST, roughness: 0.2, metalness: 0.5, emissive: COLORS.POWERUP_FAST, emissiveIntensity: 0.6 }),
+        pRandom: new THREE.MeshStandardMaterial({ color: COLORS.POWERUP_RANDOM, roughness: 0.2, metalness: 0.5, emissive: COLORS.POWERUP_RANDOM, emissiveIntensity: 0.6 }),
         shieldEffect: new THREE.MeshPhysicalMaterial({ 
             color: COLORS.SHIELD_GLOW, 
             transparent: true, 
