@@ -222,7 +222,13 @@ export class GameLogic {
           case 'fast': this.targetTimeScale = GAME_CONSTANTS.TIME_SCALE_FAST; this.birdCtrl.setEffect(GAME_CONSTANTS.SCALE_NORMAL, duration); audioService.playFastForward(); break;
           case 'shield': this.birdCtrl.setEffect(GAME_CONSTANTS.SCALE_NORMAL, duration); audioService.playShieldUp(); break;
           case 'ghost': this.birdCtrl.setEffect(GAME_CONSTANTS.SCALE_NORMAL, duration); audioService.playGhost(); break;
-          case 'gun': this.birdCtrl.setEffect(GAME_CONSTANTS.SCALE_NORMAL, duration); audioService.playShieldUp(); break;
+          case 'gun': 
+          case 'gun_spread':
+          case 'gun_rapid':
+          case 'gun_double':
+          case 'gun_wave':
+          case 'gun_pulse':
+             this.birdCtrl.setEffect(GAME_CONSTANTS.SCALE_NORMAL, duration); audioService.playShieldUp(); break;
       }
       this.activePowerup = { type, timeLeft: duration, totalTime: duration };
       this.callbacks.setActivePowerup(this.activePowerup);
@@ -364,35 +370,52 @@ export class GameLogic {
 
       for (let i = projectiles.length - 1; i >= 0; i--) {
           const proj = projectiles[i];
-          let hit = false;
+          let destroyed = false;
+          // Initialize pierce to 1 if undefined (standard behavior)
+          if (proj.pierce === undefined) proj.pierce = 1;
           
           if (this.gameMode !== 'battle') {
                // Pipe Collision
                for (const pipe of pipes) {
                     if (proj.x > pipe.x && proj.x < pipe.x + GAME_CONSTANTS.PIPE_WIDTH) {
                         if ((!pipe.brokenTop && proj.y < pipe.topHeight) || (!pipe.brokenBottom && proj.y > pipe.topHeight + GAME_CONSTANTS.PIPE_GAP)) {
-                             if (!pipe.brokenTop && proj.y < pipe.topHeight) pipe.brokenTop = true;
+                             // Determine which part hits
+                             const hitTop = !pipe.brokenTop && proj.y < pipe.topHeight;
+                             
+                             if (hitTop) pipe.brokenTop = true;
                              else pipe.brokenBottom = true;
                              
-                             hit = true;
                              this.score += 2;
                              this.callbacks.setScore(this.score);
                              audioService.playExplosion();
                              this.callbacks.triggerEffect();
                              this.particleCtrl.spawnExplosion(proj.x, proj.y, 0xFF0000, 10, 3);
+                             
+                             proj.pierce--;
+                             if (proj.pierce <= 0) {
+                                 destroyed = true;
+                             }
                              break;
                         }
                     }
                }
           } else {
                // Battle Mode Collision
+               
+               // Boss Check
                if (boss.active) {
                    const dist = Math.sqrt(Math.pow(proj.x - boss.x, 2) + Math.pow(proj.y - boss.y, 2));
-                   if (dist < BATTLE_CONSTANTS.BOSS_SIZE + 20) {
-                       hit = true;
-                       boss.hp--;
+                   if (dist < BATTLE_CONSTANTS.BOSS_SIZE + (proj.scale ? proj.scale * 4 : 20)) {
+                       boss.hp -= (proj.damage || 1);
                        this.callbacks.setBossActive(true, boss.hp, boss.maxHp);
                        this.particleCtrl.spawnExplosion(proj.x, proj.y, 0xFF0000, 2, 3);
+                       
+                       // Projectiles explode on Boss unless they have extremely high pierce (like a laser), 
+                       // but for now let's say boss consumes projectile or massive damage tick logic.
+                       // For Pulse, we want it to feel like it hits hard. 
+                       // If we let it pierce, it melts boss in 1 sec. 
+                       // Let's make boss effectively have infinite armor against pierce, consuming the shot.
+                       destroyed = true; 
                        
                        if (boss.hp <= 0) {
                            this.boss.active = false;
@@ -408,18 +431,18 @@ export class GameLogic {
                    }
                }
                
-               if (!hit) {
-                   const globalSpeedBonus = Math.min(4, (this.score / 50) * 0.5);
+               // Enemies Check
+               if (!destroyed) {
                    for (let j = enemies.length - 1; j >= 0; j--) {
                        const enemy = enemies[j];
                        if (enemy.x > width) continue;
-                       const hitRad = (BATTLE_CONSTANTS.ENEMY_SIZE * enemy.scale) + 35;
+                       const hitRad = (BATTLE_CONSTANTS.ENEMY_SIZE * enemy.scale) + (proj.scale ? proj.scale * 4 : 35);
                        const dist = Math.sqrt(Math.pow(proj.x - enemy.x, 2) + Math.pow(proj.y - enemy.y, 2));
                        
                        if (dist < hitRad) {
-                           hit = true;
-                           enemy.hp--;
+                           enemy.hp -= (proj.damage || 1);
                            this.particleCtrl.spawnExplosion(proj.x, proj.y, 0xFFFFFF, 3, 2);
+                           
                            if (enemy.hp <= 0) {
                                this.score += BATTLE_CONSTANTS.ENEMY_SCORE;
                                this.callbacks.setScore(this.score);
@@ -428,13 +451,20 @@ export class GameLogic {
                                this.callbacks.triggerEffect();
                                this.particleCtrl.spawnExplosion(enemy.x, enemy.y, 0xFF4400, 15, 4);
                            }
-                           break;
+                           
+                           proj.pierce--;
+                           if (proj.pierce <= 0) {
+                               destroyed = true;
+                               break;
+                           }
+                           // NOTE: Removed 'break' here to allow high-pierce projectiles 
+                           // to hit multiple unique enemies in a single frame.
                        }
                    }
                }
           }
 
-          if (hit) {
+          if (destroyed) {
               projectiles.splice(i, 1);
           }
       }

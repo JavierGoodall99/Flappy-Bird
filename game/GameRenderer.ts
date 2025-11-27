@@ -394,7 +394,10 @@ export class GameRenderer {
         mesh.position.x = toWorldX(p.x);
         mesh.position.y = toWorldY(p.y);
         mesh.position.z = 2;
-        mesh.scale.set(6, 6, 6);
+        
+        // Use custom scale or default
+        const s = (p.scale || 1) * 6;
+        mesh.scale.set(s, s, s);
         
         // Update Color
         const mat = mesh.material as THREE.MeshStandardMaterial;

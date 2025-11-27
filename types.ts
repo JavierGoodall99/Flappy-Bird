@@ -24,7 +24,10 @@ export interface Pipe {
   brokenBottom: boolean;
 }
 
-export type PowerupType = 'shrink' | 'grow' | 'slowmo' | 'shield' | 'ghost' | 'gun' | 'gun_spread' | 'gun_rapid' | 'fast' | 'random';
+export type PowerupType = 
+  | 'shrink' | 'grow' | 'slowmo' | 'shield' | 'ghost' 
+  | 'gun' | 'gun_spread' | 'gun_rapid' | 'gun_double' | 'gun_wave' | 'gun_pulse'
+  | 'fast' | 'random';
 
 export interface Powerup {
   x: number;
@@ -46,6 +49,13 @@ export interface Projectile {
   vy: number;
   id: number;
   color?: number;
+  // Advanced properties
+  type?: string;
+  initialY?: number;
+  time?: number;
+  scale?: number;
+  damage?: number;
+  pierce?: number;
 }
 
 export interface BossProjectile {
