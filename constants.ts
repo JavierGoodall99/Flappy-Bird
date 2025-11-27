@@ -2,21 +2,21 @@
 import { Skin } from './types';
 
 export const GAME_CONSTANTS = {
-  GRAVITY: 0.4,
-  JUMP_STRENGTH: -7, // Negative because Y is down
-  BASE_PIPE_SPEED: 3.5,
-  SPEED_INCREMENT: 0.001, // Speed increase per frame
-  PIPE_GAP: 180,
-  PIPE_WIDTH: 60,
-  PIPE_SPAWN_RATE: 120, // Frames
-  BIRD_RADIUS: 18,
+  GRAVITY: 0.55,
+  JUMP_STRENGTH: -8.2, // Negative because Y is down
+  BASE_PIPE_SPEED: 4.2,
+  SPEED_INCREMENT: 0.0015, // Speed increase per frame
+  PIPE_GAP: 155,
+  PIPE_WIDTH: 65,
+  PIPE_SPAWN_RATE: 105, // Frames between pipes
+  BIRD_RADIUS: 17,
   BIRD_X_POSITION: 0.3, // 30% of screen width
-  GLASS_PIPE_CHANCE: 0.2,
+  GLASS_PIPE_CHANCE: 0.25,
   GLASS_BREAK_SCORE: 5,
-  GLASS_BREAK_PENALTY: 5, // Positive Y velocity to push down
+  GLASS_BREAK_PENALTY: 8, // Positive Y velocity to push down
   
   // Powerups
-  POWERUP_SPAWN_RATE: 450, // Reduced frequency (approx 7.5s)
+  POWERUP_SPAWN_RATE: 600, // Reduced frequency (approx 10s)
   POWERUP_SIZE: 20,
   
   // Durations (in frames approx 60fps)
@@ -24,19 +24,19 @@ export const GAME_CONSTANTS = {
   DURATION_SLOWMO: 180, // 3 seconds
   DURATION_FAST: 300, // 5 seconds
   DURATION_SHIELD: 600, // 10 seconds
-  DURATION_GHOST: 300,  // 5 seconds
-  DURATION_GUN: 400, // ~6.5 seconds
+  DURATION_GHOST: 240,  // 4 seconds (Reduced)
+  DURATION_GUN: 300, // 5 seconds (Reduced)
 
   SCALE_NORMAL: 1,
   SCALE_SHRINK: 0.6,
   SCALE_GROW: 1.5,
   
   TIME_SCALE_NORMAL: 1.0,
-  TIME_SCALE_SLOW: 0.5,
-  TIME_SCALE_FAST: 1.25,
+  TIME_SCALE_SLOW: 0.6,
+  TIME_SCALE_FAST: 1.4,
   
   // Gun Stats
-  GUN_FIRE_RATE: 20, // Slightly faster single shot base rate
+  GUN_FIRE_RATE: 45, // Slower fire rate
   PROJECTILE_SPEED: 9,
 };
 
@@ -68,9 +68,9 @@ export const POWERUP_INFO = [
   { type: 'shrink', name: 'Tiny Bird', desc: 'Shrinks you to 60% size. Easier to fit through gaps.', color: COLORS.POWERUP_SHRINK },
   { type: 'grow', name: 'Giant Bird', desc: 'Makes you 150% bigger. Harder to dodge! (Risk/Reward)', color: COLORS.POWERUP_GROW },
   { type: 'shield', name: 'Shield', desc: 'Survive one fatal collision. Breaks upon impact.', color: COLORS.POWERUP_SHIELD },
-  { type: 'ghost', name: 'Ghost Mode', desc: 'Phase through pipes for 5 seconds. Still die to ground.', color: COLORS.POWERUP_GHOST },
-  { type: 'slowmo', name: 'Time Warp', desc: 'Slows down time by 50% for 3 seconds.', color: COLORS.POWERUP_SLOWMO },
-  { type: 'fast', name: 'Turbo Boost', desc: 'Speeds up time by 25% for 5 seconds. Hold on tight!', color: COLORS.POWERUP_FAST },
+  { type: 'ghost', name: 'Ghost Mode', desc: 'Phase through pipes for 4 seconds. Still die to ground.', color: COLORS.POWERUP_GHOST },
+  { type: 'slowmo', name: 'Time Warp', desc: 'Slows down time by 40% for 3 seconds.', color: COLORS.POWERUP_SLOWMO },
+  { type: 'fast', name: 'Turbo Boost', desc: 'Speeds up time by 40% for 5 seconds. Hold on tight!', color: COLORS.POWERUP_FAST },
   { type: 'gun', name: 'Blaster', desc: 'Auto-fire plasma bolts that destroy pipes for points.', color: COLORS.POWERUP_GUN },
 ];
 
@@ -131,16 +131,16 @@ export const DANGER_CONSTANTS = {
 // --- BATTLE MODE CONSTANTS ---
 
 export const BATTLE_CONSTANTS = {
-    ENEMY_SPAWN_RATE: 45, // Frames
-    ENEMY_SPEED: 6,
+    ENEMY_SPAWN_RATE: 28, // Frames (Significantly faster spawn)
+    ENEMY_SPEED: 9.5, // Much faster enemies
     ENEMY_SCORE: 10,
     ENEMY_HP: 1,
     ENEMY_SIZE: 20,
-    BOSS_INTERVAL: 250, // Score points between bosses (Increased from 100)
-    BOSS_BASE_HP: 40,
+    BOSS_INTERVAL: 250, // Score points between bosses
+    BOSS_BASE_HP: 40, // Tougher boss but manageable start
     BOSS_SIZE: 70,
-    BOSS_ATTACK_RATE: 90, // Frames
-    BOSS_PROJECTILE_SPEED: 7,
+    BOSS_ATTACK_RATE: 50, // Frames (Faster attacks)
+    BOSS_PROJECTILE_SPEED: 11.0,
 };
 
 export const ENEMY_SKIN: Skin = {

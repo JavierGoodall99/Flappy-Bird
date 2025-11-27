@@ -253,8 +253,9 @@ export class GameLogic {
              this.callbacks.setBossActive(true, this.boss.hp, this.boss.maxHp);
         }
 
-        const spawnRateReduction = Math.min(20, Math.floor(this.score / 40)); 
-        const currentSpawnRate = Math.max(25, BATTLE_CONSTANTS.ENEMY_SPAWN_RATE - spawnRateReduction);
+        // Reduced spawn interval as score increases, clamped to minimum 15 frames
+        const spawnRateReduction = Math.min(15, Math.floor(this.score / 50)); 
+        const currentSpawnRate = Math.max(15, BATTLE_CONSTANTS.ENEMY_SPAWN_RATE - spawnRateReduction);
 
         if (!this.boss.active && this.score < this.nextBossScore && this.frameCount - this.lastEnemySpawnFrame >= currentSpawnRate) {
             this.lastEnemySpawnFrame = this.frameCount;
@@ -322,7 +323,7 @@ export class GameLogic {
 
           boss.attackTimer -= 1 * dt;
           if (boss.attackTimer <= 0) {
-              boss.attackTimer = Math.max(40, BATTLE_CONSTANTS.BOSS_ATTACK_RATE - (Math.floor(this.score/200)*10));
+              boss.attackTimer = Math.max(30, BATTLE_CONSTANTS.BOSS_ATTACK_RATE - (Math.floor(this.score/200)*10));
               const isLowHp = boss.hp < boss.maxHp * 0.5;
               
               const spawnProjectile = (vy: number) => {
@@ -404,7 +405,8 @@ export class GameLogic {
   private spawnWeapons(dt: number, width: number, birdX: number) {
       let fireRate = GAME_CONSTANTS.GUN_FIRE_RATE;
       if (this.gameMode === 'battle') {
-          fireRate = Math.max(20, GAME_CONSTANTS.GUN_FIRE_RATE - Math.floor(this.score / 500));
+          // Changed to max 30 to prevent it becoming a laser beam too fast, starting at base 45
+          fireRate = Math.max(30, GAME_CONSTANTS.GUN_FIRE_RATE - Math.floor(this.score / 500));
       }
 
       if (this.frameCount - this.lastShotFrame >= fireRate) {

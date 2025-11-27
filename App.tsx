@@ -9,7 +9,13 @@ import { audioService } from './services/audioService';
 const App: React.FC = () => {
   const [gameState, setGameState] = useState<GameState>(GameState.START);
   const [score, setScore] = useState(0);
-  const [highScore, setHighScore] = useState(0);
+  
+  // Separate highscores for different modes
+  const [highScores, setHighScores] = useState<Record<GameMode, number>>({ 
+      standard: 0, 
+      battle: 0,
+      danger: 0 
+  });
   
   const [isNewHighScore, setIsNewHighScore] = useState(false);
   const [shake, setShake] = useState(false);
@@ -29,8 +35,16 @@ const App: React.FC = () => {
   const [initialPowerup, setInitialPowerup] = useState<PowerupType | null>(null);
 
   useEffect(() => {
-    const storedScore = localStorage.getItem('flapai-highscore');
-    if (storedScore) setHighScore(parseInt(storedScore, 10));
+    // Load highscores for all modes
+    const storedStandard = localStorage.getItem('flapai-highscore-standard') || localStorage.getItem('flapai-highscore');
+    const storedBattle = localStorage.getItem('flapai-highscore-battle');
+    const storedDanger = localStorage.getItem('flapai-highscore-danger');
+    
+    setHighScores({
+        standard: storedStandard ? parseInt(storedStandard, 10) : 0,
+        battle: storedBattle ? parseInt(storedBattle, 10) : 0,
+        danger: storedDanger ? parseInt(storedDanger, 10) : 0
+    });
     
     // Force unlock all default skins for existing users
     const allDefaultSkins = Object.values(SKINS)
@@ -52,14 +66,28 @@ const App: React.FC = () => {
 
   useEffect(() => {
     if (gameState === GameState.GAME_OVER) {
-      if (score > highScore) {
-        setHighScore(score);
-        localStorage.setItem('flapai-highscore', score.toString());
+      const currentHigh = highScores[gameMode];
+      
+      if (score > currentHigh) {
+        // Update state
+        setHighScores(prev => ({
+            ...prev,
+            [gameMode]: score
+        }));
+        
+        // Update Local Storage
+        localStorage.setItem(`flapai-highscore-${gameMode}`, score.toString());
+        
+        // Maintain legacy key for standard mode
+        if (gameMode === 'standard') {
+            localStorage.setItem('flapai-highscore', score.toString());
+        }
+
         setIsNewHighScore(true);
       }
       setBossInfo({ active: false, hp: 0, maxHp: 0 });
     }
-  }, [gameState, score, highScore]);
+  }, [gameState, score, highScores, gameMode]);
 
   const startGame = useCallback((forcedPowerup: PowerupType | null = null, mode: GameMode = 'standard') => {
     audioService.init();
@@ -120,7 +148,7 @@ const App: React.FC = () => {
           setGameState={setGameState} 
           setScore={setScore}
           triggerEffect={triggerShake}
-          highScore={highScore}
+          highScore={highScores[gameMode]}
           setActivePowerup={setActivePowerup}
           currentSkin={SKINS[currentSkinId]}
           initialPowerup={initialPowerup}
@@ -286,13 +314,13 @@ const App: React.FC = () => {
                              onClick={() => startGame(p.type as any, 'standard')}
                              className="px-4 py-2 bg-white/20 hover:bg-white/30 rounded-full text-xs font-bold text-white tracking-wide border border-white/20 transition-all active:scale-95"
                           >
-                             TEST
+                             TRY OUT
                           </button>
                       </div>
                    ))}
                 </div>
                 <div className="mt-6 text-center text-white/40 text-sm">
-                   Click TEST to start a run with the power-up active!
+                   Click TRY OUT to start a run with the power-up active!
                 </div>
              </div>
          </div>
@@ -367,7 +395,7 @@ const App: React.FC = () => {
                 <div className="p-3 bg-white/5 rounded-xl border border-white/5 flex justify-center px-6">
                     <div className="text-center">
                         <div className="text-xs uppercase tracking-wider text-slate-400">Best</div>
-                        <div className="text-xl font-bold text-white">{highScore}</div>
+                        <div className="text-xl font-bold text-white">{highScores[gameMode]}</div>
                     </div>
                 </div>
             </div>
