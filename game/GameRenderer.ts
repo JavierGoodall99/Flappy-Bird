@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { GameState, Pipe, Powerup, Enemy, Skin, Bird } from '../types';
 import { GAME_CONSTANTS, COLORS, PARTICLE_CONFIG, ENEMY_SKIN, BOSS_SKIN } from '../constants';
-import { setupThreeScene } from '../utils/threeSetup';
+import { setupThreeScene, updateCamera } from '../utils/threeSetup';
 import { createGeometries, createMaterials } from '../utils/assetManager';
 import { createBirdMesh } from '../utils/birdFactory';
 import { GameLogic } from './GameLogic';
@@ -60,11 +60,10 @@ export class GameRenderer {
 
   public resize(width: number, height: number) {
       if (!this.camera || !this.renderer) return;
-      this.camera.aspect = width / height;
-      const fov = this.camera.fov;
-      const dist = height / (2 * Math.tan((fov * Math.PI) / 360));
-      this.camera.position.z = dist;
-      this.camera.updateProjectionMatrix();
+      
+      // Update camera using the unified logic that handles mobile zooming
+      updateCamera(this.camera, width, height);
+      
       this.renderer.setSize(width, height);
   }
 
@@ -123,17 +122,25 @@ export class GameRenderer {
         if (!this.birdMesh) return; // Still failed, skip render frame
     }
     
+    // Calculate Logical Dimensions for Render scaling
     const width = window.innerWidth;
     const height = window.innerHeight;
+    
+    // Scale must match GameEngine logic
+    const scale = Math.max(1, GAME_CONSTANTS.MIN_GAME_WIDTH / width, GAME_CONSTANTS.MIN_GAME_HEIGHT / height);
+    const logicWidth = width * scale;
+    const logicHeight = height * scale;
     
     const birdState = gameLogic.bird;
     const pipes = gameLogic.pipes;
     const enemies = gameLogic.enemies;
     const powerups = gameLogic.powerups;
 
-    const toWorldY = (screenY: number) => (height / 2) - screenY;
-    const toWorldX = (screenX: number) => screenX - (width / 2);
-    const birdX = width * GAME_CONSTANTS.BIRD_X_POSITION;
+    const toWorldY = (gameY: number) => (logicHeight / 2) - gameY;
+    const toWorldX = (gameX: number) => gameX - (logicWidth / 2);
+    
+    // Note: birdX is now relative to logicWidth
+    const birdX = logicWidth * GAME_CONSTANTS.BIRD_X_POSITION;
 
     // Bird Update
     this.birdMesh.position.x = toWorldX(birdX);
@@ -291,15 +298,15 @@ export class GameRenderer {
       if (topMesh && topCap) {
         const topPipeHeight = pipe.topHeight;
         topMesh.scale.set(1, topPipeHeight, 1);
-        topMesh.position.y = (height / 2) - (topPipeHeight / 2);
-        topCap.position.y = (height / 2) - topPipeHeight - 5; 
+        topMesh.position.y = (logicHeight / 2) - (topPipeHeight / 2);
+        topCap.position.y = (logicHeight / 2) - topPipeHeight - 5; 
       }
       if (bottomMesh && bottomCap) {
         const bottomPipeYStart = pipe.topHeight + GAME_CONSTANTS.PIPE_GAP;
-        const bottomPipeHeight = Math.max(1, height - bottomPipeYStart);
+        const bottomPipeHeight = Math.max(1, logicHeight - bottomPipeYStart);
         bottomMesh.scale.set(1, bottomPipeHeight, 1);
-        bottomMesh.position.y = (height / 2) - bottomPipeYStart - (bottomPipeHeight / 2);
-        bottomCap.position.y = (height / 2) - bottomPipeYStart + 5;
+        bottomMesh.position.y = (logicHeight / 2) - bottomPipeYStart - (bottomPipeHeight / 2);
+        bottomCap.position.y = (logicHeight / 2) - bottomPipeYStart + 5;
       }
       group.traverse((child) => {
           if (child instanceof THREE.Mesh) {

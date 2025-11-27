@@ -38,6 +38,10 @@ export const GAME_CONSTANTS = {
   // Gun Stats
   GUN_FIRE_RATE: 45, // Slower fire rate
   PROJECTILE_SPEED: 9,
+  
+  // Mobile Responsiveness
+  MIN_GAME_WIDTH: 600,
+  MIN_GAME_HEIGHT: 600,
 };
 
 export const COLORS = {

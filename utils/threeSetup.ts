@@ -1,6 +1,39 @@
 
 import * as THREE from 'three';
-import { COLORS } from '../constants';
+import { COLORS, GAME_CONSTANTS } from '../constants';
+
+export const updateCamera = (camera: THREE.PerspectiveCamera, width: number, height: number) => {
+    // Determine Logic Dimensions with both constraints:
+    // We scale the logic world up if the physical screen is too narrow (width) OR too short (height).
+    const scale = Math.max(1, GAME_CONSTANTS.MIN_GAME_WIDTH / width, GAME_CONSTANTS.MIN_GAME_HEIGHT / height);
+    
+    // Logic width and height derived from scale
+    const logicWidth = width * scale;
+    const logicHeight = height * scale;
+    
+    camera.aspect = width / height;
+    camera.updateProjectionMatrix();
+
+    // 1. Calculate distance to fit logicHeight vertically (standard mapping 1 unit = 1 pixel height)
+    const fov = camera.fov;
+    let dist = logicHeight / (2 * Math.tan((fov * Math.PI) / 360));
+
+    // 2. Check visible width at this distance
+    // Visible height at dist is logicHeight.
+    // Visible width = Visible height * aspect
+    const visibleWidth = logicHeight * camera.aspect;
+
+    // 3. If visible width is less than desired logicWidth, pull camera back
+    if (visibleWidth < logicWidth) {
+        // We want visibleWidth = logicWidth
+        // visibleHeight = logicWidth / aspect
+        // dist = visibleHeight / (2 * tan(fov/2))
+        const requiredHeight = logicWidth / camera.aspect;
+        dist = requiredHeight / (2 * Math.tan((fov * Math.PI) / 360));
+    }
+    
+    camera.position.z = dist;
+};
 
 export const setupThreeScene = (container: HTMLDivElement, width: number, height: number) => {
   const scene = new THREE.Scene();
@@ -23,8 +56,9 @@ export const setupThreeScene = (container: HTMLDivElement, width: number, height
   // Camera Setup
   const fov = 40;
   const camera = new THREE.PerspectiveCamera(fov, width / height, 0.1, 5000);
-  const dist = height / (2 * Math.tan((fov * Math.PI) / 360));
-  camera.position.set(0, 0, dist);
+  // Apply smart sizing immediately
+  updateCamera(camera, width, height);
+  
   camera.lookAt(0, 0, 0);
 
   // Renderer Setup

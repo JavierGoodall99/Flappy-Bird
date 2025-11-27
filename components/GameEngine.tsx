@@ -3,6 +3,7 @@ import React, { useRef, useEffect } from 'react';
 import { GameState, ActivePowerup, Skin, GameMode, PowerupType } from '../types';
 import { GameLogic } from '../game/GameLogic';
 import { GameRenderer } from '../game/GameRenderer';
+import { GAME_CONSTANTS } from '../constants';
 
 interface GameEngineProps {
   gameState: GameState;
@@ -44,16 +45,24 @@ export const GameEngine: React.FC<GameEngineProps> = (props) => {
     const width = window.innerWidth;
     const height = window.innerHeight;
     
+    // Calculate scale factor using max of width/height constraints
+    // This ensures game world is never too small on either axis
+    const scale = Math.max(1, GAME_CONSTANTS.MIN_GAME_WIDTH / width, GAME_CONSTANTS.MIN_GAME_HEIGHT / height);
+    
+    // Apply scale to both width and height to maintain aspect ratio coverage
+    const logicWidth = width * scale;
+    const logicHeight = height * scale;
+    
     const now = performance.now();
     if (!lastTimeRef.current) lastTimeRef.current = now;
     const rawDeltaMS = Math.min(now - lastTimeRef.current, 100); 
     lastTimeRef.current = now;
     const rawDeltaFactor = rawDeltaMS / 16.666;
 
-    // Update Logic
-    logicRef.current.update(rawDeltaFactor, width, height);
+    // Update Logic using SCALED dimensions
+    logicRef.current.update(rawDeltaFactor, logicWidth, logicHeight);
 
-    // Render
+    // Render (Renderer handles mapping Logic -> Screen)
     rendererRef.current.render(logicRef.current);
 
     requestRef.current = requestAnimationFrame(loop);
@@ -80,12 +89,18 @@ export const GameEngine: React.FC<GameEngineProps> = (props) => {
 
   // Handle Game State Changes (Reset)
   useEffect(() => {
+      const width = window.innerWidth;
+      const height = window.innerHeight;
+      const scale = Math.max(1, GAME_CONSTANTS.MIN_GAME_WIDTH / width, GAME_CONSTANTS.MIN_GAME_HEIGHT / height);
+      const logicWidth = width * scale;
+      const logicHeight = height * scale;
+
       if (props.gameState === GameState.START) {
-          logicRef.current.reset(false, window.innerWidth, window.innerHeight);
+          logicRef.current.reset(false, logicWidth, logicHeight);
           rendererRef.current.reset();
       } else if (props.gameState === GameState.PLAYING) {
           if (prevGameStateRef.current === GameState.START || prevGameStateRef.current === GameState.GAME_OVER) {
-              logicRef.current.reset(true, window.innerWidth, window.innerHeight);
+              logicRef.current.reset(true, logicWidth, logicHeight);
               rendererRef.current.reset();
           }
       }

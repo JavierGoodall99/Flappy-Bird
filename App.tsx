@@ -159,7 +159,7 @@ const App: React.FC = () => {
 
       {/* Powerup HUD */}
       {(gameState === GameState.PLAYING) && activePowerup && gameMode !== 'battle' && (
-          <div className="absolute top-24 left-0 right-0 flex justify-center z-10">
+          <div className="absolute top-20 md:top-24 left-0 right-0 flex justify-center z-10 pointer-events-none">
               <div className="bg-slate-900/60 backdrop-blur-md rounded-full px-6 py-2 border border-white/20 flex items-center gap-3 shadow-xl">
                   <div className={`w-3 h-3 rounded-full animate-pulse 
                       ${activePowerup.type === 'shield' ? 'bg-white shadow-[0_0_8px_rgba(255,255,255,0.6)]' : 
@@ -190,7 +190,7 @@ const App: React.FC = () => {
 
       {/* BOSS HUD */}
       {bossInfo.active && (
-         <div className="absolute top-28 left-0 right-0 flex justify-center z-20 animate-fade-in-up">
+         <div className="absolute top-24 md:top-28 left-0 right-0 flex justify-center z-20 animate-fade-in-up pointer-events-none">
             <div className="w-full max-w-md px-4">
                <div className="bg-slate-900/80 backdrop-blur-md p-3 rounded-xl border border-red-500/50 shadow-2xl">
                    <div className="flex justify-between items-center mb-1">
@@ -211,12 +211,12 @@ const App: React.FC = () => {
 
       {/* HUD Score */}
       {(gameState === GameState.PLAYING || gameState === GameState.PAUSED) && (
-        <div className="absolute top-10 left-0 right-0 text-center z-10 pointer-events-none">
-          <span className={`text-6xl font-black drop-shadow-lg select-none font-['Outfit'] transition-all text-white`}>
+        <div className="absolute top-6 md:top-10 left-0 right-0 text-center z-10 pointer-events-none">
+          <span className={`text-5xl md:text-6xl font-black drop-shadow-lg select-none font-['Outfit'] transition-all text-white`}>
             {score}
           </span>
           {gameMode === 'battle' && (
-             <div className="flex justify-center mt-3">
+             <div className="flex justify-center mt-2 md:mt-3">
                 <div className="px-5 py-1.5 bg-red-950/40 backdrop-blur-md border border-red-500/30 rounded-full shadow-[0_0_15px_rgba(220,38,38,0.3)] flex items-center gap-2.5">
                     <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.8)]"></span>
                     <span className="text-white/90 font-bold tracking-[0.2em] text-xs uppercase drop-shadow-md">BATTLE MODE</span>
@@ -230,11 +230,11 @@ const App: React.FC = () => {
       {gameState === GameState.PLAYING && (
         <button 
           onClick={togglePause}
-          className="absolute top-8 right-8 z-30 w-12 h-12 bg-white/20 backdrop-blur-md border border-white/30 rounded-full flex items-center justify-center hover:bg-white/30 transition-all active:scale-95 group"
+          className="absolute top-6 right-6 md:top-8 md:right-8 z-30 w-10 h-10 md:w-12 md:h-12 bg-white/20 backdrop-blur-md border border-white/30 rounded-full flex items-center justify-center hover:bg-white/30 transition-all active:scale-95 group"
         >
           <div className="flex gap-1.5">
-            <div className="w-1.5 h-5 bg-white rounded-full shadow-sm group-hover:scale-y-110 transition-transform"></div>
-            <div className="w-1.5 h-5 bg-white rounded-full shadow-sm group-hover:scale-y-110 transition-transform"></div>
+            <div className="w-1.5 h-4 md:h-5 bg-white rounded-full shadow-sm group-hover:scale-y-110 transition-transform"></div>
+            <div className="w-1.5 h-4 md:h-5 bg-white rounded-full shadow-sm group-hover:scale-y-110 transition-transform"></div>
           </div>
         </button>
       )}
@@ -242,8 +242,8 @@ const App: React.FC = () => {
       {/* Pause Menu */}
       {gameState === GameState.PAUSED && (
         <div className="absolute inset-0 flex items-center justify-center z-40 bg-slate-900/40 backdrop-blur-md">
-          <div className="glass-panel p-8 rounded-3xl text-center min-w-[320px] shadow-2xl border border-white/10">
-             <h2 className="text-4xl font-black text-white tracking-wide drop-shadow-sm mb-8">PAUSED</h2>
+          <div className="glass-panel p-6 md:p-8 rounded-3xl text-center min-w-[300px] md:min-w-[320px] shadow-2xl border border-white/10 max-h-[90vh] overflow-y-auto no-scrollbar mx-4">
+             <h2 className="text-3xl md:text-4xl font-black text-white tracking-wide drop-shadow-sm mb-6 md:mb-8">PAUSED</h2>
              <div className="flex flex-col gap-4">
                 <Button onClick={togglePause} className="w-full">RESUME</Button>
                 <Button onClick={resetGame} variant="secondary" className="w-full">QUIT</Button>
@@ -255,40 +255,40 @@ const App: React.FC = () => {
       {/* Start Screen */}
       {gameState === GameState.START && !isShopOpen && !isGuideOpen && (
         <div className="absolute inset-0 flex items-center justify-center z-20 bg-black/20 backdrop-blur-sm">
-          <div className="glass-panel p-10 rounded-3xl text-center w-full max-w-md mx-4 shadow-2xl transform transition-all animate-fade-in-up">
-            <h1 className="text-7xl font-black text-white mb-2 drop-shadow-xl tracking-tighter italic transform -rotate-2">
+          <div className="glass-panel p-6 md:p-10 rounded-3xl text-center w-full max-w-md mx-4 shadow-2xl transform transition-all animate-fade-in-up max-h-[90vh] overflow-y-auto no-scrollbar">
+            <h1 className="text-5xl md:text-7xl font-black text-white mb-2 drop-shadow-xl tracking-tighter italic transform -rotate-2">
               Fliply
             </h1>
-            <div className="text-amber-400 font-bold tracking-widest uppercase mb-8 text-sm">Arcade Edition</div>
+            <div className="text-amber-400 font-bold tracking-widest uppercase mb-4 md:mb-8 text-sm">Arcade Edition</div>
             
-            <div className="flex flex-col gap-4 mb-6">
-                <Button onClick={() => startGame(null, 'standard')} className="w-full text-xl py-4 shadow-xl">PLAY CLASSIC</Button>
+            <div className="flex flex-col gap-3 md:gap-4 mb-4 md:mb-6">
+                <Button onClick={() => startGame(null, 'standard')} className="w-full text-lg md:text-xl py-3 md:py-4 shadow-xl">PLAY CLASSIC</Button>
                 
                 <button 
                   onClick={() => startGame(null, 'battle')}
-                  className="w-full py-4 rounded-full font-bold text-lg text-white bg-gradient-to-r from-red-600 to-rose-600 border-b-4 border-red-800 active:scale-95 shadow-lg hover:brightness-110 transition-all flex items-center justify-center gap-2"
+                  className="w-full py-3 md:py-4 rounded-full font-bold text-base md:text-lg text-white bg-gradient-to-r from-red-600 to-rose-600 border-b-4 border-red-800 active:scale-95 shadow-lg hover:brightness-110 transition-all flex items-center justify-center gap-2"
                 >
                   <span>⚔️</span> BATTLE MODE
                 </button>
             </div>
 
-            <div className="flex gap-4 w-full">
+            <div className="flex gap-3 md:gap-4 w-full">
               <button 
                 onClick={() => setIsShopOpen(true)}
-                className="flex-1 py-4 rounded-2xl font-bold text-base tracking-wide bg-white/5 text-white border border-white/10 hover:bg-white/15 hover:border-white/30 transition-all flex flex-col items-center justify-center gap-1 group"
+                className="flex-1 py-3 md:py-4 rounded-2xl font-bold text-base tracking-wide bg-white/5 text-white border border-white/10 hover:bg-white/15 hover:border-white/30 transition-all flex flex-col items-center justify-center gap-1 group"
               >
                 <span className="text-2xl mb-1 group-hover:scale-110 transition-transform">🎨</span> 
                 SKINS
               </button>
               <button 
                 onClick={() => setIsGuideOpen(true)}
-                className="flex-1 py-4 rounded-2xl font-bold text-base tracking-wide bg-white/5 text-white border border-white/10 hover:bg-white/15 hover:border-white/30 transition-all flex flex-col items-center justify-center gap-1 group"
+                className="flex-1 py-3 md:py-4 rounded-2xl font-bold text-base tracking-wide bg-white/5 text-white border border-white/10 hover:bg-white/15 hover:border-white/30 transition-all flex flex-col items-center justify-center gap-1 group"
               >
                 <span className="text-2xl mb-1 group-hover:scale-110 transition-transform">⚡</span> 
                 POWERS
               </button>
             </div>
-            <div className="text-white/30 text-xs uppercase tracking-widest mt-6">Press Space to Start</div>
+            <div className="text-white/30 text-xs uppercase tracking-widest mt-4 md:mt-6">Press Space to Start</div>
           </div>
         </div>
       )}
@@ -384,13 +384,13 @@ const App: React.FC = () => {
       {/* Game Over Screen */}
       {gameState === GameState.GAME_OVER && !isShopOpen && !isGuideOpen && (
         <div className="absolute inset-0 flex items-center justify-center z-20 bg-slate-900/60 backdrop-blur-md">
-          <div className="glass-panel p-8 rounded-3xl text-center w-full max-w-xs mx-4 shadow-2xl border border-white/10 relative">
-            <h2 className={`text-4xl font-bold text-white mb-6 tracking-wide`}>GAME OVER</h2>
+          <div className="glass-panel p-6 md:p-8 rounded-3xl text-center w-full max-w-xs mx-4 shadow-2xl border border-white/10 relative max-h-[90vh] overflow-y-auto no-scrollbar">
+            <h2 className={`text-3xl md:text-4xl font-bold text-white mb-4 md:mb-6 tracking-wide`}>GAME OVER</h2>
 
-            <div className="flex flex-col gap-4 mb-8">
+            <div className="flex flex-col gap-3 md:gap-4 mb-6 md:mb-8">
                 <div className={`p-4 rounded-2xl border transition-all duration-500 ${isNewHighScore ? 'bg-yellow-400/20 border-yellow-400/50 shadow-[0_0_30px_rgba(251,191,36,0.3)]' : 'bg-white/10 border-white/5'}`}>
                     <div className={`text-sm uppercase tracking-wider text-xs ${isNewHighScore ? 'text-yellow-200' : 'text-slate-300'}`}>Score</div>
-                    <div className={`text-5xl font-bold ${isNewHighScore ? 'text-yellow-400' : 'text-amber-400'}`}>{score}</div>
+                    <div className={`text-4xl md:text-5xl font-bold ${isNewHighScore ? 'text-yellow-400' : 'text-amber-400'}`}>{score}</div>
                 </div>
                 <div className="p-3 bg-white/5 rounded-xl border border-white/5 flex justify-center px-6">
                     <div className="text-center">
