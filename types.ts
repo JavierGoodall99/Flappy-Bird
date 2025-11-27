@@ -136,7 +136,7 @@ export interface EnvironmentState {
 
 // --- ENDLESS DANGER MODE ---
 
-export type GameMode = 'standard' | 'danger' | 'battle';
+export type GameMode = 'standard' | 'danger' | 'battle' | 'playground';
 
 export type HazardType = 'laser' | 'debris';
 

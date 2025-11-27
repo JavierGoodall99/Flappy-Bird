@@ -14,7 +14,8 @@ const App: React.FC = () => {
   const [highScores, setHighScores] = useState<Record<GameMode, number>>({ 
       standard: 0, 
       battle: 0,
-      danger: 0 
+      danger: 0,
+      playground: 0
   });
   
   const [isNewHighScore, setIsNewHighScore] = useState(false);
@@ -44,7 +45,8 @@ const App: React.FC = () => {
     setHighScores({
         standard: storedStandard ? parseInt(storedStandard, 10) : 0,
         battle: storedBattle ? parseInt(storedBattle, 10) : 0,
-        danger: storedDanger ? parseInt(storedDanger, 10) : 0
+        danger: storedDanger ? parseInt(storedDanger, 10) : 0,
+        playground: 0
     });
     
     // Force unlock all default skins for existing users
@@ -67,24 +69,27 @@ const App: React.FC = () => {
 
   useEffect(() => {
     if (gameState === GameState.GAME_OVER) {
-      const currentHigh = highScores[gameMode];
-      
-      if (score > currentHigh) {
-        // Update state
-        setHighScores(prev => ({
-            ...prev,
-            [gameMode]: score
-        }));
+      // Only check and update high scores if NOT in playground mode
+      if (gameMode !== 'playground') {
+        const currentHigh = highScores[gameMode];
         
-        // Update Local Storage
-        localStorage.setItem(`flapai-highscore-${gameMode}`, score.toString());
-        
-        // Maintain legacy key for standard mode
-        if (gameMode === 'standard') {
-            localStorage.setItem('flapai-highscore', score.toString());
-        }
+        if (score > currentHigh) {
+          // Update state
+          setHighScores(prev => ({
+              ...prev,
+              [gameMode]: score
+          }));
+          
+          // Update Local Storage
+          localStorage.setItem(`flapai-highscore-${gameMode}`, score.toString());
+          
+          // Maintain legacy key for standard mode
+          if (gameMode === 'standard') {
+              localStorage.setItem('flapai-highscore', score.toString());
+          }
 
-        setIsNewHighScore(true);
+          setIsNewHighScore(true);
+        }
       }
       setBossInfo({ active: false, hp: 0, maxHp: 0 });
     }
@@ -138,8 +143,17 @@ const App: React.FC = () => {
       }
     };
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener('mousedown', handleTouchOrClick);
+    window.addEventListener('touchstart', handleTouchOrClick, { passive: false });
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('mousedown', handleTouchOrClick);
+      window.removeEventListener('touchstart', handleTouchOrClick);
+    };
   }, [togglePause, gameState, startGame, isShopOpen, isGuideOpen, isWeaponSelectOpen, initialPowerup, gameMode]);
+  
+  // Dummy handler to prevent errors in cleanup
+  const handleTouchOrClick = () => {};
 
   const getPowerupName = (p: ActivePowerup) => {
       if (p.type === 'slowmo') return 'TIME WARP';
@@ -175,9 +189,9 @@ const App: React.FC = () => {
         />
       </div>
 
-      {/* Powerup HUD */}
-      {(gameState === GameState.PLAYING) && activePowerup && (
-          <div className="absolute top-20 md:top-24 left-0 right-0 flex justify-center z-10 pointer-events-none">
+      {/* Powerup HUD - Hidden in Battle Mode */}
+      {(gameState === GameState.PLAYING) && activePowerup && gameMode !== 'battle' && (
+          <div className="absolute top-32 md:top-44 left-0 right-0 flex justify-center z-10 pointer-events-none">
               <div className="bg-slate-900/60 backdrop-blur-md rounded-full px-6 py-2 border border-white/20 flex items-center gap-3 shadow-xl">
                   <div className={`w-3 h-3 rounded-full animate-pulse 
                       ${activePowerup.type === 'shield' ? 'bg-white shadow-[0_0_8px_rgba(255,255,255,0.6)]' : 
@@ -203,7 +217,7 @@ const App: React.FC = () => {
 
       {/* BOSS HUD */}
       {bossInfo.active && (
-         <div className="absolute top-24 md:top-28 left-0 right-0 flex justify-center z-20 animate-fade-in-up pointer-events-none">
+         <div className="absolute top-28 md:top-32 left-0 right-0 flex justify-center z-20 animate-fade-in-up pointer-events-none">
             <div className="w-full max-w-md px-4">
                <div className="bg-slate-900/80 backdrop-blur-md p-3 rounded-xl border border-red-500/50 shadow-2xl">
                    <div className="flex justify-between items-center mb-1">
@@ -224,15 +238,30 @@ const App: React.FC = () => {
 
       {/* HUD Score */}
       {(gameState === GameState.PLAYING || gameState === GameState.PAUSED) && (
-        <div className="absolute top-6 md:top-10 left-0 right-0 text-center z-10 pointer-events-none">
-          <span className={`text-5xl md:text-6xl font-black drop-shadow-lg select-none font-['Outfit'] transition-all text-white`}>
+        <div className="absolute top-6 md:top-10 left-0 right-0 text-center z-10 pointer-events-none flex flex-col items-center">
+          <span className={`text-5xl md:text-6xl font-black drop-shadow-lg select-none font-['Outfit'] transition-all text-white leading-none`}>
             {score}
           </span>
+          
+          {/* Previous Best Score Display */}
+          {gameMode !== 'playground' && (
+             <div className="text-white/50 font-bold text-xs md:text-sm tracking-widest uppercase drop-shadow-sm mt-1">
+                 Best {highScores[gameMode]}
+             </div>
+          )}
+
           {gameMode === 'battle' && (
-             <div className="flex justify-center mt-2 md:mt-3">
+             <div className="flex justify-center mt-3">
                 <div className="px-5 py-1.5 bg-red-950/40 backdrop-blur-md border border-red-500/30 rounded-full shadow-[0_0_15px_rgba(220,38,38,0.3)] flex items-center gap-2.5">
                     <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.8)]"></span>
                     <span className="text-white/90 font-bold tracking-[0.2em] text-xs uppercase drop-shadow-md">BATTLE MODE</span>
+                </div>
+             </div>
+          )}
+          {gameMode === 'playground' && (
+             <div className="flex justify-center mt-3">
+                <div className="px-5 py-1.5 bg-blue-950/40 backdrop-blur-md border border-blue-500/30 rounded-full shadow-[0_0_15px_rgba(59,130,246,0.3)] flex items-center gap-2.5">
+                    <span className="text-white/90 font-bold tracking-[0.2em] text-xs uppercase drop-shadow-md">PRACTICE</span>
                 </div>
              </div>
           )}
@@ -363,7 +392,7 @@ const App: React.FC = () => {
                              <p className="text-sm text-slate-300 leading-tight">{p.desc}</p>
                           </div>
                           <button 
-                             onClick={() => startGame(p.type as any, 'standard')}
+                             onClick={() => startGame(p.type as any, 'playground')}
                              className="px-4 py-2 bg-white/20 hover:bg-white/30 rounded-full text-xs font-bold text-white tracking-wide border border-white/20 transition-all active:scale-95"
                           >
                              TRY OUT
@@ -444,12 +473,14 @@ const App: React.FC = () => {
                     <div className={`text-sm uppercase tracking-wider text-xs ${isNewHighScore ? 'text-yellow-200' : 'text-slate-300'}`}>Score</div>
                     <div className={`text-4xl md:text-5xl font-bold ${isNewHighScore ? 'text-yellow-400' : 'text-amber-400'}`}>{score}</div>
                 </div>
-                <div className="p-3 bg-white/5 rounded-xl border border-white/5 flex justify-center px-6">
-                    <div className="text-center">
-                        <div className="text-xs uppercase tracking-wider text-slate-400">Best</div>
-                        <div className="text-xl font-bold text-white">{highScores[gameMode]}</div>
-                    </div>
-                </div>
+                {gameMode !== 'playground' && (
+                  <div className="p-3 bg-white/5 rounded-xl border border-white/5 flex justify-center px-6">
+                      <div className="text-center">
+                          <div className="text-xs uppercase tracking-wider text-slate-400">Best</div>
+                          <div className="text-xl font-bold text-white">{highScores[gameMode]}</div>
+                      </div>
+                  </div>
+                )}
             </div>
 
             <div className="flex flex-col gap-3">

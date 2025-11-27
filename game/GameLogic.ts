@@ -154,15 +154,14 @@ export class GameLogic {
     const moveSpeed = (this.speed) * dt;
 
     // Powerup Timer Logic
-    if (this.gameMode !== 'battle' && this.bird.effectTimer > 0) {
-       // Note: BirdController handles decrementing internal timer too, 
-       // but we need to sync activePowerup UI state
+    if (this.gameMode !== 'battle') {
        if (this.activePowerup) {
            this.activePowerup.timeLeft = this.bird.effectTimer;
            this.callbacks.setActivePowerup({ ...this.activePowerup });
-       }
-       if (this.bird.effectTimer <= 0) {
-           this.clearPowerup();
+           
+           if (this.bird.effectTimer <= 0) {
+               this.clearPowerup();
+           }
        }
     }
 
@@ -186,7 +185,11 @@ export class GameLogic {
     } else {
         // Standard Mode Spawning
         this.pipeCtrl.spawn(this.frameCount, this.speed, this.timeScale, width, height);
-        this.powerupCtrl.spawn(this.frameCount, this.timeScale, width, height, this.pipes);
+        
+        // Prevent powerup spawning in playground mode
+        if (this.gameMode !== 'playground') {
+            this.powerupCtrl.spawn(this.frameCount, this.timeScale, width, height, this.pipes);
+        }
     }
     
     // Weapon Firing
@@ -239,6 +242,16 @@ export class GameLogic {
       this.targetTimeScale = GAME_CONSTANTS.TIME_SCALE_NORMAL;
       this.activePowerup = null;
       this.callbacks.setActivePowerup(null);
+
+      // Playground Logic: Restore initial powerup if lost (e.g. Shield broke -> Ghost -> End)
+      if (this.gameMode === 'playground' && this.initialPowerup) {
+           let type = this.initialPowerup;
+           if (type === 'random') {
+                const types: PowerupType[] = ['shrink', 'grow', 'slowmo', 'fast', 'shield', 'ghost', 'gun'];
+                type = types[Math.floor(Math.random() * types.length)];
+           }
+           this.activatePowerup(type, 999999);
+      }
   }
 
   private handleCrash() {
@@ -247,12 +260,12 @@ export class GameLogic {
      this.callbacks.setGameState(GameState.GAME_OVER);
   }
   
-  private handleShieldBreak() {
+  private handleShieldBreak(birdX: number) {
      const recoveryTime = 60;
      this.activatePowerup('ghost', recoveryTime); // Activates ghost temporarily
      audioService.playShieldBreak();
      this.callbacks.triggerEffect();
-     this.particleCtrl.spawnExplosion(this.birdCtrl.bird.y, this.birdCtrl.bird.y, parseInt(COLORS.SHIELD_GLOW.replace('#','0x')), 20, 3);
+     this.particleCtrl.spawnExplosion(birdX, this.birdCtrl.bird.y, parseInt(COLORS.SHIELD_GLOW.replace('#','0x')), 20, 3);
   }
 
   private checkPowerupCollisions(birdX: number, radius: number) {
@@ -304,7 +317,7 @@ export class GameLogic {
                          this.bird.velocity = Math.max(this.bird.velocity + GAME_CONSTANTS.GLASS_BREAK_PENALTY, GAME_CONSTANTS.GLASS_BREAK_PENALTY / 2);
                      }
                  } else if (this.activePowerup?.type === 'shield') {
-                     this.handleShieldBreak();
+                     this.handleShieldBreak(birdX);
                  } else {
                      this.handleCrash();
                  }
@@ -353,7 +366,7 @@ export class GameLogic {
           const dy = proj.y - this.bird.y;
           if (Math.sqrt(dx*dx + dy*dy) < radius + 10) {
               if (this.activePowerup?.type === 'shield') {
-                  this.handleShieldBreak();
+                  this.handleShieldBreak(birdX);
                   bossProjs.splice(i, 1);
               } else {
                   this.handleCrash();

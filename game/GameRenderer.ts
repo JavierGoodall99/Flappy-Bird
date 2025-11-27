@@ -25,12 +25,16 @@ export class GameRenderer {
   private geometry: any = null;
   private material: any = null;
   private currentSkin: Skin | null = null;
+  
+  // Cache dimensions to prevent layout thrashing
+  private width: number = 0;
+  private height: number = 0;
 
   public init(container: HTMLDivElement) {
-    const width = window.innerWidth;
-    const height = window.innerHeight;
+    this.width = window.innerWidth;
+    this.height = window.innerHeight;
 
-    const { scene, camera, renderer, bgTexture } = setupThreeScene(container, width, height);
+    const { scene, camera, renderer, bgTexture } = setupThreeScene(container, this.width, this.height);
     this.scene = scene;
     this.camera = camera;
     this.renderer = renderer;
@@ -61,6 +65,9 @@ export class GameRenderer {
   public resize(width: number, height: number) {
       if (!this.camera || !this.renderer) return;
       
+      this.width = width;
+      this.height = height;
+
       // Update camera using the unified logic that handles mobile zooming
       updateCamera(this.camera, width, height);
       
@@ -122,9 +129,9 @@ export class GameRenderer {
         if (!this.birdMesh) return; // Still failed, skip render frame
     }
     
-    // Calculate Logical Dimensions for Render scaling
-    const width = window.innerWidth;
-    const height = window.innerHeight;
+    // Calculate Logical Dimensions for Render scaling using cached dimensions
+    const width = this.width || window.innerWidth;
+    const height = this.height || window.innerHeight;
     
     // Scale must match GameEngine logic
     const scale = Math.max(1, GAME_CONSTANTS.MIN_GAME_WIDTH / width, GAME_CONSTANTS.MIN_GAME_HEIGHT / height);
@@ -308,18 +315,6 @@ export class GameRenderer {
         bottomMesh.position.y = (logicHeight / 2) - bottomPipeYStart - (bottomPipeHeight / 2);
         bottomCap.position.y = (logicHeight / 2) - bottomPipeYStart + 5;
       }
-      group.traverse((child) => {
-          if (child instanceof THREE.Mesh) {
-              const isGlass = pipe.type === 'glass';
-              if (isGhostActive) {
-                  const m = child.material as THREE.Material;
-                  m.transparent = true; m.opacity = isGlass ? 0.2 : 0.5;
-              } else {
-                  const m = child.material as THREE.Material;
-                  if (!isGlass) m.opacity = 1.0;
-              }
-          }
-      });
     });
 
     // Render Powerups
@@ -353,6 +348,15 @@ export class GameRenderer {
         mesh.position.x = toWorldX(p.x);
         mesh.position.y = toWorldY(p.y);
         mesh.rotation.y += 0.05; mesh.rotation.z += 0.02;
+
+        // FLASHING LOGIC FOR MYSTERY BOX
+        if (p.type === 'random') {
+            const time = performance.now() * 0.003; 
+            const hue = (time % 1); 
+            const mat = mesh.material as THREE.MeshStandardMaterial;
+            mat.color.setHSL(hue, 1.0, 0.5);
+            mat.emissive.setHSL(hue, 1.0, 0.5);
+        }
       }
     });
 
