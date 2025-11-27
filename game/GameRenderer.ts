@@ -1,0 +1,425 @@
+
+import * as THREE from 'three';
+import { GameState, Pipe, Powerup, Enemy, Skin, Bird } from '../types';
+import { GAME_CONSTANTS, COLORS, PARTICLE_CONFIG, ENEMY_SKIN, BOSS_SKIN } from '../constants';
+import { setupThreeScene } from '../utils/threeSetup';
+import { createGeometries, createMaterials } from '../utils/assetManager';
+import { createBirdMesh } from '../utils/birdFactory';
+import { GameLogic } from './GameLogic';
+
+export class GameRenderer {
+  private scene: THREE.Scene | null = null;
+  private camera: THREE.PerspectiveCamera | null = null;
+  private renderer: THREE.WebGLRenderer | null = null;
+  private bgTexture: THREE.Texture | null = null;
+  
+  private birdMesh: THREE.Group | null = null;
+  private pipeMeshes: Map<Pipe, THREE.Group> = new Map();
+  private powerupMeshes: Map<Powerup, THREE.Mesh> = new Map();
+  private projectileMeshes: THREE.Mesh[] = [];
+  private bossProjectileMeshes: THREE.Mesh[] = [];
+  private enemyMeshes: Map<Enemy, THREE.Group> = new Map();
+  private bossMesh: THREE.Group | null = null;
+  private particleMeshes: THREE.Mesh[] = [];
+
+  private geometry: any = null;
+  private material: any = null;
+  private currentSkin: Skin | null = null;
+
+  public init(container: HTMLDivElement) {
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+
+    const { scene, camera, renderer, bgTexture } = setupThreeScene(container, width, height);
+    this.scene = scene;
+    this.camera = camera;
+    this.renderer = renderer;
+    this.bgTexture = bgTexture;
+
+    this.geometry = createGeometries();
+    this.material = createMaterials();
+
+    // Create particle pool
+    for(let i=0; i<PARTICLE_CONFIG.MAX_PARTICLES; i++) {
+        const mesh = new THREE.Mesh(this.geometry.particleSphere, new THREE.MeshBasicMaterial({color: 0xffffff, transparent: true}));
+        mesh.visible = false;
+        scene.add(mesh);
+        this.particleMeshes.push(mesh);
+    }
+
+    // If a skin was set before init (via props), build the bird now
+    if (this.currentSkin) {
+        // Force update by clearing the cached mesh reference if it exists (though it shouldn't be valid yet)
+        if (this.birdMesh) {
+            this.scene.remove(this.birdMesh);
+            this.birdMesh = null;
+        }
+        this.rebuildBirdMesh(this.currentSkin);
+    }
+  }
+
+  public resize(width: number, height: number) {
+      if (!this.camera || !this.renderer) return;
+      this.camera.aspect = width / height;
+      const fov = this.camera.fov;
+      const dist = height / (2 * Math.tan((fov * Math.PI) / 360));
+      this.camera.position.z = dist;
+      this.camera.updateProjectionMatrix();
+      this.renderer.setSize(width, height);
+  }
+
+  public updateSkin(skin: Skin) {
+      this.currentSkin = skin;
+      
+      // Guard: Cannot create mesh without assets or scene. 
+      // The init() method will handle this skin when called later.
+      if (!this.geometry || !this.material || !this.scene) {
+          return;
+      }
+      
+      // If we already have this skin and a valid mesh, do nothing
+      if (this.birdMesh && this.birdMesh.userData.skinId === skin.id) {
+          return;
+      }
+
+      this.rebuildBirdMesh(skin);
+  }
+
+  private rebuildBirdMesh(skin: Skin) {
+      if (!this.scene || !this.geometry || !this.material) return;
+
+      if (this.birdMesh) {
+          this.scene.remove(this.birdMesh);
+      }
+      
+      this.birdMesh = createBirdMesh(skin, this.geometry, this.material);
+      this.birdMesh.userData.skinId = skin.id; // Store ID to prevent unnecessary rebuilds
+      this.scene.add(this.birdMesh);
+  }
+
+  public reset() {
+      if (!this.scene) return;
+      this.pipeMeshes.forEach((group) => this.scene?.remove(group));
+      this.pipeMeshes.clear();
+      this.powerupMeshes.forEach((mesh) => this.scene?.remove(mesh));
+      this.powerupMeshes.clear();
+      this.enemyMeshes.forEach((group) => this.scene?.remove(group));
+      this.enemyMeshes.clear();
+      if (this.bossMesh) { this.scene.remove(this.bossMesh); this.bossMesh = null; }
+      this.projectileMeshes.forEach(mesh => { mesh.visible = false; });
+      this.bossProjectileMeshes.forEach(mesh => { mesh.visible = false; });
+      this.particleMeshes.forEach(mesh => mesh.visible = false);
+  }
+
+  public render(gameLogic: GameLogic) {
+    if (!this.scene || !this.camera || !this.renderer) return;
+
+    // Guard: Bird mesh might not be ready yet
+    if (!this.birdMesh) {
+        // Try to recover if we have the data but missed a cycle
+        if (this.currentSkin && this.geometry && this.material) {
+            this.rebuildBirdMesh(this.currentSkin);
+        }
+        if (!this.birdMesh) return; // Still failed, skip render frame
+    }
+    
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+    
+    const birdState = gameLogic.bird;
+    const pipes = gameLogic.pipes;
+    const enemies = gameLogic.enemies;
+    const powerups = gameLogic.powerups;
+
+    const toWorldY = (screenY: number) => (height / 2) - screenY;
+    const toWorldX = (screenX: number) => screenX - (width / 2);
+    const birdX = width * GAME_CONSTANTS.BIRD_X_POSITION;
+
+    // Bird Update
+    this.birdMesh.position.x = toWorldX(birdX);
+    this.birdMesh.position.y = toWorldY(birdState.y);
+    this.birdMesh.rotation.z = birdState.rotation;
+    const s = birdState.scale;
+    this.birdMesh.scale.set(s, s, s);
+    this.birdMesh.visible = true;
+
+    // Bird Animations
+    let targetBrowRot = 0; 
+    let targetPupilScale = 1;
+    if (gameLogic.gameState === GameState.GAME_OVER) {
+        targetPupilScale = 0.2;
+    } else {
+        const closePipe = pipes.find(p => p.x > birdX - 50 && p.x < birdX + 200);
+        const isFalling = birdState.velocity > 6;
+        const isFast = gameLogic.speed > GAME_CONSTANTS.BASE_PIPE_SPEED * 1.3;
+        const isPowered = !!gameLogic.activePowerup;
+
+        if (isFast) {
+            targetBrowRot = -0.4; 
+            targetPupilScale = 0.8 + Math.sin(Date.now() * 0.05) * 0.2; 
+        } else if (closePipe) {
+            targetBrowRot = 0.4;
+        } else if (isFalling) {
+            targetBrowRot = -0.2;
+            targetPupilScale = 1.25;
+        } else if (isPowered) {
+            targetBrowRot = -0.3; 
+        }
+    }
+
+    const browL = this.birdMesh.getObjectByName('browL');
+    if (browL) browL.rotation.z += (targetBrowRot - browL.rotation.z) * 0.2;
+    const browR = this.birdMesh.getObjectByName('browR');
+    if (browR) browR.rotation.z += (-targetBrowRot - browR.rotation.z) * 0.2;
+    
+    const isGhostActive = gameLogic.activePowerup?.type === 'ghost';
+    const isShieldActive = gameLogic.activePowerup?.type === 'shield';
+    const isGunActive = gameLogic.activePowerup?.type === 'gun';
+
+    this.birdMesh.traverse((child) => {
+        if (child.name === 'pupil') {
+            const currentS = child.scale.x;
+            const newS = currentS + (targetPupilScale - currentS) * 0.2;
+            child.scale.set(newS, newS, 1);
+        }
+        if (child instanceof THREE.Mesh) {
+           const mat = child.material as THREE.MeshStandardMaterial;
+           if (mat.name !== 'shield' && mat.name !== 'gun') { 
+               mat.opacity = isGhostActive ? 0.3 : 1.0;
+               mat.transparent = true; 
+           }
+        }
+    });
+    
+    const shield = this.birdMesh.getObjectByName('shield');
+    if (shield) {
+        shield.visible = isShieldActive;
+        if (isShieldActive) {
+            shield.scale.set(1.4, 1.4, 1.4);
+            shield.rotation.y += 0.02; 
+        }
+    }
+    const gun = this.birdMesh.getObjectByName('gun');
+    if (gun) gun.visible = isGunActive;
+
+    // Render Enemies
+    const currentEnemies = new Set(enemies);
+    for (const [enemy, group] of this.enemyMeshes.entries()) {
+        if (!currentEnemies.has(enemy)) {
+            this.scene.remove(group);
+            this.enemyMeshes.delete(enemy);
+        }
+    }
+    enemies.forEach(enemy => {
+        let group = this.enemyMeshes.get(enemy);
+        if (!group) {
+            group = createBirdMesh(ENEMY_SKIN, this.geometry, this.material);
+            group.rotation.y = Math.PI;
+            this.scene?.add(group);
+            this.enemyMeshes.set(enemy, group);
+        }
+        group.position.x = toWorldX(enemy.x);
+        group.position.y = toWorldY(enemy.y);
+        group.rotation.z = 0.2;
+        const s = 1.2 * enemy.scale;
+        group.scale.set(s, s, s);
+    });
+
+    // Render Boss
+    if (gameLogic.boss.active) {
+        if (!this.bossMesh) {
+            this.bossMesh = createBirdMesh(BOSS_SKIN, this.geometry, this.material);
+            this.bossMesh.rotation.y = Math.PI;
+            this.scene?.add(this.bossMesh);
+        }
+        this.bossMesh.visible = true;
+        this.bossMesh.position.x = toWorldX(gameLogic.boss.x);
+        this.bossMesh.position.y = toWorldY(gameLogic.boss.y);
+        this.bossMesh.scale.set(5, 5, 5);
+        this.bossMesh.rotation.z = Math.sin(gameLogic.frameCount * 0.05) * 0.1;
+
+        if (gameLogic.boss.hp < gameLogic.boss.maxHp * 0.3) {
+             const shake = (Math.random() - 0.5) * 10;
+             this.bossMesh.position.x += shake;
+             this.bossMesh.position.y += shake;
+             const pulse = 5 + Math.sin(performance.now() * 0.02) * 0.5;
+             this.bossMesh.scale.set(pulse, pulse, pulse);
+        }
+    } else if (this.bossMesh) {
+        this.bossMesh.visible = false;
+    }
+
+    // Render Pipes
+    const currentPipes = new Set(pipes);
+    for (const [pipe, mesh] of this.pipeMeshes.entries()) {
+      if (!currentPipes.has(pipe)) {
+        this.scene.remove(mesh);
+        this.pipeMeshes.delete(pipe);
+      }
+    }
+    pipes.forEach(pipe => {
+      let group = this.pipeMeshes.get(pipe);
+      if (!group) {
+        group = new THREE.Group();
+        const isGlass = pipe.type === 'glass';
+        const bodyMat = isGlass ? this.material.glassPipe : this.material.pipe;
+        const capMat = isGlass ? this.material.glassCap : this.material.pipeCap;
+        const topMesh = new THREE.Mesh(this.geometry.pipe, bodyMat);
+        topMesh.castShadow = !isGlass; topMesh.receiveShadow = true; topMesh.name = 'top'; group.add(topMesh);
+        const topCap = new THREE.Mesh(this.geometry.pipeCap, capMat);
+        topCap.name = 'topCap'; topCap.castShadow = !isGlass; group.add(topCap);
+        const bottomMesh = new THREE.Mesh(this.geometry.pipe, bodyMat);
+        bottomMesh.castShadow = !isGlass; bottomMesh.receiveShadow = true; bottomMesh.name = 'bottom'; group.add(bottomMesh);
+        const bottomCap = new THREE.Mesh(this.geometry.pipeCap, capMat);
+        bottomCap.name = 'bottomCap'; bottomCap.castShadow = !isGlass; group.add(bottomCap);
+        this.scene?.add(group);
+        this.pipeMeshes.set(pipe, group);
+      }
+      group.position.x = toWorldX(pipe.x + GAME_CONSTANTS.PIPE_WIDTH / 2);
+      group.position.z = 0;
+      
+      const topMesh = group.getObjectByName('top') as THREE.Mesh;
+      const topCap = group.getObjectByName('topCap') as THREE.Mesh;
+      const bottomMesh = group.getObjectByName('bottom') as THREE.Mesh;
+      const bottomCap = group.getObjectByName('bottomCap') as THREE.Mesh;
+      
+      if (topMesh) topMesh.visible = !pipe.brokenTop;
+      if (topCap) topCap.visible = !pipe.brokenTop;
+      if (bottomMesh) bottomMesh.visible = !pipe.brokenBottom;
+      if (bottomCap) bottomCap.visible = !pipe.brokenBottom;
+      
+      if (topMesh && topCap) {
+        const topPipeHeight = pipe.topHeight;
+        topMesh.scale.set(1, topPipeHeight, 1);
+        topMesh.position.y = (height / 2) - (topPipeHeight / 2);
+        topCap.position.y = (height / 2) - topPipeHeight - 5; 
+      }
+      if (bottomMesh && bottomCap) {
+        const bottomPipeYStart = pipe.topHeight + GAME_CONSTANTS.PIPE_GAP;
+        const bottomPipeHeight = Math.max(1, height - bottomPipeYStart);
+        bottomMesh.scale.set(1, bottomPipeHeight, 1);
+        bottomMesh.position.y = (height / 2) - bottomPipeYStart - (bottomPipeHeight / 2);
+        bottomCap.position.y = (height / 2) - bottomPipeYStart + 5;
+      }
+      group.traverse((child) => {
+          if (child instanceof THREE.Mesh) {
+              const isGlass = pipe.type === 'glass';
+              if (isGhostActive) {
+                  const m = child.material as THREE.Material;
+                  m.transparent = true; m.opacity = isGlass ? 0.2 : 0.5;
+              } else {
+                  const m = child.material as THREE.Material;
+                  if (!isGlass) m.opacity = 1.0;
+              }
+          }
+      });
+    });
+
+    // Render Powerups
+    const currentPowerups = new Set(powerups);
+    for (const [p, mesh] of this.powerupMeshes.entries()) {
+      if (!currentPowerups.has(p)) {
+        this.scene.remove(mesh);
+        this.powerupMeshes.delete(p);
+      }
+    }
+    powerups.forEach(p => {
+      let mesh = this.powerupMeshes.get(p);
+      if (!mesh) {
+          const geo = this.geometry.orb;
+          let mat = this.material.pShrink;
+          switch (p.type) {
+              case 'grow': mat = this.material.pGrow; break;
+              case 'slowmo': mat = this.material.pSlow; break;
+              case 'fast': mat = this.material.pFast; break;
+              case 'shield': mat = this.material.pShield; break;
+              case 'ghost': mat = this.material.pGhost; break;
+              case 'gun': mat = this.material.pGun; break;
+          }
+          mesh = new THREE.Mesh(geo, mat);
+          mesh.scale.set(GAME_CONSTANTS.POWERUP_SIZE/2, GAME_CONSTANTS.POWERUP_SIZE/2, GAME_CONSTANTS.POWERUP_SIZE/2); 
+          this.scene?.add(mesh);
+          this.powerupMeshes.set(p, mesh);
+      }
+      if (mesh) {
+        mesh.position.x = toWorldX(p.x);
+        mesh.position.y = toWorldY(p.y);
+        mesh.rotation.y += 0.05; mesh.rotation.z += 0.02;
+      }
+    });
+
+    // Particles
+    this.particleMeshes.forEach(m => m.visible = false);
+    while (this.particleMeshes.length < gameLogic.particles.length) {
+         // Create more if needed
+         const mesh = new THREE.Mesh(this.geometry.particleSphere, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true }));
+         this.scene.add(mesh);
+         this.particleMeshes.push(mesh);
+    }
+    gameLogic.particles.forEach((p, i) => {
+        const mesh = this.particleMeshes[i];
+        mesh.visible = true;
+        mesh.position.x = toWorldX(p.x);
+        mesh.position.y = toWorldY(p.y);
+        mesh.position.z = -5; 
+        const scale = p.scale * (p.life / p.maxLife);
+        mesh.scale.set(scale, scale, scale);
+        (mesh.material as THREE.MeshBasicMaterial).color.setHex(p.color);
+        (mesh.material as THREE.MeshBasicMaterial).opacity = p.life / p.maxLife;
+        mesh.rotation.z = p.rotation;
+    });
+
+    // Projectiles
+    this.projectileMeshes.forEach(m => m.visible = false);
+    while (this.projectileMeshes.length < gameLogic.projectiles.length) {
+        const mesh = new THREE.Mesh(this.geometry.particleSphere, this.material.projectile);
+        const glow = new THREE.Mesh(this.geometry.particleSphere, new THREE.MeshBasicMaterial({ color: 0xFFFFFF, transparent: true, opacity: 0.5 }));
+        glow.scale.set(1.5, 1.5, 1.5);
+        mesh.add(glow);
+        this.scene.add(mesh);
+        this.projectileMeshes.push(mesh);
+    }
+    gameLogic.projectiles.forEach((p, i) => {
+        const mesh = this.projectileMeshes[i];
+        mesh.visible = true;
+        mesh.position.x = toWorldX(p.x);
+        mesh.position.y = toWorldY(p.y);
+        mesh.position.z = 2;
+        mesh.scale.set(6, 6, 6);
+    });
+
+    // Boss Projectiles
+    this.bossProjectileMeshes.forEach(m => m.visible = false);
+    while (this.bossProjectileMeshes.length < gameLogic.bossProjectiles.length) {
+        const mesh = new THREE.Mesh(this.geometry.orb, this.material.bossProjectile);
+        const glow = new THREE.Mesh(this.geometry.particleSphere, new THREE.MeshBasicMaterial({ color: 0xFF0000, transparent: true, opacity: 0.4 }));
+        glow.scale.set(2.0, 2.0, 2.0);
+        mesh.add(glow);
+        this.scene.add(mesh);
+        this.bossProjectileMeshes.push(mesh);
+    }
+    gameLogic.bossProjectiles.forEach((p, i) => {
+        const mesh = this.bossProjectileMeshes[i];
+        mesh.visible = true;
+        mesh.position.x = toWorldX(p.x);
+        mesh.position.y = toWorldY(p.y);
+        mesh.position.z = 5;
+        mesh.rotation.z += 0.1;
+        mesh.rotation.x += 0.1;
+        mesh.scale.set(10, 10, 10);
+    });
+    
+    this.renderer.render(this.scene, this.camera);
+  }
+
+  public dispose() {
+    if (this.container && this.renderer) {
+        this.container.removeChild(this.renderer.domElement);
+    }
+    this.renderer?.dispose();
+    this.geometry?.pipe?.dispose();
+    // Add full cleanup if necessary
+  }
+  
+  private container: HTMLDivElement | null = null;
+}
