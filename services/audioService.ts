@@ -3,10 +3,19 @@
 class AudioController {
   private ctx: AudioContext | null = null;
   private masterGain: GainNode | null = null;
+  private isMuted: boolean = false;
 
   constructor() {
     // Initialize on user interaction to comply with browser policies
     this.init = this.init.bind(this);
+  }
+
+  setMuted(muted: boolean) {
+    this.isMuted = muted;
+    if (this.masterGain && this.ctx) {
+        this.masterGain.gain.cancelScheduledValues(this.ctx.currentTime);
+        this.masterGain.gain.setValueAtTime(this.isMuted ? 0 : 0.5, this.ctx.currentTime);
+    }
   }
 
   init() {
@@ -15,7 +24,7 @@ class AudioController {
       this.ctx = new AudioContextClass();
       this.masterGain = this.ctx.createGain();
       this.masterGain.connect(this.ctx.destination);
-      this.masterGain.gain.value = 0.5; // Master volume
+      this.masterGain.gain.value = this.isMuted ? 0 : 0.5; // Master volume
     }
     if (this.ctx.state === 'suspended') {
       this.ctx.resume();
@@ -27,7 +36,7 @@ class AudioController {
   }
 
   playJump() {
-    if (!this.ctx || !this.masterGain) return;
+    if (this.isMuted || !this.ctx || !this.masterGain) return;
     
     const osc = this.ctx.createOscillator();
     const gain = this.ctx.createGain();
@@ -47,7 +56,7 @@ class AudioController {
   }
 
   playScore() {
-    if (!this.ctx || !this.masterGain) return;
+    if (this.isMuted || !this.ctx || !this.masterGain) return;
 
     const osc = this.ctx.createOscillator();
     const gain = this.ctx.createGain();
@@ -66,7 +75,7 @@ class AudioController {
   }
 
   playCrash() {
-    if (!this.ctx || !this.masterGain) return;
+    if (this.isMuted || !this.ctx || !this.masterGain) return;
 
     const osc = this.ctx.createOscillator();
     const gain = this.ctx.createGain();
@@ -86,7 +95,7 @@ class AudioController {
   }
 
   playGlassBreak() {
-    if (!this.ctx || !this.masterGain) return;
+    if (this.isMuted || !this.ctx || !this.masterGain) return;
 
     const osc = this.ctx.createOscillator();
     const gain = this.ctx.createGain();
@@ -122,17 +131,17 @@ class AudioController {
   }
 
   playShrink() {
-    if (!this.ctx || !this.masterGain) return;
+    if (this.isMuted || !this.ctx || !this.masterGain) return;
     this.playPowerupSound(600, 1200, 'sine');
   }
 
   playGrow() {
-    if (!this.ctx || !this.masterGain) return;
+    if (this.isMuted || !this.ctx || !this.masterGain) return;
     this.playPowerupSound(300, 150, 'square');
   }
 
   playSlowMo() {
-    if (!this.ctx || !this.masterGain) return;
+    if (this.isMuted || !this.ctx || !this.masterGain) return;
     const osc = this.ctx.createOscillator();
     const gain = this.ctx.createGain();
     osc.connect(gain);
@@ -151,7 +160,7 @@ class AudioController {
   }
 
   playFastForward() {
-    if (!this.ctx || !this.masterGain) return;
+    if (this.isMuted || !this.ctx || !this.masterGain) return;
     const osc = this.ctx.createOscillator();
     const gain = this.ctx.createGain();
     osc.connect(gain);
@@ -170,7 +179,7 @@ class AudioController {
   }
 
   playShieldUp() {
-    if (!this.ctx || !this.masterGain) return;
+    if (this.isMuted || !this.ctx || !this.masterGain) return;
     const osc = this.ctx.createOscillator();
     const gain = this.ctx.createGain();
     osc.connect(gain);
@@ -190,7 +199,7 @@ class AudioController {
   }
 
   playShieldBreak() {
-    if (!this.ctx || !this.masterGain) return;
+    if (this.isMuted || !this.ctx || !this.masterGain) return;
     const osc = this.ctx.createOscillator();
     const gain = this.ctx.createGain();
     osc.connect(gain);
@@ -209,12 +218,12 @@ class AudioController {
   }
 
   playGhost() {
-    if (!this.ctx || !this.masterGain) return;
+    if (this.isMuted || !this.ctx || !this.masterGain) return;
     this.playPowerupSound(1000, 1000, 'sine', 0.1, 0.5); // Ethereal ping
   }
 
   playShoot() {
-    if (!this.ctx || !this.masterGain) return;
+    if (this.isMuted || !this.ctx || !this.masterGain) return;
     const osc = this.ctx.createOscillator();
     const gain = this.ctx.createGain();
     osc.connect(gain);
@@ -233,7 +242,7 @@ class AudioController {
   }
 
   playBossShoot() {
-    if (!this.ctx || !this.masterGain) return;
+    if (this.isMuted || !this.ctx || !this.masterGain) return;
     const osc = this.ctx.createOscillator();
     const gain = this.ctx.createGain();
     osc.connect(gain);
@@ -252,7 +261,7 @@ class AudioController {
   }
 
   playExplosion() {
-    if (!this.ctx || !this.masterGain) return;
+    if (this.isMuted || !this.ctx || !this.masterGain) return;
     const osc = this.ctx.createOscillator();
     const gain = this.ctx.createGain();
     
@@ -273,6 +282,7 @@ class AudioController {
   playLaserCharge() {}
 
   private playPowerupSound(startFreq: number, endFreq: number, type: OscillatorType, duration: number = 0.2, volume: number = 0.3) {
+    if (this.isMuted) return;
     const osc = this.ctx!.createOscillator();
     const gain = this.ctx!.createGain();
     osc.connect(gain);

@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { GameEngine } from './components/GameEngine';
 import { Button } from './components/Button';
@@ -21,6 +22,7 @@ const App: React.FC = () => {
   const [isNewHighScore, setIsNewHighScore] = useState(false);
   const [shake, setShake] = useState(false);
   const [activePowerup, setActivePowerup] = useState<ActivePowerup | null>(null);
+  const [isMuted, setIsMuted] = useState(false);
   
   // Game Mode
   const [gameMode, setGameMode] = useState<GameMode>('standard');
@@ -65,6 +67,13 @@ const App: React.FC = () => {
 
     const storedCurrentSkin = localStorage.getItem('flapai-currentskin');
     if (storedCurrentSkin && SKINS[storedCurrentSkin]) setCurrentSkinId(storedCurrentSkin as SkinId);
+
+    // Load Mute State
+    const storedMute = localStorage.getItem('flapai-muted');
+    if (storedMute === 'true') {
+        setIsMuted(true);
+        audioService.setMuted(true);
+    }
   }, []);
 
   useEffect(() => {
@@ -121,6 +130,14 @@ const App: React.FC = () => {
     });
   }, []);
 
+  const toggleMute = (e: React.MouseEvent) => {
+      e.stopPropagation();
+      const newState = !isMuted;
+      setIsMuted(newState);
+      audioService.setMuted(newState);
+      localStorage.setItem('flapai-muted', String(newState));
+  };
+
   const triggerShake = () => {
     setShake(true);
     setTimeout(() => setShake(false), 300);
@@ -135,6 +152,7 @@ const App: React.FC = () => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (isShopOpen || isGuideOpen || isWeaponSelectOpen) return; // Disable game controls in menus
       if (e.code === 'Escape' || e.code === 'KeyP') togglePause();
+      if (e.code === 'KeyM') toggleMute({ stopPropagation: () => {} } as React.MouseEvent);
       if (e.code === 'Space') {
         e.preventDefault(); 
         if (gameState === GameState.PAUSED) togglePause();
@@ -150,7 +168,7 @@ const App: React.FC = () => {
       window.removeEventListener('mousedown', handleTouchOrClick);
       window.removeEventListener('touchstart', handleTouchOrClick);
     };
-  }, [togglePause, gameState, startGame, isShopOpen, isGuideOpen, isWeaponSelectOpen, initialPowerup, gameMode]);
+  }, [togglePause, gameState, startGame, isShopOpen, isGuideOpen, isWeaponSelectOpen, initialPowerup, gameMode, isMuted]);
   
   // Dummy handler to prevent errors in cleanup
   const handleTouchOrClick = () => {};
@@ -188,6 +206,20 @@ const App: React.FC = () => {
           setBossActive={(active, hp, maxHp) => setBossInfo({ active, hp, maxHp })}
         />
       </div>
+
+      {/* MUTE BUTTON - Always Visible (except deep menus maybe) */}
+      {!isShopOpen && !isGuideOpen && !isWeaponSelectOpen && (
+          <button 
+            onClick={toggleMute}
+            className="absolute top-6 left-6 md:top-8 md:left-8 z-30 w-10 h-10 md:w-12 md:h-12 bg-white/20 backdrop-blur-md border border-white/30 rounded-full flex items-center justify-center hover:bg-white/30 transition-all active:scale-95 group"
+          >
+             {isMuted ? (
+                 <span className="text-xl md:text-2xl text-white">🔇</span>
+             ) : (
+                 <span className="text-xl md:text-2xl text-white">🔊</span>
+             )}
+          </button>
+      )}
 
       {/* Powerup HUD - Hidden in Battle Mode */}
       {(gameState === GameState.PLAYING) && activePowerup && gameMode !== 'battle' && (
@@ -288,6 +320,16 @@ const App: React.FC = () => {
              <h2 className="text-3xl md:text-4xl font-black text-white tracking-wide drop-shadow-sm mb-6 md:mb-8">PAUSED</h2>
              <div className="flex flex-col gap-4">
                 <Button onClick={togglePause} className="w-full">RESUME</Button>
+                <Button 
+                   onClick={(e) => toggleMute(e as any)} 
+                   variant="secondary" 
+                   className="w-full"
+                >
+                   <div className="flex items-center justify-center gap-2">
+                       <span>{isMuted ? 'UNMUTE SOUND' : 'MUTE SOUND'}</span>
+                       <span className="text-xl">{isMuted ? '🔇' : '🔊'}</span>
+                   </div>
+                </Button>
                 <Button onClick={resetGame} variant="secondary" className="w-full">QUIT</Button>
              </div>
           </div>

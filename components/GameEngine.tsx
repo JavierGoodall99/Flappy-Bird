@@ -116,6 +116,11 @@ export const GameEngine: React.FC<GameEngineProps> = (props) => {
       }
     };
     const handleTouchOrClick = (e: Event) => {
+      // Prevent jump if interacting with UI buttons
+      const target = e.target as HTMLElement;
+      if (target.closest('button') || target.closest('[role="button"]')) {
+          return;
+      }
       logicRef.current.jump();
     };
     window.addEventListener('keydown', handleKeyDown);
