@@ -100,7 +100,13 @@ export class BattleController {
     private bossAttack(score: number, birdY: number, birdX: number) {
         const boss = this.boss;
         boss.attackTimer = Math.max(30, BATTLE_CONSTANTS.BOSS_ATTACK_RATE - (Math.floor(score/200)*10));
+        
+        // Determine difficulty tier (1 = first boss, 2 = second, etc.)
+        const difficultyTier = Math.floor(score / BATTLE_CONSTANTS.BOSS_INTERVAL);
+        
+        // Only use multi-shot rage mode if it's NOT the first boss
         const isLowHp = boss.hp < boss.maxHp * 0.5;
+        const useRageMode = isLowHp && difficultyTier > 1;
         
         const spawnProjectile = (vy: number) => {
             this.bossProjectiles.push({
@@ -112,7 +118,7 @@ export class BattleController {
             });
         };
 
-        if (isLowHp) {
+        if (useRageMode) {
              spawnProjectile(0);
              spawnProjectile(1.5);
              spawnProjectile(-1.5);

@@ -152,10 +152,10 @@ export const BATTLE_CONSTANTS = {
     ENEMY_HP: 1,
     ENEMY_SIZE: 20,
     BOSS_INTERVAL: 250, // Score points between bosses
-    BOSS_BASE_HP: 40, // Tougher boss but manageable start
+    BOSS_BASE_HP: 30, // Updated to 30
     BOSS_SIZE: 70,
-    BOSS_ATTACK_RATE: 50, // Frames (Faster attacks)
-    BOSS_PROJECTILE_SPEED: 11.0,
+    BOSS_ATTACK_RATE: 90, // Frames (Slower attacks) (Increased from 75 to make it slower/easier)
+    BOSS_PROJECTILE_SPEED: 7.5, // Reduced from 8.5 to make dodging easier
 };
 
 export const ENEMY_SKIN: Skin = {
