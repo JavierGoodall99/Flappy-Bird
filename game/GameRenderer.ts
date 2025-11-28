@@ -33,8 +33,11 @@ export class GameRenderer {
   private container: HTMLDivElement | null = null;
 
   public init(container: HTMLDivElement) {
+    console.log('GameRenderer.init() called', { hasSkin: !!this.currentSkin });
+    
     // Clean up any existing renderer first (handles React Strict Mode double-mount)
     if (this.renderer) {
+        console.log('Cleaning up existing renderer');
         this.renderer.dispose();
         if (this.renderer.domElement.parentNode) {
             this.renderer.domElement.parentNode.removeChild(this.renderer.domElement);
@@ -64,13 +67,25 @@ export class GameRenderer {
 
     // If a skin was set before init (via props), build the bird now
     if (this.currentSkin) {
+        console.log('Building bird mesh in init()', this.currentSkin.id);
         // Force update by clearing the cached mesh reference if it exists (though it shouldn't be valid yet)
         if (this.birdMesh) {
             this.scene.remove(this.birdMesh);
             this.birdMesh = null;
         }
         this.rebuildBirdMesh(this.currentSkin);
+        console.log('Bird mesh created:', !!this.birdMesh);
+    } else {
+        console.warn('No skin available in init()!');
     }
+
+    // Debug: Do an initial render to verify scene is working
+    console.log('Doing initial render test', { 
+        scene: !!this.scene, 
+        camera: !!this.camera, 
+        renderer: !!this.renderer,
+        cameraPos: this.camera?.position.z
+    });
     this.renderer.render(this.scene, this.camera);
   }
 
@@ -131,16 +146,19 @@ export class GameRenderer {
 
   public render(gameLogic: GameLogic) {
     if (!this.scene || !this.camera || !this.renderer) {
+        console.warn('Render skipped: missing scene/camera/renderer', { scene: !!this.scene, camera: !!this.camera, renderer: !!this.renderer });
         return;
     }
 
     // Guard: Bird mesh might not be ready yet
     if (!this.birdMesh) {
+        console.warn('No birdMesh, attempting recovery...', { skin: !!this.currentSkin, geo: !!this.geometry, mat: !!this.material });
         // Try to recover if we have the data but missed a cycle
         if (this.currentSkin && this.geometry && this.material) {
             this.rebuildBirdMesh(this.currentSkin);
         }
         if (!this.birdMesh) {
+            console.error('Bird mesh recovery failed!');
             // Still render the scene background at least
             this.renderer.render(this.scene, this.camera);
             return;
