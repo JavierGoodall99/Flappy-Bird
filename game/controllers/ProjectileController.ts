@@ -58,13 +58,12 @@ export class ProjectileController {
 
         if (frameCount - this.lastShotFrame >= fireRate) {
             this.lastShotFrame = frameCount;
-            this.fire(weaponType, birdX, birdY, score);
+            this.fire(weaponType, birdX, birdY);
         }
     }
 
-    private fire(weaponType: string, birdX: number, birdY: number, score: number) {
-        const speedBonus = Math.min(10, Math.floor(score / 50)); 
-        const pSpeed = GAME_CONSTANTS.PROJECTILE_SPEED + speedBonus;
+    private fire(weaponType: string, birdX: number, birdY: number) {
+        const pSpeed = GAME_CONSTANTS.PROJECTILE_SPEED;
         
         const weaponDef = WEAPON_LOADOUTS.find(w => w.id === weaponType) || WEAPON_LOADOUTS[0];
         const color = parseInt(weaponDef.color.replace('#', '0x'));
