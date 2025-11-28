@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { GameEngine } from './components/GameEngine';
 import { Button } from './components/Button';
@@ -367,8 +366,8 @@ const App: React.FC = () => {
                       onClick={handleGoogleSignIn}
                       className="px-4 py-2 bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/20 rounded-full text-white text-xs font-bold tracking-wide flex items-center gap-2 transition-all shadow-lg active:scale-95 group"
                   >
-                      <span className="group-hover:scale-110 transition-transform">☁️</span>
-                      <span>SAVE DATA</span>
+                      <span className="group-hover:scale-110 transition-transform">👤</span>
+                      <span>SIGN IN</span>
                   </button>
               )}
           </div>
