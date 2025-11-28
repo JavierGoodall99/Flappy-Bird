@@ -81,12 +81,12 @@ export const POWERUP_INFO = [
 ];
 
 export const WEAPON_LOADOUTS = [
-  { id: 'gun', name: 'Plasma Blaster', description: 'Standard rapid-fire energy weapon. Reliable & balanced.', color: '#14B8A6', stats: 'Fire Rate: ⭐⭐⭐ Damage: ⭐⭐' },
-  { id: 'gun_spread', name: 'Tri-Shot', description: 'Fires 3 projectiles in a wide spread. Crowd control.', color: '#F97316', stats: 'Fire Rate: ⭐⭐ Spread: ⭐⭐⭐⭐⭐' },
-  { id: 'gun_rapid', name: 'Vulcan Cannon', description: 'Extreme fire rate. Melts bosses but eats accuracy.', color: '#8B5CF6', stats: 'Fire Rate: ⭐⭐⭐⭐⭐ Accuracy: ⭐' },
-  { id: 'gun_double', name: 'Twin Strikers', description: 'Fires two parallel shots. Double the trouble.', color: '#4ADE80', stats: 'Fire Rate: ⭐⭐⭐ Damage: ⭐⭐⭐' },
-  { id: 'gun_wave', name: 'Sonic Wave', description: 'Oscillating energy waves that pierce through multiple enemies.', color: '#06B6D4', stats: 'Fire Rate: ⭐⭐ Pierce: ⭐⭐⭐⭐' },
-  { id: 'gun_pulse', name: 'Omega Pulse', description: 'Massive piercing energy ball. Obliterates everything in its path.', color: '#E11D48', stats: 'Fire Rate: ⭐ Damage: ⭐⭐⭐⭐⭐' }
+  { id: 'gun', name: 'Plasma Blaster', description: 'Standard rapid-fire energy weapon. Reliable & balanced.', color: '#14B8A6', stats: 'Fire Rate: ⭐⭐⭐\nDamage: ⭐⭐' },
+  { id: 'gun_spread', name: 'Tri-Shot', description: 'Fires 3 projectiles in a wide spread. Crowd control.', color: '#F97316', stats: 'Fire Rate: ⭐⭐\nSpread: ⭐⭐⭐⭐⭐' },
+  { id: 'gun_rapid', name: 'Vulcan Cannon', description: 'Extreme fire rate. Melts bosses but eats accuracy.', color: '#8B5CF6', stats: 'Fire Rate: ⭐⭐⭐⭐⭐\nAccuracy: ⭐' },
+  { id: 'gun_double', name: 'Twin Strikers', description: 'Fires two parallel shots. Double the trouble.', color: '#4ADE80', stats: 'Fire Rate: ⭐⭐⭐\nDamage: ⭐⭐⭐' },
+  { id: 'gun_wave', name: 'Sonic Wave', description: 'Oscillating energy waves that pierce through multiple enemies.', color: '#06B6D4', stats: 'Fire Rate: ⭐⭐\nPierce: ⭐⭐⭐⭐' },
+  { id: 'gun_pulse', name: 'Omega Pulse', description: 'Massive piercing energy ball. Obliterates everything in its path.', color: '#E11D48', stats: 'Fire Rate: ⭐\nDamage: ⭐⭐⭐⭐⭐' }
 ];
 
 // --- ENVIRONMENT CONSTANTS ---
