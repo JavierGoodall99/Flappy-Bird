@@ -30,8 +30,18 @@ export class GameRenderer {
   // Cache dimensions to prevent layout thrashing
   private width: number = 0;
   private height: number = 0;
+  private container: HTMLDivElement | null = null;
 
   public init(container: HTMLDivElement) {
+    // Clean up any existing renderer first (handles React Strict Mode double-mount)
+    if (this.renderer) {
+        this.renderer.dispose();
+        if (this.renderer.domElement.parentNode) {
+            this.renderer.domElement.parentNode.removeChild(this.renderer.domElement);
+        }
+    }
+    
+    this.container = container;
     this.width = window.innerWidth;
     this.height = window.innerHeight;
 
@@ -61,6 +71,7 @@ export class GameRenderer {
         }
         this.rebuildBirdMesh(this.currentSkin);
     }
+    this.renderer.render(this.scene, this.camera);
   }
 
   public resize(width: number, height: number) {
@@ -119,7 +130,9 @@ export class GameRenderer {
   }
 
   public render(gameLogic: GameLogic) {
-    if (!this.scene || !this.camera || !this.renderer) return;
+    if (!this.scene || !this.camera || !this.renderer) {
+        return;
+    }
 
     // Guard: Bird mesh might not be ready yet
     if (!this.birdMesh) {
@@ -127,7 +140,11 @@ export class GameRenderer {
         if (this.currentSkin && this.geometry && this.material) {
             this.rebuildBirdMesh(this.currentSkin);
         }
-        if (!this.birdMesh) return; // Still failed, skip render frame
+        if (!this.birdMesh) {
+            // Still render the scene background at least
+            this.renderer.render(this.scene, this.camera);
+            return;
+        }
     }
     
     // Calculate Logical Dimensions for Render scaling using cached dimensions
@@ -492,6 +509,4 @@ export class GameRenderer {
     this.geometry?.pipe?.dispose();
     // Add full cleanup if necessary
   }
-  
-  private container: HTMLDivElement | null = null;
 }
