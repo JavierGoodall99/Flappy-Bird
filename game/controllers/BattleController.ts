@@ -43,7 +43,7 @@ export class BattleController {
 
     public spawnEnemy(score: number, frameCount: number, width: number, height: number) {
         const spawnRateReduction = Math.min(15, Math.floor(score / 50)); 
-        const currentSpawnRate = Math.max(15, BATTLE_CONSTANTS.ENEMY_SPAWN_RATE - spawnRateReduction);
+        const currentSpawnRate = Math.max(10, BATTLE_CONSTANTS.ENEMY_SPAWN_RATE - spawnRateReduction);
 
         if (frameCount - this.lastEnemySpawnFrame >= currentSpawnRate) {
             this.lastEnemySpawnFrame = frameCount;

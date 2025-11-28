@@ -1,5 +1,4 @@
 
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { GameEngine } from './components/GameEngine';
 import { Button } from './components/Button';
@@ -27,6 +26,7 @@ const App: React.FC = () => {
   // Game Mode
   const [gameMode, setGameMode] = useState<GameMode>('standard');
   const [bossInfo, setBossInfo] = useState<{ active: boolean; hp: number; maxHp: number }>({ active: false, hp: 0, maxHp: 0 });
+  const [playerHealth, setPlayerHealth] = useState({ current: 0, max: 0 });
 
   // Cosmetics State
   const [currentSkinId, setCurrentSkinId] = useState<SkinId>('default');
@@ -113,6 +113,7 @@ const App: React.FC = () => {
     setIsGuideOpen(false);
     setIsWeaponSelectOpen(false);
     setBossInfo({ active: false, hp: 0, maxHp: 0 });
+    setPlayerHealth({ current: 1, max: 1 });
   }, []);
 
   const resetGame = () => {
@@ -189,6 +190,14 @@ const App: React.FC = () => {
       return 'POWER UP';
   };
 
+  // Dynamic Health Bar Logic
+  const healthPercent = playerHealth.current / Math.max(1, playerHealth.max);
+  // Adjusted thresholds for 3 HP: 3=1.0(Green), 2=0.66(Green), 1=0.33(Red)
+  const healthColor = healthPercent > 0.7 ? 'from-green-600 to-green-400' : 
+                      healthPercent > 0.4 ? 'from-yellow-500 to-amber-500' : 'from-red-600 to-red-500';
+  const healthShadow = healthPercent > 0.7 ? 'shadow-[0_0_8px_rgba(74,222,128,0.5)]' : 
+                       healthPercent > 0.4 ? 'shadow-[0_0_8px_rgba(245,158,11,0.5)]' : 'shadow-[0_0_8px_rgba(239,68,68,0.5)]';
+
   return (
     <div className={`relative w-full h-screen overflow-hidden ${shake ? 'animate-pulse' : ''}`}>
       {/* Game Layer */}
@@ -204,6 +213,7 @@ const App: React.FC = () => {
           initialPowerup={initialPowerup}
           gameMode={gameMode}
           setBossActive={(active, hp, maxHp) => setBossInfo({ active, hp, maxHp })}
+          setPlayerHealth={(current, max) => setPlayerHealth({ current, max })}
         />
       </div>
 
@@ -219,6 +229,25 @@ const App: React.FC = () => {
                  <span className="text-xl md:text-2xl text-white">🔊</span>
              )}
           </button>
+      )}
+
+      {/* PLAYER HP HUD (Battle Mode) */}
+      {gameMode === 'battle' && gameState === GameState.PLAYING && (
+         <div className="absolute top-20 left-6 md:top-24 md:left-8 z-30 pointer-events-none animate-fade-in">
+             <div className="flex flex-col gap-1">
+                 <div className="text-xs font-bold text-white/80 tracking-widest uppercase">ARMOR INTEGRITY</div>
+                 <div className="flex gap-1">
+                     {Array.from({ length: playerHealth.max }).map((_, i) => (
+                         <div 
+                             key={i}
+                             className={`w-4 h-6 md:w-5 md:h-8 rounded-sm transform skew-x-[-12deg] transition-all duration-300 border border-white/20
+                               ${i < playerHealth.current ? `bg-gradient-to-t ${healthColor} ${healthShadow}` : 'bg-slate-800/50'}
+                             `}
+                         />
+                     ))}
+                 </div>
+             </div>
+         </div>
       )}
 
       {/* Powerup HUD - Hidden in Battle Mode */}

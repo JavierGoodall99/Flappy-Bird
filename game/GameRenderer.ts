@@ -189,6 +189,9 @@ export class GameRenderer {
     const isGhostActive = gameLogic.activePowerup?.type === 'ghost';
     const isShieldActive = gameLogic.activePowerup?.type === 'shield';
     const isGunActive = gameLogic.activePowerup?.type.startsWith('gun');
+    const isIframe = birdState.invulnerabilityTimer > 0;
+    // Blink effect if damaged
+    const alpha = isIframe ? (Math.sin(performance.now() * 0.03) > 0 ? 0.3 : 0.8) : 1.0;
 
     this.birdMesh.traverse((child) => {
         if (child.name === 'pupil') {
@@ -199,7 +202,8 @@ export class GameRenderer {
         if (child instanceof THREE.Mesh) {
            const mat = child.material as THREE.MeshStandardMaterial;
            if (mat.name !== 'shield' && mat.name !== 'gun') { 
-               mat.opacity = isGhostActive ? 0.3 : 1.0;
+               // Combine ghost opacity with iframe opacity
+               mat.opacity = (isGhostActive ? 0.3 : 1.0) * alpha;
                mat.transparent = true; 
            }
         }

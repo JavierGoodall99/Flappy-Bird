@@ -17,7 +17,10 @@ export class BirdController {
             rotation: 0,
             scale: GAME_CONSTANTS.SCALE_NORMAL,
             targetScale: GAME_CONSTANTS.SCALE_NORMAL,
-            effectTimer: 0
+            effectTimer: 0,
+            hp: 1,
+            maxHp: 1,
+            invulnerabilityTimer: 0
         };
     }
 
@@ -51,6 +54,11 @@ export class BirdController {
         // Effect Timer
         if (this.bird.effectTimer > 0) {
             this.bird.effectTimer -= 1 * dt;
+        }
+        
+        // Invulnerability Timer
+        if (this.bird.invulnerabilityTimer > 0) {
+            this.bird.invulnerabilityTimer -= 1 * dt;
         }
     }
 

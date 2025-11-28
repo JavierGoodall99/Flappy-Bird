@@ -17,6 +17,7 @@ interface GameLogicCallbacks {
   triggerEffect: () => void;
   setActivePowerup: (powerup: ActivePowerup | null) => void;
   setBossActive: (active: boolean, hp: number, maxHp: number) => void;
+  setPlayerHealth: (current: number, max: number) => void;
 }
 
 export class GameLogic {
@@ -94,6 +95,16 @@ export class GameLogic {
     this.battleCtrl.reset(width, height);
     this.projectileCtrl.reset();
     this.particleCtrl.reset();
+    
+    // Initialize Health for Mode
+    if (this.gameMode === 'battle') {
+        this.birdCtrl.bird.maxHp = BATTLE_CONSTANTS.PLAYER_HP;
+        this.birdCtrl.bird.hp = BATTLE_CONSTANTS.PLAYER_HP;
+    } else {
+        this.birdCtrl.bird.maxHp = 1;
+        this.birdCtrl.bird.hp = 1;
+    }
+    this.callbacks.setPlayerHealth(this.birdCtrl.bird.hp, this.birdCtrl.bird.maxHp);
 
     if (spawnEntities) {
         if (this.gameMode !== 'battle') {
@@ -260,6 +271,24 @@ export class GameLogic {
      this.callbacks.setGameState(GameState.GAME_OVER);
   }
   
+  private handlePlayerHit(damage: number, birdX: number) {
+      if (this.bird.invulnerabilityTimer > 0) return;
+
+      this.bird.hp -= damage;
+      this.callbacks.setPlayerHealth(this.bird.hp, this.bird.maxHp);
+      
+      this.bird.invulnerabilityTimer = BATTLE_CONSTANTS.DAMAGE_COOLDOWN;
+      this.callbacks.triggerEffect();
+      
+      if (this.bird.hp <= 0) {
+          this.handleCrash();
+      } else {
+          audioService.playDamage();
+          // Visual pop effect
+          this.particleCtrl.spawnExplosion(birdX, this.bird.y, 0xFF0000, 10, 2);
+      }
+  }
+  
   private handleShieldBreak(birdX: number) {
      const recoveryTime = 60;
      this.activatePowerup('ghost', recoveryTime); // Activates ghost temporarily
@@ -335,6 +364,9 @@ export class GameLogic {
 
   private checkBattleCollisions(birdX: number, radius: number, dt: number) {
       if (this.gameMode !== 'battle') return;
+      
+      const isGhost = this.bird.invulnerabilityTimer > 0;
+      if (isGhost) return;
 
       // Enemy Collision
       const enemies = this.battleCtrl.enemies;
@@ -344,7 +376,7 @@ export class GameLogic {
           const dist = Math.sqrt(dx*dx + dy*dy);
           const enemyRadius = BATTLE_CONSTANTS.ENEMY_SIZE * enemy.scale;
           if (dist < radius + enemyRadius) {
-               this.handleCrash();
+               this.handlePlayerHit(1, birdX);
           }
       }
 
@@ -354,7 +386,7 @@ export class GameLogic {
           const dx = boss.x - birdX;
           const dy = boss.y - this.bird.y;
           if (Math.sqrt(dx*dx + dy*dy) < radius + BATTLE_CONSTANTS.BOSS_SIZE) {
-              this.handleCrash();
+              this.handlePlayerHit(1, birdX);
           }
       }
 
@@ -369,7 +401,8 @@ export class GameLogic {
                   this.handleShieldBreak(birdX);
                   bossProjs.splice(i, 1);
               } else {
-                  this.handleCrash();
+                  this.handlePlayerHit(1, birdX);
+                  bossProjs.splice(i, 1);
               }
           }
       }

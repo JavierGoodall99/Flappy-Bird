@@ -93,6 +93,27 @@ class AudioController {
     osc.start();
     osc.stop(this.ctx.currentTime + 0.3);
   }
+  
+  playDamage() {
+    if (this.isMuted || !this.ctx || !this.masterGain) return;
+    
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    
+    osc.connect(gain);
+    gain.connect(this.masterGain);
+    
+    // Quick downward thud
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(150, this.ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(50, this.ctx.currentTime + 0.1);
+    
+    gain.gain.setValueAtTime(0.4, this.ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.1);
+    
+    osc.start();
+    osc.stop(this.ctx.currentTime + 0.1);
+  }
 
   playGlassBreak() {
     if (this.isMuted || !this.ctx || !this.masterGain) return;

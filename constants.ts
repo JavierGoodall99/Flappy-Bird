@@ -146,16 +146,18 @@ export const DANGER_CONSTANTS = {
 // --- BATTLE MODE CONSTANTS ---
 
 export const BATTLE_CONSTANTS = {
-    ENEMY_SPAWN_RATE: 28, // Frames (Significantly faster spawn)
-    ENEMY_SPEED: 9.5, // Much faster enemies
+    ENEMY_SPAWN_RATE: 20, // Reduced from 22 for more enemies
+    ENEMY_SPEED: 12.5, // Increased from 11.0 for higher difficulty
     ENEMY_SCORE: 10,
     ENEMY_HP: 1,
     ENEMY_SIZE: 20,
     BOSS_INTERVAL: 250, // Score points between bosses
-    BOSS_BASE_HP: 30, // Updated to 30
+    BOSS_BASE_HP: 30, // As requested
     BOSS_SIZE: 70,
-    BOSS_ATTACK_RATE: 90, // Frames (Slower attacks) (Increased from 75 to make it slower/easier)
-    BOSS_PROJECTILE_SPEED: 7.5, // Reduced from 8.5 to make dodging easier
+    BOSS_ATTACK_RATE: 50, // Frames (Faster attacks, was 65)
+    BOSS_PROJECTILE_SPEED: 11.0, // Faster boss projectiles (was 9.0)
+    PLAYER_HP: 3, // Reduced from 5 to balance the difficulty
+    DAMAGE_COOLDOWN: 60, // 1 second invulnerability
 };
 
 export const ENEMY_SKIN: Skin = {

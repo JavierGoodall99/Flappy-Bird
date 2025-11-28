@@ -16,6 +16,7 @@ interface GameEngineProps {
   initialPowerup?: PowerupType | null; 
   gameMode: GameMode;
   setBossActive: (active: boolean, hp: number, maxHp: number) => void;
+  setPlayerHealth: (current: number, max: number) => void;
 }
 
 export const GameEngine: React.FC<GameEngineProps> = (props) => {
@@ -28,7 +29,8 @@ export const GameEngine: React.FC<GameEngineProps> = (props) => {
       setScore: props.setScore,
       triggerEffect: props.triggerEffect,
       setActivePowerup: props.setActivePowerup,
-      setBossActive: props.setBossActive
+      setBossActive: props.setBossActive,
+      setPlayerHealth: props.setPlayerHealth
   }));
   
   const rendererRef = useRef<GameRenderer>(new GameRenderer());

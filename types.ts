@@ -13,6 +13,9 @@ export interface Bird {
   scale: number;
   targetScale: number;
   effectTimer: number;
+  hp: number;
+  maxHp: number;
+  invulnerabilityTimer: number;
 }
 
 export interface Pipe {
