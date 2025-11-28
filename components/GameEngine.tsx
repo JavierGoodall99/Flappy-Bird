@@ -72,6 +72,8 @@ export const GameEngine: React.FC<GameEngineProps> = (props) => {
 
   useEffect(() => {
     if (containerRef.current) {
+        // Set skin before init so the bird mesh is created during initialization
+        rendererRef.current.updateSkin(props.currentSkin);
         rendererRef.current.init(containerRef.current);
         // Start loop
         requestRef.current = requestAnimationFrame(loop);
