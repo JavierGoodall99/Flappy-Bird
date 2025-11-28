@@ -1,10 +1,11 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { GameEngine } from './components/GameEngine';
 import { Button } from './components/Button';
 import { GameState, ActivePowerup, SkinId, Skin, PowerupType, GameMode } from './types';
 import { SKINS, POWERUP_INFO, WEAPON_LOADOUTS } from './constants';
 import { audioService } from './services/audioService';
+import { signIn, signInWithGoogle, logout, subscribeToAuth, syncUserData, saveGameData } from './services/firebase';
 
 const App: React.FC = () => {
   const [gameState, setGameState] = useState<GameState>(GameState.START);
@@ -38,6 +39,11 @@ const App: React.FC = () => {
   // Testing State
   const [initialPowerup, setInitialPowerup] = useState<PowerupType | null>(null);
 
+  // User State
+  const [user, setUser] = useState<any>(null);
+  const isSyncing = useRef(false);
+
+  // 1. INITIAL LOAD (Local Storage)
   useEffect(() => {
     // Load highscores for all modes
     const storedStandard = localStorage.getItem('flapai-highscore-standard') || localStorage.getItem('flapai-highscore');
@@ -62,7 +68,6 @@ const App: React.FC = () => {
     // Merge defaults
     const merged = [...new Set([...currentUnlocked, ...allDefaultSkins])];
     setUnlockedSkins(merged);
-    // Update storage to reflect new unlocked state for consistency
     localStorage.setItem('flapai-unlockedskins', JSON.stringify(merged));
 
     const storedCurrentSkin = localStorage.getItem('flapai-currentskin');
@@ -75,6 +80,96 @@ const App: React.FC = () => {
         audioService.setMuted(true);
     }
   }, []);
+
+  // 2. FIREBASE AUTH & SYNC FLOW
+  useEffect(() => {
+    const handleAuthChange = async (authUser: any) => {
+        if (authUser) {
+            setUser(authUser);
+            // Prepare local data for sync (User's current device state)
+            const localData = {
+                highScores: {
+                    standard: parseInt(localStorage.getItem('flapai-highscore-standard') || '0', 10),
+                    battle: parseInt(localStorage.getItem('flapai-highscore-battle') || '0', 10),
+                    danger: parseInt(localStorage.getItem('flapai-highscore-danger') || '0', 10),
+                },
+                unlockedSkins: JSON.parse(localStorage.getItem('flapai-unlockedskins') || '[]'),
+                currentSkinId: localStorage.getItem('flapai-currentskin') || 'default',
+                muted: localStorage.getItem('flapai-muted') === 'true'
+            };
+
+            // Sync with Cloud
+            const cloudData = await syncUserData(authUser.uid, localData);
+            
+            // Apply Cloud Data (Remote Wins or Merged)
+            if (cloudData) {
+                isSyncing.current = true; // Prevent triggering save effects during load
+                
+                if (cloudData.highScores) setHighScores(prev => ({ ...prev, ...cloudData.highScores }));
+                if (cloudData.unlockedSkins) setUnlockedSkins(cloudData.unlockedSkins);
+                if (cloudData.currentSkinId) setCurrentSkinId(cloudData.currentSkinId as SkinId);
+                if (cloudData.muted !== undefined) {
+                    setIsMuted(cloudData.muted);
+                    audioService.setMuted(cloudData.muted);
+                }
+
+                // Update Local Storage to match Cloud (Keep them in sync)
+                localStorage.setItem('flapai-highscore-standard', (cloudData.highScores?.standard || 0).toString());
+                localStorage.setItem('flapai-highscore-battle', (cloudData.highScores?.battle || 0).toString());
+                localStorage.setItem('flapai-highscore-danger', (cloudData.highScores?.danger || 0).toString());
+                localStorage.setItem('flapai-unlockedskins', JSON.stringify(cloudData.unlockedSkins || []));
+                localStorage.setItem('flapai-currentskin', cloudData.currentSkinId || 'default');
+                localStorage.setItem('flapai-muted', String(cloudData.muted));
+
+                setTimeout(() => { isSyncing.current = false; }, 100);
+            }
+        } else {
+            setUser(null);
+            // If not logged in, try anonymous login for Guest Mode
+            // This ensures we always have a uid for saving 'somewhere' if possible, 
+            // or ready for upgrade.
+            signIn(); 
+        }
+    };
+
+    const unsubscribe = subscribeToAuth(handleAuthChange);
+    return () => unsubscribe();
+  }, []);
+
+  // 3. PERSISTENCE EFFECTS (Save when state changes)
+
+  // Save High Scores
+  useEffect(() => {
+      if (isSyncing.current) return;
+      if (user) {
+          saveGameData(user.uid, { highScores });
+      }
+  }, [highScores, user]);
+
+  // Save Skins
+  useEffect(() => {
+      if (isSyncing.current) return;
+      if (user) {
+          saveGameData(user.uid, { unlockedSkins });
+      }
+  }, [unlockedSkins, user]);
+
+  // Save Current Skin
+  useEffect(() => {
+      if (isSyncing.current) return;
+      if (user) {
+          saveGameData(user.uid, { currentSkinId });
+      }
+  }, [currentSkinId, user]);
+
+  // Save Settings
+  useEffect(() => {
+      if (isSyncing.current) return;
+      if (user) {
+          saveGameData(user.uid, { muted: isMuted });
+      }
+  }, [isMuted, user]);
+
 
   useEffect(() => {
     if (gameState === GameState.GAME_OVER) {
@@ -147,6 +242,14 @@ const App: React.FC = () => {
   const handleEquipSkin = (id: SkinId) => {
       setCurrentSkinId(id);
       localStorage.setItem('flapai-currentskin', id);
+  };
+  
+  const handleGoogleSignIn = () => {
+      signInWithGoogle();
+  };
+  
+  const handleLogout = () => {
+      logout();
   };
 
   useEffect(() => {
@@ -233,6 +336,42 @@ const App: React.FC = () => {
                  <span className="text-xl md:text-2xl text-white">🔊</span>
              )}
           </button>
+      )}
+
+      {/* USER PROFILE / AUTH - TOP RIGHT on START SCREEN */}
+      {gameState === GameState.START && !isShopOpen && !isGuideOpen && !isWeaponSelectOpen && (
+          <div className="absolute top-6 right-6 md:top-8 md:right-8 z-30 flex flex-col items-end gap-2 animate-fade-in">
+              {user && !user.isAnonymous ? (
+                  <div className="flex items-center gap-2 bg-slate-900/80 backdrop-blur-md border border-white/20 rounded-full pl-1 pr-4 py-1 shadow-lg">
+                      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-xs font-bold text-white overflow-hidden border border-white/30">
+                          {user.photoURL ? (
+                              <img src={user.photoURL} alt="User" className="w-full h-full object-cover" />
+                          ) : (
+                              <span>{user.displayName ? user.displayName.charAt(0).toUpperCase() : 'U'}</span>
+                          )}
+                      </div>
+                      <div className="flex flex-col">
+                           <span className="text-xs font-bold text-white leading-tight max-w-[100px] truncate">
+                               {user.displayName || 'Player'}
+                           </span>
+                           <button 
+                              onClick={handleLogout}
+                              className="text-[10px] text-red-400 hover:text-red-300 font-bold uppercase tracking-wide text-left"
+                           >
+                              Log Out
+                           </button>
+                      </div>
+                  </div>
+              ) : (
+                  <button 
+                      onClick={handleGoogleSignIn}
+                      className="px-4 py-2 bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/20 rounded-full text-white text-xs font-bold tracking-wide flex items-center gap-2 transition-all shadow-lg active:scale-95 group"
+                  >
+                      <span className="group-hover:scale-110 transition-transform">☁️</span>
+                      <span>SAVE DATA</span>
+                  </button>
+              )}
+          </div>
       )}
 
       {/* PLAYER HP HUD (Battle Mode) */}
