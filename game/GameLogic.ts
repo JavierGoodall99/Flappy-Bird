@@ -1,4 +1,5 @@
 
+
 import { GameState, ActivePowerup, GameMode, PowerupType } from '../types';
 import { GAME_CONSTANTS, COLORS, BATTLE_CONSTANTS } from '../constants';
 import { audioService } from '../services/audioService';
@@ -112,7 +113,7 @@ export class GameLogic {
         }
 
         if (this.gameMode === 'battle') {
-            const weaponType = (this.initialPowerup && this.initialPowerup.startsWith('gun')) 
+            const weaponType = (this.initialPowerup && (this.initialPowerup.startsWith('gun') || this.initialPowerup.startsWith('weapon_'))) 
                 ? this.initialPowerup 
                 : 'gun';
             this.activatePowerup(weaponType, 9999999);
@@ -204,7 +205,7 @@ export class GameLogic {
     }
     
     // Weapon Firing
-    if (this.activePowerup?.type.startsWith('gun')) {
+    if (this.activePowerup?.type.startsWith('gun') || this.activePowerup?.type.startsWith('weapon_')) {
         this.projectileCtrl.tryShoot(this.frameCount, this.activePowerup.type, birdX, this.bird.y, this.gameMode, this.score);
     }
 
@@ -242,6 +243,8 @@ export class GameLogic {
           case 'gun_double':
           case 'gun_wave':
           case 'gun_pulse':
+          case 'weapon_spear':
+          case 'weapon_dagger':
              this.birdCtrl.setEffect(GAME_CONSTANTS.SCALE_NORMAL, duration); audioService.playShieldUp(); break;
       }
       this.activePowerup = { type, timeLeft: duration, totalTime: duration };

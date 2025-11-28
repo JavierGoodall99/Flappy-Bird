@@ -1,4 +1,5 @@
 
+
 import { Projectile, PowerupType } from '../../types';
 import { GAME_CONSTANTS, WEAPON_LOADOUTS } from '../../constants';
 import { audioService } from '../../services/audioService';
@@ -23,11 +24,12 @@ export class ProjectileController {
                 // Sine wave motion: Amplitude 80, Frequency dependent on time
                 proj.y = proj.initialY + Math.sin(proj.time * 0.15) * 80;
             } else {
+                // Standard linear
                 proj.x += proj.vx * dt;
                 proj.y += proj.vy * dt;
             }
 
-            if (proj.x > width + 100) {
+            if (proj.x > width + 100 || proj.y > 2000) {
                 this.projectiles.splice(i, 1);
             }
         }
@@ -40,7 +42,11 @@ export class ProjectileController {
         if (weaponType === 'gun_rapid') baseRate = 20;
         if (weaponType === 'gun_double') baseRate = 50;
         if (weaponType === 'gun_wave') baseRate = 55;
-        if (weaponType === 'gun_pulse') baseRate = 120; // Slower fire rate to emphasize "wait for big blast"
+        if (weaponType === 'gun_pulse') baseRate = 120;
+        
+        // Melee Weapon Rates
+        if (weaponType === 'weapon_spear') baseRate = 70;
+        if (weaponType === 'weapon_dagger') baseRate = 15; // Fast burst
 
         let fireRate = baseRate;
         if (gameMode === 'battle') {
@@ -64,8 +70,33 @@ export class ProjectileController {
         const color = parseInt(weaponDef.color.replace('#', '0x'));
         
         let sound = 'shoot';
-
-        if (weaponType === 'gun_spread') {
+        let projType = 'standard';
+        
+        if (weaponType === 'weapon_spear') {
+             projType = 'spear';
+             this.projectiles.push({
+                 id: Math.random(), x: birdX + 20, y: birdY,
+                 vx: pSpeed * 1.5, vy: 0, color, damage: 3, pierce: 4, type: projType
+             });
+        } else if (weaponType === 'weapon_dagger') {
+             projType = 'dagger';
+             // Burst of 3
+             this.projectiles.push({
+                 id: Math.random(), x: birdX + 20, y: birdY,
+                 vx: pSpeed * 1.8, vy: 0, color, damage: 0.5, pierce: 1, type: projType
+             });
+             this.projectiles.push({
+                 id: Math.random(), x: birdX + 15, y: birdY - 10,
+                 vx: pSpeed * 1.7, vy: 0.5, color, damage: 0.5, pierce: 1, type: projType
+             });
+             this.projectiles.push({
+                 id: Math.random(), x: birdX + 15, y: birdY + 10,
+                 vx: pSpeed * 1.7, vy: -0.5, color, damage: 0.5, pierce: 1, type: projType
+             });
+        }
+        
+        // STANDARD GUNS
+        else if (weaponType === 'gun_spread') {
              this.projectiles.push({
                  id: Math.random(), x: birdX + 20, y: birdY - 5,
                  vx: pSpeed, vy: 0, color, damage: 1, pierce: 1

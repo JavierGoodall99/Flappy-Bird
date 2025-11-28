@@ -1,4 +1,5 @@
 
+
 import * as THREE from 'three';
 import { GameState, Pipe, Powerup, Enemy, Skin, Bird } from '../types';
 import { GAME_CONSTANTS, COLORS, PARTICLE_CONFIG, ENEMY_SKIN, BOSS_SKIN } from '../constants';
@@ -16,7 +17,7 @@ export class GameRenderer {
   private birdMesh: THREE.Group | null = null;
   private pipeMeshes: Map<Pipe, THREE.Group> = new Map();
   private powerupMeshes: Map<Powerup, THREE.Mesh> = new Map();
-  private projectileMeshes: THREE.Mesh[] = [];
+  private projectileMeshes: THREE.Group[] = []; // Changed to Group to hold multiple types
   private bossProjectileMeshes: THREE.Mesh[] = [];
   private enemyMeshes: Map<Enemy, THREE.Group> = new Map();
   private bossMesh: THREE.Group | null = null;
@@ -112,7 +113,7 @@ export class GameRenderer {
       this.enemyMeshes.forEach((group) => this.scene?.remove(group));
       this.enemyMeshes.clear();
       if (this.bossMesh) { this.scene.remove(this.bossMesh); this.bossMesh = null; }
-      this.projectileMeshes.forEach(mesh => { mesh.visible = false; });
+      this.projectileMeshes.forEach(group => { group.visible = false; });
       this.bossProjectileMeshes.forEach(mesh => { mesh.visible = false; });
       this.particleMeshes.forEach(mesh => mesh.visible = false);
   }
@@ -188,7 +189,7 @@ export class GameRenderer {
     
     const isGhostActive = gameLogic.activePowerup?.type === 'ghost';
     const isShieldActive = gameLogic.activePowerup?.type === 'shield';
-    const isGunActive = gameLogic.activePowerup?.type.startsWith('gun');
+    const isGunActive = gameLogic.activePowerup?.type.startsWith('gun') || gameLogic.activePowerup?.type.startsWith('weapon_');
     const isIframe = birdState.invulnerabilityTimer > 0;
     // Blink effect if damaged
     const alpha = isIframe ? (Math.sin(performance.now() * 0.03) > 0 ? 0.3 : 0.8) : 1.0;
@@ -342,6 +343,7 @@ export class GameRenderer {
               case 'ghost': mat = this.material.pGhost; break;
               case 'gun': mat = this.material.pGun; break;
               case 'random': mat = this.material.pRandom; break;
+              default: mat = this.material.pRandom; break;
           }
           mesh = new THREE.Mesh(geo, mat);
           mesh.scale.set(GAME_CONSTANTS.POWERUP_SIZE/2, GAME_CONSTANTS.POWERUP_SIZE/2, GAME_CONSTANTS.POWERUP_SIZE/2); 
@@ -386,36 +388,75 @@ export class GameRenderer {
     });
 
     // Projectiles
-    this.projectileMeshes.forEach(m => m.visible = false);
+    this.projectileMeshes.forEach(group => group.visible = false);
     while (this.projectileMeshes.length < gameLogic.projectiles.length) {
-        const mesh = new THREE.Mesh(this.geometry.particleSphere, this.material.projectile.clone()); // CLONE MATERIAL FOR UNIQUE COLOR
+        // Create a container Group for the projectile
+        const group = new THREE.Group();
+        
+        // 1. Standard Orb (Sphere)
+        const orb = new THREE.Mesh(this.geometry.particleSphere, this.material.projectile.clone());
         const glow = new THREE.Mesh(this.geometry.particleSphere, new THREE.MeshBasicMaterial({ color: 0xFFFFFF, transparent: true, opacity: 0.5 }));
-        glow.name = 'glow';
-        glow.scale.set(1.5, 1.5, 1.5);
-        mesh.add(glow);
-        this.scene.add(mesh);
-        this.projectileMeshes.push(mesh);
+        glow.name = 'glow'; glow.scale.set(1.5, 1.5, 1.5); orb.add(glow);
+        orb.name = 'standard';
+        group.add(orb);
+
+        // 2. Spear
+        const spear = new THREE.Mesh(this.geometry.geoSpear, this.material.projectile.clone());
+        spear.rotation.z = -Math.PI / 2; // Point forward
+        spear.name = 'spear';
+        group.add(spear);
+
+        // 4. Dagger
+        const dagger = new THREE.Mesh(this.geometry.geoDagger, this.material.projectile.clone());
+        dagger.rotation.z = -Math.PI / 2;
+        dagger.name = 'dagger';
+        group.add(dagger);
+        
+        this.scene.add(group);
+        this.projectileMeshes.push(group);
     }
+    
     gameLogic.projectiles.forEach((p, i) => {
-        const mesh = this.projectileMeshes[i];
-        mesh.visible = true;
-        mesh.position.x = toWorldX(p.x);
-        mesh.position.y = toWorldY(p.y);
-        mesh.position.z = 2;
+        const group = this.projectileMeshes[i];
+        group.visible = true;
+        group.position.x = toWorldX(p.x);
+        group.position.y = toWorldY(p.y);
+        group.position.z = 2;
         
-        // Use custom scale or default
-        const s = (p.scale || 1) * 6;
-        mesh.scale.set(s, s, s);
+        // Determine active child mesh based on projectile type
+        const type = p.type || 'standard';
         
-        // Update Color
-        const mat = mesh.material as THREE.MeshStandardMaterial;
+        // Hide all children first
+        group.children.forEach(c => c.visible = false);
+        
+        let activeMesh = group.getObjectByName('standard') as THREE.Mesh;
+        
+        let visualType = 'standard';
+        if (type === 'spear') visualType = 'spear';
+        if (type === 'dagger') visualType = 'dagger';
+
+        activeMesh = group.getObjectByName(visualType) as THREE.Mesh || activeMesh;
+        activeMesh.visible = true;
+
+        // Scaling
+        const baseScale = (p.scale || 1);
+        // Visual-specific scaling corrections
+        let s = baseScale * 6; // Standard size
+        if (visualType === 'spear') s = baseScale * 2;
+        if (visualType === 'dagger') s = baseScale * 1.5;
+        
+        activeMesh.scale.set(s, s, s);
+
+        // Color Update
+        const mat = activeMesh.material as THREE.MeshStandardMaterial;
         const col = p.color || 0xFFFF00;
         mat.color.setHex(col);
         mat.emissive.setHex(col);
         
-        const glow = mesh.getObjectByName('glow') as THREE.Mesh;
-        if (glow) {
-            (glow.material as THREE.MeshBasicMaterial).color.setHex(col);
+        // Update glow if standard
+        if (visualType === 'standard') {
+            const glow = activeMesh.getObjectByName('glow') as THREE.Mesh;
+            if (glow) (glow.material as THREE.MeshBasicMaterial).color.setHex(col);
         }
     });
 

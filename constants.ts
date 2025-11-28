@@ -1,4 +1,5 @@
 
+
 import { Skin } from './types';
 
 export const GAME_CONSTANTS = {
@@ -86,7 +87,10 @@ export const WEAPON_LOADOUTS = [
   { id: 'gun_rapid', name: 'Vulcan Cannon', description: 'Extreme fire rate. Melts bosses but eats accuracy.', color: '#8B5CF6', stats: 'Fire Rate: ⭐⭐⭐⭐⭐\nAccuracy: ⭐' },
   { id: 'gun_double', name: 'Twin Strikers', description: 'Fires two parallel shots. Double the trouble.', color: '#4ADE80', stats: 'Fire Rate: ⭐⭐⭐\nDamage: ⭐⭐⭐' },
   { id: 'gun_wave', name: 'Sonic Wave', description: 'Oscillating energy waves that pierce through multiple enemies.', color: '#06B6D4', stats: 'Fire Rate: ⭐⭐\nPierce: ⭐⭐⭐⭐' },
-  { id: 'gun_pulse', name: 'Omega Pulse', description: 'Massive piercing energy ball. Obliterates everything in its path.', color: '#E11D48', stats: 'Fire Rate: ⭐\nDamage: ⭐⭐⭐⭐⭐' }
+  { id: 'gun_pulse', name: 'Omega Pulse', description: 'Massive piercing energy ball. Obliterates everything in its path.', color: '#E11D48', stats: 'Fire Rate: ⭐\nDamage: ⭐⭐⭐⭐⭐' },
+  // MELEE WEAPONS
+  { id: 'weapon_spear', name: 'Gungnir Spear', description: 'High-velocity piercing throw. Penetrates multiple enemies.', color: '#FFD700', stats: 'Fire Rate: ⭐⭐\nPierce: ⭐⭐⭐⭐⭐' },
+  { id: 'weapon_dagger', name: 'Shadow Daggers', description: 'Throw 3 knives in a burst. Fast but weak.', color: '#A8A29E', stats: 'Fire Rate: ⭐⭐⭐⭐⭐\nSpeed: ⭐⭐⭐⭐⭐' },
 ];
 
 // --- ENVIRONMENT CONSTANTS ---

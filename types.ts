@@ -30,6 +30,7 @@ export interface Pipe {
 export type PowerupType = 
   | 'shrink' | 'grow' | 'slowmo' | 'shield' | 'ghost' 
   | 'gun' | 'gun_spread' | 'gun_rapid' | 'gun_double' | 'gun_wave' | 'gun_pulse'
+  | 'weapon_spear' | 'weapon_dagger'
   | 'fast' | 'random';
 
 export interface Powerup {
@@ -55,6 +56,7 @@ export interface Projectile {
   // Advanced properties
   type?: string;
   initialY?: number;
+  initialX?: number; // Added for boomerang logic
   time?: number;
   scale?: number;
   damage?: number;

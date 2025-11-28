@@ -1,4 +1,5 @@
 
+
 import * as THREE from 'three';
 import { COLORS, GAME_CONSTANTS } from '../constants';
 
@@ -20,7 +21,11 @@ export const createGeometries = () => {
         strawHatTop: new THREE.CylinderGeometry(10, 12, 8, 32),
         headbandPlate: new THREE.BoxGeometry(10, 3, 1),
         gunBarrel: new THREE.CylinderGeometry(2, 2, 8, 16),
-        eyebrow: new THREE.BoxGeometry(7, 1.5, 1)
+        eyebrow: new THREE.BoxGeometry(7, 1.5, 1),
+        
+        // Weapon Projectiles
+        geoSpear: new THREE.CylinderGeometry(1, 1, 20, 8),
+        geoDagger: new THREE.ConeGeometry(2, 8, 4),
     };
 };
 
