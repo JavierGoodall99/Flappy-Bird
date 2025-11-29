@@ -57,10 +57,20 @@ export const useGameData = () => {
 
     const handleAuthChange = async (authUser: any) => {
         if (!authUser) {
-             // If no auth user yet, and we don't have a cached user, we must wait or sign in
-             if (!user) { 
-                 signIn(); 
-             }
+             // User is not signed in (Logged out or first visit)
+             
+             // Clear local user state
+             setUser(null);
+             localStorage.removeItem('fliply_user_cache');
+             
+             // Reset game data to defaults to prevent leaking previous user data
+             setHighScores({ standard: 0, battle: 0, danger: 0, playground: 0 });
+             setStats({ gamesPlayed: 0, totalScore: 0 });
+             setUnlockedSkins(['default']);
+             setCurrentSkinId('default');
+             
+             // Automatically sign in anonymously to ensure game functionality
+             signIn(); 
              return;
         }
 
