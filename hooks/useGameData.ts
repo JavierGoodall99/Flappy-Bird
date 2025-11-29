@@ -10,143 +10,217 @@ export interface GameStats {
   totalScore: number;
 }
 
+// Helper to safely read from localStorage
+const getLocal = <T>(key: string, fallback: T): T => {
+    try {
+        const item = localStorage.getItem(key);
+        return item ? JSON.parse(item) : fallback;
+    } catch {
+        return fallback;
+    }
+};
+
 export const useGameData = () => {
-  const [user, setUser] = useState<any>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [highScores, setHighScores] = useState<Record<GameMode, number>>({ 
-      standard: 0, battle: 0, danger: 0, playground: 0 
+  // Initialize state from Local Storage for instant render
+  const [highScores, setHighScores] = useState<Record<GameMode, number>>(() => 
+      getLocal('fliply_highScores', { standard: 0, battle: 0, danger: 0, playground: 0 })
+  );
+  const [stats, setStats] = useState<GameStats>(() => 
+      getLocal('fliply_stats', { gamesPlayed: 0, totalScore: 0 })
+  );
+  const [unlockedSkins, setUnlockedSkins] = useState<SkinId[]>(() => 
+      getLocal('fliply_unlockedSkins', ['default'])
+  );
+  const [currentSkinId, setCurrentSkinId] = useState<SkinId>(() => 
+      getLocal('fliply_currentSkinId', 'default')
+  );
+  const [isMuted, setIsMuted] = useState(() => 
+      getLocal('fliply_muted', false)
+  );
+  
+  // Optimistic User Loading: Load cached user immediately to skip "Loading..." screen
+  const [user, setUser] = useState<any>(() => 
+      getLocal('fliply_user_cache', null)
+  );
+
+  // Only show loading if we have absolutely no user data cached
+  const [isLoading, setIsLoading] = useState(() => {
+       return !localStorage.getItem('fliply_user_cache'); 
   });
-  const [stats, setStats] = useState<GameStats>({ gamesPlayed: 0, totalScore: 0 });
-  const [unlockedSkins, setUnlockedSkins] = useState<SkinId[]>(['default']);
-  const [currentSkinId, setCurrentSkinId] = useState<SkinId>('default');
-  const [isMuted, setIsMuted] = useState(false);
   
   const isSyncing = useRef(false);
 
   // Auth & Load
   useEffect(() => {
+    // Ensure audio service matches muted state immediately
+    audioService.setMuted(isMuted);
+
     const handleAuthChange = async (authUser: any) => {
-        setIsLoading(true);
-        if (authUser) {
-            setUser(authUser);
-            const userProfile = {
-                displayName: authUser.displayName,
-                email: authUser.email,
-                photoURL: authUser.photoURL
-            };
-            const cloudData = await loadUserGameData(authUser.uid, userProfile);
+        if (!authUser) {
+             // If no auth user yet, and we don't have a cached user, we must wait or sign in
+             if (!user) { 
+                 signIn(); 
+             }
+             return;
+        }
+
+        // We have an authUser (Anonymous or Google)
+        
+        // Merge authUser properties into our user state locally first
+        setUser((prev: any) => {
+            if (!prev) return authUser;
+            return { ...prev, uid: authUser.uid, email: authUser.email }; 
+        });
+
+        const userProfile = {
+            displayName: authUser.displayName,
+            email: authUser.email,
+            photoURL: authUser.photoURL
+        };
+
+        // Fetch Cloud Data
+        const cloudData = await loadUserGameData(authUser.uid, userProfile);
+        
+        if (cloudData) {
+            isSyncing.current = true;
             
-            if (cloudData) {
-                isSyncing.current = true;
-                setHighScores(cloudData.highScores);
-                setUnlockedSkins(cloudData.unlockedSkins);
-                setCurrentSkinId(cloudData.currentSkinId as SkinId);
-                setStats(cloudData.stats);
+            // SMART MERGE: Cloud vs Local
+            // We take the max of high scores/stats to prevent data loss if played offline
+            // or if local data is newer than what was just fetched.
+            setHighScores(prev => ({
+                standard: Math.max(prev.standard, cloudData.highScores.standard || 0),
+                battle: Math.max(prev.battle, cloudData.highScores.battle || 0),
+                danger: Math.max(prev.danger, cloudData.highScores.danger || 0),
+                playground: Math.max(prev.playground, cloudData.highScores.playground || 0),
+            }));
+
+            setStats(prev => ({
+                gamesPlayed: Math.max(prev.gamesPlayed, cloudData.stats.gamesPlayed || 0),
+                totalScore: Math.max(prev.totalScore, cloudData.stats.totalScore || 0)
+            }));
+
+            // Merge unlocked skins
+            setUnlockedSkins(prev => {
+                const combined = new Set([...prev, ...(cloudData.unlockedSkins || [])]);
+                return Array.from(combined);
+            });
+
+            // For preferences, Cloud wins if set, otherwise keep Local
+            if (cloudData.currentSkinId) setCurrentSkinId(cloudData.currentSkinId as SkinId);
+            if (cloudData.muted !== undefined) {
                 setIsMuted(cloudData.muted);
                 audioService.setMuted(cloudData.muted);
-
-                if (cloudData.displayName) {
-                    setUser((prev: any) => ({ 
-                        ...prev, 
-                        displayName: cloudData.displayName, 
-                        photoURL: cloudData.photoURL,
-                        avatarColor: cloudData.avatarColor,
-                        avatarText: cloudData.avatarText,
-                        useCustomAvatar: cloudData.useCustomAvatar
-                    }));
-                }
-                setTimeout(() => { isSyncing.current = false; }, 100);
             }
-            setIsLoading(false);
-        } else {
-            setUser(null);
-            signIn(); 
+
+            // Update User Profile Data
+            setUser((prev: any) => ({ 
+                ...prev, 
+                uid: authUser.uid,
+                displayName: cloudData.displayName || prev?.displayName, 
+                photoURL: cloudData.photoURL || prev?.photoURL,
+                avatarColor: cloudData.avatarColor || prev?.avatarColor,
+                avatarText: cloudData.avatarText || prev?.avatarText,
+                useCustomAvatar: cloudData.useCustomAvatar ?? prev?.useCustomAvatar,
+                isAnonymous: authUser.isAnonymous
+            }));
+            
+            // Allow persistence to resume after state settles
+            setTimeout(() => { isSyncing.current = false; }, 100);
         }
+        
+        // Hide loading screen if it was still showing
+        setIsLoading(false);
     };
+
     const unsubscribe = subscribeToAuth(handleAuthChange);
     return () => unsubscribe();
-  }, []);
+  }, []); // Run once on mount
 
-  // Persistence Effects
-  useEffect(() => { if (!isSyncing.current && user) saveGameData(user.uid, { highScores }); }, [highScores, user]);
-  useEffect(() => { if (!isSyncing.current && user) saveGameData(user.uid, { stats }); }, [stats, user]);
-  useEffect(() => { if (!isSyncing.current && user) saveGameData(user.uid, { unlockedSkins }); }, [unlockedSkins, user]);
-  useEffect(() => { if (!isSyncing.current && user) saveGameData(user.uid, { currentSkinId }); }, [currentSkinId, user]);
-  useEffect(() => { if (!isSyncing.current && user) saveGameData(user.uid, { muted: isMuted }); }, [isMuted, user]);
+  // Persistence Effects (Save to LocalStorage AND Cloud)
+  useEffect(() => { 
+      localStorage.setItem('fliply_highScores', JSON.stringify(highScores));
+      if (!isSyncing.current && user) saveGameData(user.uid, { highScores }); 
+  }, [highScores, user]);
 
-  const updateProfileName = async (name: string) => {
-      // Deprecated, mapped to updateProfile for backward compatibility if needed
-      await updateProfile({ displayName: name });
-  };
+  useEffect(() => { 
+      localStorage.setItem('fliply_stats', JSON.stringify(stats));
+      if (!isSyncing.current && user) saveGameData(user.uid, { stats }); 
+  }, [stats, user]);
 
-  const updateProfile = async (data: { displayName?: string, avatarColor?: string, avatarText?: string, useCustomAvatar?: boolean }) => {
+  useEffect(() => { 
+      localStorage.setItem('fliply_unlockedSkins', JSON.stringify(unlockedSkins));
+      if (!isSyncing.current && user) saveGameData(user.uid, { unlockedSkins }); 
+  }, [unlockedSkins, user]);
+
+  useEffect(() => { 
+      localStorage.setItem('fliply_currentSkinId', JSON.stringify(currentSkinId));
+      if (!isSyncing.current && user) saveGameData(user.uid, { currentSkinId }); 
+  }, [currentSkinId, user]);
+
+  useEffect(() => { 
+      localStorage.setItem('fliply_muted', JSON.stringify(isMuted));
+      if (!isSyncing.current && user) saveGameData(user.uid, { muted: isMuted }); 
+  }, [isMuted, user]);
+
+  // Cache User Display Info for Optimistic Load
+  useEffect(() => {
       if (user) {
-          const newData = { ...data };
-          if (newData.displayName && newData.displayName.trim().length === 0) delete newData.displayName;
-          
-          await updateUserProfile(user.uid, newData);
-          setUser((prev: any) => ({ ...prev, ...newData }));
+          const cacheUser = {
+              uid: user.uid,
+              displayName: user.displayName,
+              photoURL: user.photoURL,
+              avatarColor: user.avatarColor,
+              avatarText: user.avatarText,
+              useCustomAvatar: user.useCustomAvatar
+          };
+          localStorage.setItem('fliply_user_cache', JSON.stringify(cacheUser));
       }
-  };
+  }, [user]);
 
-  const processGameEnd = (score: number, gameMode: GameMode, onUnlock: (name: string) => void) => {
-      let newStats = { ...stats };
-      let newHighScores = { ...highScores };
-      let isNewRecord = false;
+  // Game Logic Actions
+  const processGameEnd = (score: number, mode: GameMode, onUnlock: (name: string) => void) => {
+      let isRecord = false;
+      const newStats = { ...stats };
+      newStats.gamesPlayed += 1;
+      newStats.totalScore += score;
+      setStats(newStats);
 
-      // Update Stats
-      if (gameMode !== 'playground') {
-           newStats = {
-               gamesPlayed: stats.gamesPlayed + 1,
-               totalScore: stats.totalScore + score
-           };
-           setStats(newStats);
-      }
-
-      // Update High Scores
-      if (gameMode !== 'playground') {
-        const currentHigh = highScores[gameMode];
-        if (score > currentHigh) {
-          newHighScores = { ...highScores, [gameMode]: score };
-          setHighScores(newHighScores);
-          isNewRecord = true;
-        }
+      if (score > highScores[mode]) {
+          setHighScores(prev => ({ ...prev, [mode]: score }));
+          isRecord = true;
       }
 
       // Check Unlocks
-      const newUnlockedSkins = [...unlockedSkins];
-      let hasUnlock = false;
-
+      const newUnlocks: SkinId[] = [];
       Object.values(SKINS).forEach(skin => {
-          if (newUnlockedSkins.includes(skin.id)) return;
-          let unlocked = false;
-          const condition = skin.unlockCondition;
+          if (unlockedSkins.includes(skin.id)) return;
           
-          if (condition.type === 'score') {
-               if (score >= condition.value && gameMode === 'standard') unlocked = true;
-               if (newHighScores.standard >= condition.value) unlocked = true;
-          } else if (condition.type === 'battle_score') {
-               if (score >= condition.value && gameMode === 'battle') unlocked = true;
-               if (newHighScores.battle >= condition.value) unlocked = true;
-          } else if (condition.type === 'games_played') {
-               if (newStats.gamesPlayed >= condition.value) unlocked = true;
-          } else if (condition.type === 'total_score') {
-               if (newStats.totalScore >= condition.value) unlocked = true;
-          }
+          let unlocked = false;
+          const cond = skin.unlockCondition;
+          
+          if (cond.type === 'score' && mode === 'standard' && score >= cond.value) unlocked = true;
+          if (cond.type === 'battle_score' && mode === 'battle' && score >= cond.value) unlocked = true;
+          if (cond.type === 'games_played' && newStats.gamesPlayed >= cond.value) unlocked = true;
+          if (cond.type === 'total_score' && newStats.totalScore >= cond.value) unlocked = true;
 
           if (unlocked) {
-              newUnlockedSkins.push(skin.id);
-              hasUnlock = true;
+              newUnlocks.push(skin.id);
               onUnlock(skin.name);
           }
       });
 
-      if (hasUnlock) {
-          setUnlockedSkins(newUnlockedSkins);
-          audioService.playScore();
+      if (newUnlocks.length > 0) {
+          setUnlockedSkins(prev => [...prev, ...newUnlocks]);
       }
+      
+      return isRecord;
+  };
 
-      return isNewRecord;
+  const updateProfile = async (data: any) => {
+      setUser((prev: any) => ({ ...prev, ...data }));
+      if (user?.uid) {
+          await updateUserProfile(user.uid, data);
+      }
   };
 
   return {
@@ -160,7 +234,6 @@ export const useGameData = () => {
       setIsMuted,
       setCurrentSkinId,
       processGameEnd,
-      updateProfileName,
       updateProfile
   };
 };

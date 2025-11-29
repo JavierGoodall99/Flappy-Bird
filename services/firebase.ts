@@ -5,10 +5,13 @@ import {
   getAuth, 
   signInAnonymously, 
   GoogleAuthProvider, 
-  signInWithPopup, 
+  signInWithPopup,
+  linkWithPopup,
   signOut,
   onAuthStateChanged,
-  User
+  User,
+  setPersistence,
+  browserLocalPersistence
 } from "firebase/auth";
 import { getFirestore, doc, setDoc, getDoc, enableIndexedDbPersistence, collection, query, orderBy, limit, getDocs } from "firebase/firestore";
 
@@ -29,6 +32,11 @@ const analytics = getAnalytics(app);
 const auth = getAuth(app);
 const db = getFirestore(app);
 const googleProvider = new GoogleAuthProvider();
+
+// Explicitly set persistence to local (survives browser restart)
+setPersistence(auth, browserLocalPersistence).catch((error) => {
+    console.error("Auth Persistence Error", error);
+});
 
 // Enable offline persistence
 try {
@@ -57,6 +65,9 @@ const generateRandomName = () => {
 // Authenticate Anonymously
 export const signIn = async () => {
     try {
+        // If already signed in, don't create a new one
+        if (auth.currentUser) return auth.currentUser;
+        
         const userCredential = await signInAnonymously(auth);
         return userCredential.user;
     } catch (error: any) {
@@ -76,7 +87,25 @@ export const signIn = async () => {
 // Authenticate with Google
 export const signInWithGoogle = async () => {
     try {
-        const result = await signInWithPopup(auth, googleProvider);
+        let result;
+        // Check if current user is anonymous. If so, try to link.
+        if (auth.currentUser && auth.currentUser.isAnonymous) {
+            try {
+                result = await linkWithPopup(auth.currentUser, googleProvider);
+            } catch (linkError: any) {
+                if (linkError.code === 'auth/credential-already-in-use') {
+                    // Google account already exists. We must sign in to it, abandoning the anon account.
+                    // This explains why users might see "2 separate users" if they link to an existing account.
+                    console.log("Account exists, switching to it...");
+                    result = await signInWithPopup(auth, googleProvider);
+                } else {
+                    throw linkError;
+                }
+            }
+        } else {
+            // Not anonymous or not logged in, just sign in normally
+            result = await signInWithPopup(auth, googleProvider);
+        }
         return result.user;
     } catch (error: any) {
         if (error.code === 'auth/unauthorized-domain') {
