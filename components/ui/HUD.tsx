@@ -68,7 +68,7 @@ export const HUD: React.FC<HUDProps> = ({
                 </button>
             )}
 
-            {/* PLAYER HP HUD (Battle Mode) - Moved lower to avoid overlap with back button or top elements on small screens */}
+            {/* PLAYER HP HUD (Battle Mode) */}
             {gameMode === 'battle' && gameState === GameState.PLAYING && (
                 <div className="absolute top-16 left-4 md:top-24 md:left-8 z-30 pointer-events-none animate-fade-in">
                     <div className="flex flex-col gap-1">
@@ -87,7 +87,7 @@ export const HUD: React.FC<HUDProps> = ({
                 </div>
             )}
 
-            {/* Powerup HUD - Moved to BOTTOM to prevent overlap with Boss HUD */}
+            {/* Powerup HUD - BOTTOM */}
             {(gameState === GameState.PLAYING) && activePowerup && gameMode !== 'battle' && (
                 <div className="absolute bottom-10 md:bottom-12 left-0 right-0 flex justify-center z-10 pointer-events-none">
                     <div className="bg-slate-900/80 backdrop-blur-md rounded-full px-5 py-2 border border-white/20 flex items-center gap-3 shadow-xl transform scale-90 md:scale-100">
@@ -113,23 +113,23 @@ export const HUD: React.FC<HUDProps> = ({
                 </div>
             )}
 
-            {/* BOSS HUD - Top Center, slightly lower than Score */}
+            {/* BOSS HUD - Pushed down to avoid overlap */}
             {bossInfo.active && (
-                <div className="absolute top-20 md:top-28 left-0 right-0 flex justify-center z-20 animate-fade-in-up pointer-events-none">
-                    <div className="w-[85%] max-w-md px-2">
-                    <div className="bg-slate-900/90 backdrop-blur-md p-2.5 rounded-xl border border-red-500/50 shadow-2xl">
-                        <div className="flex justify-between items-center mb-1">
-                            <span className="text-red-500 font-black tracking-widest text-[10px] uppercase">GIANT BIRD</span>
-                            <span className="text-white font-bold text-[10px]">{Math.ceil(bossInfo.hp)} / {bossInfo.maxHp}</span>
+                <div className="absolute top-32 md:top-40 left-0 right-0 flex justify-center z-20 animate-fade-in-up pointer-events-none">
+                    <div className="w-[60%] md:w-[70%] max-w-sm px-2">
+                        <div className="bg-slate-900/90 backdrop-blur-md p-2 rounded-xl border border-red-500/50 shadow-2xl">
+                            <div className="flex justify-between items-center mb-1">
+                                <span className="text-red-500 font-black tracking-widest text-[9px] md:text-[10px] uppercase">GIANT BIRD</span>
+                                <span className="text-white font-bold text-[9px] md:text-[10px]">{Math.ceil(bossInfo.hp)} / {bossInfo.maxHp}</span>
+                            </div>
+                            <div className="w-full h-2 md:h-3 bg-slate-800 rounded-full overflow-hidden border border-white/10 relative">
+                                <div className="absolute inset-0 bg-red-900/50"></div>
+                                <div 
+                                    className="h-full bg-gradient-to-r from-red-600 to-red-500 transition-all duration-200"
+                                    style={{ width: `${(bossInfo.hp / bossInfo.maxHp) * 100}%` }}
+                                ></div>
+                            </div>
                         </div>
-                        <div className="w-full h-3 bg-slate-800 rounded-full overflow-hidden border border-white/10 relative">
-                            <div className="absolute inset-0 bg-red-900/50"></div>
-                            <div 
-                                className="h-full bg-gradient-to-r from-red-600 to-red-500 transition-all duration-200"
-                                style={{ width: `${(bossInfo.hp / bossInfo.maxHp) * 100}%` }}
-                            ></div>
-                        </div>
-                    </div>
                     </div>
                 </div>
             )}
@@ -137,28 +137,31 @@ export const HUD: React.FC<HUDProps> = ({
             {/* Score HUD */}
             {(gameState === GameState.PLAYING || gameState === GameState.PAUSED) && (
                 <div className="absolute top-4 md:top-10 left-0 right-0 text-center z-10 pointer-events-none flex flex-col items-center">
-                    <span className={`text-5xl md:text-6xl font-black drop-shadow-lg select-none font-['Outfit'] transition-all text-white leading-none scale-90 md:scale-100`}>
+                    <span className={`text-4xl md:text-6xl font-black drop-shadow-lg select-none font-['Outfit'] transition-all text-white leading-none scale-100`}>
                         {score}
                     </span>
                     
+                    {/* Always show Best Score */}
                     {gameMode !== 'playground' && (
                         <div className="text-white/50 font-bold text-[10px] md:text-sm tracking-widest uppercase drop-shadow-sm mt-1">
                             Best {highScore}
                         </div>
                     )}
 
+                    {/* Always show Battle Badge in Battle Mode */}
                     {gameMode === 'battle' && (
-                        <div className="flex justify-center mt-2">
-                            <div className="px-3 py-1 bg-red-950/40 backdrop-blur-md border border-red-500/30 rounded-full shadow-[0_0_15px_rgba(220,38,38,0.3)] flex items-center gap-2">
+                        <div className="flex justify-center mt-1">
+                            <div className="px-2 py-0.5 bg-red-950/40 backdrop-blur-md border border-red-500/30 rounded-full shadow-[0_0_15px_rgba(220,38,38,0.3)] flex items-center gap-2">
                                 <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.8)]"></span>
-                                <span className="text-white/90 font-bold tracking-[0.2em] text-[10px] uppercase drop-shadow-md">BATTLE</span>
+                                <span className="text-white/90 font-bold tracking-[0.2em] text-[8px] md:text-[10px] uppercase drop-shadow-md">BATTLE</span>
                             </div>
                         </div>
                     )}
+
                     {gameMode === 'playground' && (
                         <div className="flex justify-center mt-2">
                             <div className="px-3 py-1 bg-blue-950/40 backdrop-blur-md border border-blue-500/30 rounded-full shadow-[0_0_15px_rgba(59,130,246,0.3)] flex items-center gap-2">
-                                <span className="text-white/90 font-bold tracking-[0.2em] text-[10px] uppercase drop-shadow-md">PRACTICE</span>
+                                <span className="text-white/90 font-bold tracking-[0.2em] text-[8px] md:text-[10px] uppercase drop-shadow-md">PRACTICE</span>
                             </div>
                         </div>
                     )}
