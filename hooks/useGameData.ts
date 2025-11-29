@@ -88,11 +88,6 @@ export const useGameData = () => {
         }
 
         // We have an authUser (Anonymous or Google)
-        // NOTE: We do NOT set 'user' state here immediately. 
-        // We wait for the data subscription to prevent race conditions where 
-        // the 'user' state updates before the 'data' state, triggering a save 
-        // of default data (0 score) to the new user's cloud storage.
-
         const userProfile = {
             displayName: authUser.displayName,
             email: authUser.email,
@@ -109,6 +104,15 @@ export const useGameData = () => {
             // Mark that we are processing a remote update for this specific UID
             loadedUid.current = authUser.uid;
             isRemoteUpdate.current = true;
+            
+            // IMPORTANT: Clear the flag after a short delay. 
+            // This ensures that ALL React effects triggered by the state updates below 
+            // will see isRemoteUpdate=true and skip saving back to the cloud.
+            // If we simply reset it in the effects, the first effect to run would enable saving for subsequent effects,
+            // creating a race condition.
+            setTimeout(() => {
+                isRemoteUpdate.current = false;
+            }, 200);
 
             setHighScores(prev => ({
                 standard: Math.max(prev.standard, data.highScores?.standard || 0),
@@ -161,6 +165,7 @@ export const useGameData = () => {
   
   // Helper to check if we should save to cloud
   const shouldSaveToCloud = (currentUser: any) => {
+      // Prevent saving if this update came from the cloud
       if (isRemoteUpdate.current) return false;
       // Critical: Only save if we have successfully loaded data for this user
       if (!currentUser || currentUser.uid !== loadedUid.current) return false;
@@ -173,9 +178,6 @@ export const useGameData = () => {
       
       if (shouldSaveToCloud(user)) {
           saveGameData(user.uid, { highScores }); 
-      } else {
-          // Reset flag if it was true, so subsequent local changes trigger save
-          if (isRemoteUpdate.current) isRemoteUpdate.current = false;
       }
   }, [highScores, user]);
 
@@ -183,8 +185,6 @@ export const useGameData = () => {
       localStorage.setItem('fliply_stats', JSON.stringify(stats));
       if (shouldSaveToCloud(user)) {
           saveGameData(user.uid, { stats }); 
-      } else {
-          if (isRemoteUpdate.current) isRemoteUpdate.current = false;
       }
   }, [stats, user]);
 
@@ -192,8 +192,6 @@ export const useGameData = () => {
       localStorage.setItem('fliply_unlockedSkins', JSON.stringify(unlockedSkins));
       if (shouldSaveToCloud(user)) {
           saveGameData(user.uid, { unlockedSkins }); 
-      } else {
-          if (isRemoteUpdate.current) isRemoteUpdate.current = false;
       }
   }, [unlockedSkins, user]);
 
@@ -201,8 +199,6 @@ export const useGameData = () => {
       localStorage.setItem('fliply_currentSkinId', JSON.stringify(currentSkinId));
       if (shouldSaveToCloud(user)) {
           saveGameData(user.uid, { currentSkinId }); 
-      } else {
-          if (isRemoteUpdate.current) isRemoteUpdate.current = false;
       }
   }, [currentSkinId, user]);
 
@@ -210,8 +206,6 @@ export const useGameData = () => {
       localStorage.setItem('fliply_muted', JSON.stringify(isMuted));
       if (shouldSaveToCloud(user)) {
           saveGameData(user.uid, { muted: isMuted }); 
-      } else {
-          if (isRemoteUpdate.current) isRemoteUpdate.current = false;
       }
   }, [isMuted, user]);
 

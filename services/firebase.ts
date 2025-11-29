@@ -17,7 +17,8 @@ import {
   getFirestore, 
   doc, 
   setDoc, 
-  getDoc, 
+  getDoc,
+  deleteDoc,
   enableIndexedDbPersistence, 
   collection, 
   query, 
@@ -96,12 +97,23 @@ export const signIn = async () => {
     }
 };
 
+export const deleteUserDocument = async (uid: string) => {
+    if (!uid) return;
+    try {
+        await deleteDoc(doc(db, 'users', uid));
+        console.log(`Deleted anonymous user data for ${uid}`);
+    } catch (e) {
+        console.error("Error deleting anonymous data", e);
+    }
+};
+
 // Authenticate with Google
 export const signInWithGoogle = async () => {
     try {
         let result;
         // Check if current user is anonymous. If so, try to link.
         if (auth.currentUser && auth.currentUser.isAnonymous) {
+            const anonUid = auth.currentUser.uid;
             try {
                 result = await linkWithPopup(auth.currentUser, googleProvider);
             } catch (linkError: any) {
@@ -110,6 +122,11 @@ export const signInWithGoogle = async () => {
                     // This explains why users might see "2 separate users" if they link to an existing account.
                     console.log("Account exists, switching to it...");
                     result = await signInWithPopup(auth, googleProvider);
+                    
+                    // Cleanup: Delete the old anonymous account data to prevent table flooding
+                    if (anonUid) {
+                        await deleteUserDocument(anonUid);
+                    }
                 } else {
                     throw linkError;
                 }
