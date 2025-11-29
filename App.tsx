@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { GameEngine } from './components/GameEngine';
 import { Button } from './components/Button';
@@ -18,7 +19,11 @@ const App: React.FC = () => {
       playground: 0
   });
   
+  // Player Stats
+  const [stats, setStats] = useState({ gamesPlayed: 0, totalScore: 0 });
+  
   const [isNewHighScore, setIsNewHighScore] = useState(false);
+  
   const [shake, setShake] = useState(false);
   const [activePowerup, setActivePowerup] = useState<ActivePowerup | null>(null);
   const [isMuted, setIsMuted] = useState(false);
@@ -55,6 +60,12 @@ const App: React.FC = () => {
         danger: storedDanger ? parseInt(storedDanger, 10) : 0,
         playground: 0
     });
+    
+    // Load Stats
+    const storedStats = localStorage.getItem('flapai-stats');
+    if (storedStats) {
+        setStats(JSON.parse(storedStats));
+    }
     
     // Force unlock all default skins for existing users
     const allDefaultSkins = Object.values(SKINS)
@@ -94,7 +105,8 @@ const App: React.FC = () => {
                 },
                 unlockedSkins: JSON.parse(localStorage.getItem('flapai-unlockedskins') || '[]'),
                 currentSkinId: localStorage.getItem('flapai-currentskin') || 'default',
-                muted: localStorage.getItem('flapai-muted') === 'true'
+                muted: localStorage.getItem('flapai-muted') === 'true',
+                stats: JSON.parse(localStorage.getItem('flapai-stats') || '{"gamesPlayed": 0, "totalScore": 0}')
             };
 
             // Sync with Cloud
@@ -107,6 +119,7 @@ const App: React.FC = () => {
                 if (cloudData.highScores) setHighScores(prev => ({ ...prev, ...cloudData.highScores }));
                 if (cloudData.unlockedSkins) setUnlockedSkins(cloudData.unlockedSkins);
                 if (cloudData.currentSkinId) setCurrentSkinId(cloudData.currentSkinId as SkinId);
+                if (cloudData.stats) setStats(cloudData.stats);
                 if (cloudData.muted !== undefined) {
                     setIsMuted(cloudData.muted);
                     audioService.setMuted(cloudData.muted);
@@ -119,14 +132,13 @@ const App: React.FC = () => {
                 localStorage.setItem('flapai-unlockedskins', JSON.stringify(cloudData.unlockedSkins || []));
                 localStorage.setItem('flapai-currentskin', cloudData.currentSkinId || 'default');
                 localStorage.setItem('flapai-muted', String(cloudData.muted));
+                localStorage.setItem('flapai-stats', JSON.stringify(cloudData.stats || {gamesPlayed: 0, totalScore: 0}));
 
                 setTimeout(() => { isSyncing.current = false; }, 100);
             }
         } else {
             setUser(null);
             // If not logged in, try anonymous login for Guest Mode
-            // This ensures we always have a uid for saving 'somewhere' if possible, 
-            // or ready for upgrade.
             signIn(); 
         }
     };
@@ -144,6 +156,14 @@ const App: React.FC = () => {
           saveGameData(user.uid, { highScores });
       }
   }, [highScores, user]);
+
+  // Save Stats
+  useEffect(() => {
+      if (isSyncing.current) return;
+      if (user) {
+          saveGameData(user.uid, { stats });
+      }
+  }, [stats, user]);
 
   // Save Skins
   useEffect(() => {
@@ -172,6 +192,18 @@ const App: React.FC = () => {
 
   useEffect(() => {
     if (gameState === GameState.GAME_OVER) {
+      // Update Stats
+      if (gameMode !== 'playground') {
+           setStats(prev => {
+               const newStats = {
+                   gamesPlayed: prev.gamesPlayed + 1,
+                   totalScore: prev.totalScore + score
+               };
+               localStorage.setItem('flapai-stats', JSON.stringify(newStats));
+               return newStats;
+           });
+      }
+
       // Only check and update high scores if NOT in playground mode
       if (gameMode !== 'playground') {
         const currentHigh = highScores[gameMode];
@@ -631,7 +663,14 @@ const App: React.FC = () => {
            <div className="w-full max-w-4xl h-full flex flex-col">
               <div className="flex justify-between items-center mb-8">
                   <h2 className="text-4xl font-black text-white">SKIN SHOP</h2>
-                  <button onClick={() => setIsShopOpen(false)} className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-white hover:bg-white/20">✕</button>
+                  <div className="flex items-center gap-4">
+                      {/* Stats Display in Shop */}
+                      <div className="bg-black/30 px-4 py-1.5 rounded-full flex gap-4 text-xs font-bold border border-white/10">
+                          <div className="text-slate-300">GAMES: <span className="text-white">{stats.gamesPlayed}</span></div>
+                          <div className="text-slate-300">LIFETIME SCORE: <span className="text-amber-400">{stats.totalScore}</span></div>
+                      </div>
+                      <button onClick={() => setIsShopOpen(false)} className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-white hover:bg-white/20">✕</button>
+                  </div>
               </div>
 
               <div className="flex-1 overflow-y-auto grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 pb-8 no-scrollbar">
