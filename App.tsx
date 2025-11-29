@@ -109,8 +109,15 @@ const App: React.FC = () => {
                 stats: JSON.parse(localStorage.getItem('flapai-stats') || '{"gamesPlayed": 0, "totalScore": 0}')
             };
 
+            // Prepare User Identity Data
+            const userProfile = {
+                displayName: authUser.displayName,
+                email: authUser.email,
+                photoURL: authUser.photoURL
+            };
+
             // Sync with Cloud
-            const cloudData = await syncUserData(authUser.uid, localData);
+            const cloudData = await syncUserData(authUser.uid, localData, userProfile);
             
             // Apply Cloud Data (Remote Wins or Merged)
             if (cloudData) {
