@@ -13,7 +13,19 @@ import {
   setPersistence,
   browserLocalPersistence
 } from "firebase/auth";
-import { getFirestore, doc, setDoc, getDoc, enableIndexedDbPersistence, collection, query, orderBy, limit, getDocs } from "firebase/firestore";
+import { 
+  getFirestore, 
+  doc, 
+  setDoc, 
+  getDoc, 
+  enableIndexedDbPersistence, 
+  collection, 
+  query, 
+  orderBy, 
+  limit, 
+  getDocs,
+  onSnapshot
+} from "firebase/firestore";
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
@@ -170,6 +182,17 @@ export const updateUserProfile = async (uid: string, data: any) => {
     }
 };
 
+// Listen to User Data Changes (Real-time)
+export const subscribeToGameData = (uid: string, onData: (data: any) => void) => {
+    if (!uid) return () => {};
+    const userRef = doc(db, 'users', uid);
+    return onSnapshot(userRef, (docSnap) => {
+        if (docSnap.exists()) {
+            onData(docSnap.data());
+        }
+    });
+};
+
 // Load User Data: Fetches directly from DB or creates defaults. No LocalStorage.
 export const loadUserGameData = async (uid: string, userProfile?: { displayName: string | null, email: string | null, photoURL: string | null }) => {
     if (!uid) return null;
@@ -196,10 +219,6 @@ export const loadUserGameData = async (uid: string, userProfile?: { displayName:
             const remoteData = snap.data();
             
             // LOGIC: Ensure User has a Display Name
-            // If they signed in with Google, use that.
-            // If they are Anonymous and have no name in DB, generate one.
-            // If they are Anonymous and HAVE a name in DB, keep it.
-            
             let finalDisplayName = remoteData.displayName;
             let shouldUpdate = false;
             let updatePayload: any = {};
@@ -230,7 +249,6 @@ export const loadUserGameData = async (uid: string, userProfile?: { displayName:
                 await setDoc(userRef, updatePayload, { merge: true });
             }
 
-            // Return remote data merged with structure to ensure all fields exist
             return {
                 highScores: { ...defaultData.highScores, ...remoteData.highScores },
                 unlockedSkins: remoteData.unlockedSkins || defaultData.unlockedSkins,
