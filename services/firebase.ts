@@ -1,3 +1,4 @@
+
 import { initializeApp } from "firebase/app";
 import { getAnalytics } from "firebase/analytics";
 import { 
@@ -8,7 +9,9 @@ import {
   linkWithPopup,
   signOut,
   onAuthStateChanged,
-  User
+  User,
+  setPersistence,
+  browserLocalPersistence
 } from "firebase/auth";
 import { getFirestore, doc, setDoc, getDoc, enableIndexedDbPersistence, collection, query, orderBy, limit, getDocs } from "firebase/firestore";
 
@@ -29,6 +32,11 @@ const analytics = getAnalytics(app);
 const auth = getAuth(app);
 const db = getFirestore(app);
 const googleProvider = new GoogleAuthProvider();
+
+// Explicitly set persistence to local (survives browser restart)
+setPersistence(auth, browserLocalPersistence).catch((error) => {
+    console.error("Auth Persistence Error", error);
+});
 
 // Enable offline persistence
 try {
@@ -57,6 +65,9 @@ const generateRandomName = () => {
 // Authenticate Anonymously
 export const signIn = async () => {
     try {
+        // If already signed in, don't create a new one
+        if (auth.currentUser) return auth.currentUser;
+        
         const userCredential = await signInAnonymously(auth);
         return userCredential.user;
     } catch (error: any) {
@@ -83,8 +94,9 @@ export const signInWithGoogle = async () => {
                 result = await linkWithPopup(auth.currentUser, googleProvider);
             } catch (linkError: any) {
                 if (linkError.code === 'auth/credential-already-in-use') {
-                    // Google account already exists, so we must sign in to it instead of linking.
-                    // This creates a separate session if the anon user had data, but is necessary if the account exists.
+                    // Google account already exists. We must sign in to it, abandoning the anon account.
+                    // This explains why users might see "2 separate users" if they link to an existing account.
+                    console.log("Account exists, switching to it...");
                     result = await signInWithPopup(auth, googleProvider);
                 } else {
                     throw linkError;
