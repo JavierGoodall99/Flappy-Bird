@@ -49,6 +49,9 @@ export const useGameData = () => {
   
   // Use a ref to track if an update came from the server (to avoid infinite save loops)
   const isRemoteUpdate = useRef(false);
+  // Track which UID we have fully loaded data for to prevent overwriting cloud data during user switches
+  const loadedUid = useRef<string | null>(null);
+  
   // Store the unsubscribe function for the snapshot listener
   const unsubSnapshot = useRef<(() => void) | null>(null);
 
@@ -69,10 +72,11 @@ export const useGameData = () => {
              
              // Clear local user state
              setUser(null);
+             loadedUid.current = null;
              localStorage.removeItem('fliply_user_cache');
              
-             // Reset game data to defaults
-             isRemoteUpdate.current = true; // Block effects from saving resets to DB (though user=null blocks it anyway)
+             // Reset game data to defaults (locally only, don't save to cloud yet)
+             isRemoteUpdate.current = true; 
              setHighScores({ standard: 0, battle: 0, danger: 0, playground: 0 });
              setStats({ gamesPlayed: 0, totalScore: 0 });
              setUnlockedSkins(['default']);
@@ -84,12 +88,10 @@ export const useGameData = () => {
         }
 
         // We have an authUser (Anonymous or Google)
-        
-        // Merge authUser properties locally first
-        setUser((prev: any) => {
-            if (!prev) return authUser;
-            return { ...prev, uid: authUser.uid, email: authUser.email }; 
-        });
+        // NOTE: We do NOT set 'user' state here immediately. 
+        // We wait for the data subscription to prevent race conditions where 
+        // the 'user' state updates before the 'data' state, triggering a save 
+        // of default data (0 score) to the new user's cloud storage.
 
         const userProfile = {
             displayName: authUser.displayName,
@@ -98,12 +100,14 @@ export const useGameData = () => {
         };
 
         // 1. Initial Load to ensure document exists (and create if needed)
-        const cloudData = await loadUserGameData(authUser.uid, userProfile);
+        await loadUserGameData(authUser.uid, userProfile);
         
         // 2. Subscribe to real-time updates to handle multiple tabs
         unsubSnapshot.current = subscribeToGameData(authUser.uid, (data) => {
             if (!data) return;
             
+            // Mark that we are processing a remote update for this specific UID
+            loadedUid.current = authUser.uid;
             isRemoteUpdate.current = true;
 
             setHighScores(prev => ({
@@ -129,6 +133,7 @@ export const useGameData = () => {
                 audioService.setMuted(data.muted);
             }
 
+            // Finally, update the user state now that data is synced
             setUser((prev: any) => ({ 
                 ...prev, 
                 uid: authUser.uid,
@@ -153,40 +158,61 @@ export const useGameData = () => {
   }, []); // Run once on mount
 
   // Persistence Effects (Save to LocalStorage AND Cloud)
+  
+  // Helper to check if we should save to cloud
+  const shouldSaveToCloud = (currentUser: any) => {
+      if (isRemoteUpdate.current) return false;
+      // Critical: Only save if we have successfully loaded data for this user
+      if (!currentUser || currentUser.uid !== loadedUid.current) return false;
+      return true;
+  };
+
   useEffect(() => { 
       // Always save to local storage
       localStorage.setItem('fliply_highScores', JSON.stringify(highScores));
       
-      // Only save to Cloud if this is NOT a remote update to prevent infinite loops
-      if (isRemoteUpdate.current) {
-          isRemoteUpdate.current = false; // Reset the flag
-          return;
+      if (shouldSaveToCloud(user)) {
+          saveGameData(user.uid, { highScores }); 
+      } else {
+          // Reset flag if it was true, so subsequent local changes trigger save
+          if (isRemoteUpdate.current) isRemoteUpdate.current = false;
       }
-      if (user) saveGameData(user.uid, { highScores }); 
   }, [highScores, user]);
 
   useEffect(() => { 
       localStorage.setItem('fliply_stats', JSON.stringify(stats));
-      if (isRemoteUpdate.current) return;
-      if (user) saveGameData(user.uid, { stats }); 
+      if (shouldSaveToCloud(user)) {
+          saveGameData(user.uid, { stats }); 
+      } else {
+          if (isRemoteUpdate.current) isRemoteUpdate.current = false;
+      }
   }, [stats, user]);
 
   useEffect(() => { 
       localStorage.setItem('fliply_unlockedSkins', JSON.stringify(unlockedSkins));
-      if (isRemoteUpdate.current) return;
-      if (user) saveGameData(user.uid, { unlockedSkins }); 
+      if (shouldSaveToCloud(user)) {
+          saveGameData(user.uid, { unlockedSkins }); 
+      } else {
+          if (isRemoteUpdate.current) isRemoteUpdate.current = false;
+      }
   }, [unlockedSkins, user]);
 
   useEffect(() => { 
       localStorage.setItem('fliply_currentSkinId', JSON.stringify(currentSkinId));
-      if (isRemoteUpdate.current) return;
-      if (user) saveGameData(user.uid, { currentSkinId }); 
+      if (shouldSaveToCloud(user)) {
+          saveGameData(user.uid, { currentSkinId }); 
+      } else {
+          if (isRemoteUpdate.current) isRemoteUpdate.current = false;
+      }
   }, [currentSkinId, user]);
 
   useEffect(() => { 
       localStorage.setItem('fliply_muted', JSON.stringify(isMuted));
-      if (isRemoteUpdate.current) return;
-      if (user) saveGameData(user.uid, { muted: isMuted }); 
+      if (shouldSaveToCloud(user)) {
+          saveGameData(user.uid, { muted: isMuted }); 
+      } else {
+          if (isRemoteUpdate.current) isRemoteUpdate.current = false;
+      }
   }, [isMuted, user]);
 
   // Cache User Display Info for Optimistic Load
