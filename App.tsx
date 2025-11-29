@@ -5,7 +5,7 @@ import { Button } from './components/Button';
 import { GameState, ActivePowerup, SkinId, Skin, PowerupType, GameMode } from './types';
 import { SKINS, POWERUP_INFO, WEAPON_LOADOUTS } from './constants';
 import { audioService } from './services/audioService';
-import { signIn, signInWithGoogle, logout, subscribeToAuth, loadUserGameData, saveGameData } from './services/firebase';
+import { signIn, signInWithGoogle, logout, subscribeToAuth, loadUserGameData, saveGameData, getLeaderboard, LeaderboardEntry } from './services/firebase';
 
 const App: React.FC = () => {
   const [gameState, setGameState] = useState<GameState>(GameState.START);
@@ -39,6 +39,12 @@ const App: React.FC = () => {
   const [isShopOpen, setIsShopOpen] = useState(false);
   const [isGuideOpen, setIsGuideOpen] = useState(false);
   const [isWeaponSelectOpen, setIsWeaponSelectOpen] = useState(false);
+
+  // Leaderboard State
+  const [isLeaderboardOpen, setIsLeaderboardOpen] = useState(false);
+  const [leaderboardTab, setLeaderboardTab] = useState<'standard' | 'battle'>('standard');
+  const [leaderboardData, setLeaderboardData] = useState<LeaderboardEntry[]>([]);
+  const [leaderboardLoading, setLeaderboardLoading] = useState(false);
 
   // Testing State
   const [initialPowerup, setInitialPowerup] = useState<PowerupType | null>(null);
@@ -160,6 +166,7 @@ const App: React.FC = () => {
     setIsNewHighScore(false);
     setIsGuideOpen(false);
     setIsWeaponSelectOpen(false);
+    setIsLeaderboardOpen(false);
     setBossInfo({ active: false, hp: 0, maxHp: 0 });
     setPlayerHealth({ current: 1, max: 1 });
   }, []);
@@ -203,10 +210,28 @@ const App: React.FC = () => {
       logout();
   };
 
+  const handleOpenLeaderboard = () => {
+      setIsLeaderboardOpen(true);
+      // Data fetching is handled by the useEffect below
+  };
+
+  // Automatically fetch leaderboard data when open or tab changes
+  useEffect(() => {
+      if (isLeaderboardOpen) {
+          const fetchLeaderboard = async () => {
+              setLeaderboardLoading(true);
+              const data = await getLeaderboard(leaderboardTab);
+              setLeaderboardData(data);
+              setLeaderboardLoading(false);
+          };
+          fetchLeaderboard();
+      }
+  }, [isLeaderboardOpen, leaderboardTab]);
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (isLoading) return;
-      if (isShopOpen || isGuideOpen || isWeaponSelectOpen) return; // Disable game controls in menus
+      if (isShopOpen || isGuideOpen || isWeaponSelectOpen || isLeaderboardOpen) return; // Disable game controls in menus
       if (e.code === 'Escape' || e.code === 'KeyP') togglePause();
       if (e.code === 'KeyM') toggleMute({ stopPropagation: () => {} } as React.MouseEvent);
       if (e.code === 'Space') {
@@ -224,7 +249,7 @@ const App: React.FC = () => {
       window.removeEventListener('mousedown', handleTouchOrClick);
       window.removeEventListener('touchstart', handleTouchOrClick);
     };
-  }, [togglePause, gameState, startGame, isShopOpen, isGuideOpen, isWeaponSelectOpen, initialPowerup, gameMode, isMuted, isLoading]);
+  }, [togglePause, gameState, startGame, isShopOpen, isGuideOpen, isWeaponSelectOpen, isLeaderboardOpen, initialPowerup, gameMode, isMuted, isLoading]);
   
   // Dummy handler to prevent errors in cleanup
   const handleTouchOrClick = () => {};
@@ -287,7 +312,7 @@ const App: React.FC = () => {
       </div>
 
       {/* MUTE BUTTON - Always Visible (except deep menus maybe) */}
-      {!isShopOpen && !isGuideOpen && !isWeaponSelectOpen && (
+      {!isShopOpen && !isGuideOpen && !isWeaponSelectOpen && !isLeaderboardOpen && (
           <button 
             onClick={toggleMute}
             className="absolute top-6 left-6 md:top-8 md:left-8 z-30 w-10 h-10 md:w-12 md:h-12 bg-white/20 backdrop-blur-md border border-white/30 rounded-full flex items-center justify-center hover:bg-white/30 transition-all active:scale-95 group"
@@ -301,7 +326,7 @@ const App: React.FC = () => {
       )}
 
       {/* USER PROFILE / AUTH - TOP RIGHT on START SCREEN */}
-      {gameState === GameState.START && !isShopOpen && !isGuideOpen && !isWeaponSelectOpen && (
+      {gameState === GameState.START && !isShopOpen && !isGuideOpen && !isWeaponSelectOpen && !isLeaderboardOpen && (
           <div className="absolute top-6 right-6 md:top-8 md:right-8 z-30 flex flex-col items-end gap-2 animate-fade-in">
               {user && !user.isAnonymous ? (
                   <div className="flex items-center gap-2 bg-slate-900/80 backdrop-blur-md border border-white/20 rounded-full pl-1 pr-4 py-1 shadow-lg">
@@ -471,7 +496,7 @@ const App: React.FC = () => {
       )}
 
       {/* Start Screen */}
-      {gameState === GameState.START && !isShopOpen && !isGuideOpen && !isWeaponSelectOpen && (
+      {gameState === GameState.START && !isShopOpen && !isGuideOpen && !isWeaponSelectOpen && !isLeaderboardOpen && (
         <div className="absolute inset-0 flex items-center justify-center z-20 bg-black/20 backdrop-blur-sm">
           <div className="glass-panel p-6 md:p-10 rounded-3xl text-center w-full max-w-md mx-4 shadow-2xl transform transition-all animate-fade-in-up max-h-[90vh] overflow-y-auto no-scrollbar">
             <h1 className="text-5xl md:text-7xl font-black text-white mb-2 drop-shadow-xl tracking-tighter italic transform -rotate-2">
@@ -490,7 +515,7 @@ const App: React.FC = () => {
                 </button>
             </div>
 
-            <div className="flex gap-3 md:gap-4 w-full">
+            <div className="flex gap-3 md:gap-4 w-full mb-3">
               <button 
                 onClick={() => setIsShopOpen(true)}
                 className="flex-1 py-3 md:py-4 rounded-2xl font-bold text-base tracking-wide bg-white/5 text-white border border-white/10 hover:bg-white/15 hover:border-white/30 transition-all flex flex-col items-center justify-center gap-1 group"
@@ -506,9 +531,119 @@ const App: React.FC = () => {
                 POWERS
               </button>
             </div>
+            
+            <button 
+                onClick={handleOpenLeaderboard}
+                className="w-full py-3 rounded-2xl font-bold text-base tracking-wide bg-gradient-to-r from-yellow-500/20 to-amber-500/20 text-amber-200 border border-amber-500/30 hover:bg-amber-500/30 hover:border-amber-500/50 transition-all flex items-center justify-center gap-2 group"
+            >
+                <span className="text-xl group-hover:scale-110 transition-transform">🏆</span>
+                LEADERBOARD
+            </button>
+
             <div className="text-white/30 text-xs uppercase tracking-widest mt-4 md:mt-6">Press Space to Start</div>
           </div>
         </div>
+      )}
+
+      {/* LEADERBOARD */}
+      {isLeaderboardOpen && (
+          <div className="absolute inset-0 z-50 bg-slate-900/90 backdrop-blur-lg flex flex-col items-center justify-center p-6 animate-fade-in">
+              <div className="w-full max-w-2xl h-full flex flex-col max-h-[85vh]">
+                  <div className="flex justify-between items-center mb-4">
+                      <div className="flex items-center gap-3">
+                        <span className="text-4xl">🏆</span>
+                        <h2 className="text-3xl font-black text-white italic tracking-tighter">LEADERBOARD</h2>
+                      </div>
+                      <button onClick={() => setIsLeaderboardOpen(false)} className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-white hover:bg-white/20 transition-colors">✕</button>
+                  </div>
+
+                  {/* MODE TOGGLE */}
+                  <div className="flex bg-white/5 p-1 rounded-xl mb-6 border border-white/10 w-full max-w-sm self-center">
+                      <button 
+                          onClick={() => setLeaderboardTab('standard')}
+                          className={`flex-1 py-2 rounded-lg text-xs font-bold uppercase tracking-widest transition-all ${leaderboardTab === 'standard' ? 'bg-amber-500 text-black shadow-lg scale-100' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
+                      >
+                          Classic
+                      </button>
+                      <button 
+                          onClick={() => setLeaderboardTab('battle')}
+                          className={`flex-1 py-2 rounded-lg text-xs font-bold uppercase tracking-widest transition-all ${leaderboardTab === 'battle' ? 'bg-red-600 text-white shadow-lg scale-100' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
+                      >
+                          Battle
+                      </button>
+                  </div>
+
+                  <div className="flex-1 overflow-hidden bg-white/5 rounded-3xl border border-white/10 flex flex-col">
+                      <div className="grid grid-cols-6 p-4 bg-white/5 font-bold text-xs uppercase tracking-widest text-slate-400 border-b border-white/10">
+                          <div className="col-span-1 text-center">Rank</div>
+                          <div className="col-span-4 pl-2">Player</div>
+                          <div className="col-span-1 text-right">Score</div>
+                      </div>
+                      
+                      <div className="flex-1 overflow-y-auto no-scrollbar relative">
+                          {leaderboardLoading ? (
+                               <div className="absolute inset-0 flex items-center justify-center">
+                                   <div className="w-8 h-8 border-2 border-amber-400 border-t-transparent rounded-full animate-spin"></div>
+                               </div>
+                          ) : (
+                               <div className="flex flex-col">
+                                   {leaderboardData.length === 0 ? (
+                                       <div className="text-center p-8 text-white/30 italic">No records found yet.</div>
+                                   ) : (
+                                       leaderboardData.map((entry, index) => {
+                                           const isMe = user && entry.uid === user.uid;
+                                           return (
+                                               <div 
+                                                   key={entry.uid} 
+                                                   className={`grid grid-cols-6 p-4 items-center border-b border-white/5 hover:bg-white/5 transition-colors
+                                                      ${isMe ? 'bg-amber-500/10 hover:bg-amber-500/20' : ''}
+                                                   `}
+                                               >
+                                                   <div className="col-span-1 flex justify-center">
+                                                       {index < 3 ? (
+                                                           <div className={`w-8 h-8 rounded-full flex items-center justify-center text-lg shadow-lg
+                                                               ${index === 0 ? 'bg-yellow-400 text-yellow-900' : 
+                                                                 index === 1 ? 'bg-slate-300 text-slate-800' : 'bg-orange-400 text-orange-900'}
+                                                           `}>
+                                                               {index === 0 ? '🥇' : index === 1 ? '🥈' : '🥉'}
+                                                           </div>
+                                                       ) : (
+                                                           <span className="text-slate-400 font-bold text-lg">#{index + 1}</span>
+                                                       )}
+                                                   </div>
+                                                   <div className="col-span-4 flex items-center gap-3 pl-2">
+                                                       <div className="w-10 h-10 rounded-full bg-slate-700 overflow-hidden border border-white/20 flex-shrink-0">
+                                                           {entry.photoURL ? (
+                                                               <img src={entry.photoURL} alt="avi" className="w-full h-full object-cover" />
+                                                           ) : (
+                                                               <div className="w-full h-full flex items-center justify-center text-white/50 font-bold">
+                                                                   {entry.displayName.charAt(0).toUpperCase()}
+                                                               </div>
+                                                           )}
+                                                       </div>
+                                                       <div className="flex flex-col">
+                                                           <span className={`font-bold text-sm truncate ${isMe ? 'text-amber-300' : 'text-white'}`}>
+                                                               {entry.displayName} {isMe && '(You)'}
+                                                           </span>
+                                                       </div>
+                                                   </div>
+                                                   <div className="col-span-1 text-right font-black text-xl text-white tracking-wide">
+                                                       {entry.score}
+                                                   </div>
+                                               </div>
+                                           );
+                                       })
+                                   )}
+                               </div>
+                          )}
+                      </div>
+                  </div>
+                  
+                  <div className="mt-4 text-center text-white/30 text-xs">
+                      Top players for {leaderboardTab === 'standard' ? 'Classic' : 'Battle'} Mode
+                  </div>
+              </div>
+          </div>
       )}
 
       {/* WEAPON SELECTOR */}
@@ -651,7 +786,7 @@ const App: React.FC = () => {
       )}
 
       {/* Game Over Screen */}
-      {gameState === GameState.GAME_OVER && !isShopOpen && !isGuideOpen && !isWeaponSelectOpen && (
+      {gameState === GameState.GAME_OVER && !isShopOpen && !isGuideOpen && !isWeaponSelectOpen && !isLeaderboardOpen && (
         <div className="absolute inset-0 flex items-center justify-center z-20 bg-slate-900/60 backdrop-blur-md">
           <div className="glass-panel p-6 md:p-8 rounded-3xl text-center w-full max-w-xs mx-4 shadow-2xl border border-white/10 relative max-h-[90vh] overflow-y-auto no-scrollbar">
             <h2 className={`text-3xl md:text-4xl font-bold text-white mb-4 md:mb-6 tracking-wide`}>GAME OVER</h2>

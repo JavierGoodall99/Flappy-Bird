@@ -10,7 +10,7 @@ import {
   onAuthStateChanged,
   User
 } from "firebase/auth";
-import { getFirestore, doc, setDoc, getDoc, enableIndexedDbPersistence } from "firebase/firestore";
+import { getFirestore, doc, setDoc, getDoc, enableIndexedDbPersistence, collection, query, orderBy, limit, getDocs } from "firebase/firestore";
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
@@ -183,6 +183,35 @@ export const saveGameData = async (uid: string, data: any) => {
         if (error.code === 'unavailable') return; // Offline, Firebase handles it via queue
         console.warn("Save Error", error); 
     }
+};
+
+export interface LeaderboardEntry {
+  uid: string;
+  displayName: string;
+  photoURL: string;
+  score: number;
+}
+
+export const getLeaderboard = async (mode: string = 'standard'): Promise<LeaderboardEntry[]> => {
+  try {
+    const usersRef = collection(db, 'users');
+    // Query top 20 users by high score in the specified mode
+    const q = query(usersRef, orderBy(`highScores.${mode}`, 'desc'), limit(20));
+    const querySnapshot = await getDocs(q);
+    
+    return querySnapshot.docs.map(doc => {
+      const data = doc.data();
+      return {
+        uid: doc.id,
+        displayName: data.displayName || 'Anonymous',
+        photoURL: data.photoURL || '',
+        score: data.highScores?.[mode] || 0
+      };
+    });
+  } catch (error) {
+    console.error("Error fetching leaderboard:", error);
+    return [];
+  }
 };
 
 export { app, analytics, auth, db };
