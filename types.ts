@@ -90,7 +90,7 @@ export type SkinId =
   | 'ninja_sage' | 'pirate_king' | 'enemy' | 'boss';
 
 export interface UnlockCondition {
-  type: 'default' | 'score' | 'games_played' | 'login' | 'lucky_drop';
+  type: 'default' | 'score' | 'games_played' | 'login' | 'lucky_drop' | 'total_score' | 'battle_score';
   value: number; // e.g. Score 50, or 100 games
   description: string;
 }

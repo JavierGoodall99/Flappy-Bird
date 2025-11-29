@@ -1,4 +1,6 @@
 
+
+
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { GameEngine } from './components/GameEngine';
 import { Button } from './components/Button';
@@ -39,6 +41,7 @@ const App: React.FC = () => {
   const [isShopOpen, setIsShopOpen] = useState(false);
   const [isGuideOpen, setIsGuideOpen] = useState(false);
   const [isWeaponSelectOpen, setIsWeaponSelectOpen] = useState(false);
+  const [notification, setNotification] = useState<{message: string, type: 'unlock' | 'info'} | null>(null);
 
   // Leaderboard State
   const [isLeaderboardOpen, setIsLeaderboardOpen] = useState(false);
@@ -131,15 +134,16 @@ const App: React.FC = () => {
 
   useEffect(() => {
     if (gameState === GameState.GAME_OVER) {
+      let newStats = { ...stats };
+      let newHighScores = { ...highScores };
+
       // Update Stats
       if (gameMode !== 'playground') {
-           setStats(prev => {
-               const newStats = {
-                   gamesPlayed: prev.gamesPlayed + 1,
-                   totalScore: prev.totalScore + score
-               };
-               return newStats;
-           });
+           newStats = {
+               gamesPlayed: stats.gamesPlayed + 1,
+               totalScore: stats.totalScore + score
+           };
+           setStats(newStats);
       }
 
       // Only check and update high scores if NOT in playground mode
@@ -147,16 +151,58 @@ const App: React.FC = () => {
         const currentHigh = highScores[gameMode];
         
         if (score > currentHigh) {
-          setHighScores(prev => ({
-              ...prev,
+          newHighScores = {
+              ...highScores,
               [gameMode]: score
-          }));
+          };
+          setHighScores(newHighScores);
           setIsNewHighScore(true);
         }
       }
+
+      // CHECK FOR UNLOCKS
+      const newUnlockedSkins = [...unlockedSkins];
+      let hasUnlock = false;
+
+      Object.values(SKINS).forEach(skin => {
+          if (newUnlockedSkins.includes(skin.id)) return;
+
+          let unlocked = false;
+          const condition = skin.unlockCondition;
+          
+          if (condition.type === 'score') {
+               // Check current run score AND stored high score
+               if (score >= condition.value && gameMode === 'standard') unlocked = true;
+               if (newHighScores.standard >= condition.value) unlocked = true;
+          } else if (condition.type === 'battle_score') {
+               if (score >= condition.value && gameMode === 'battle') unlocked = true;
+               if (newHighScores.battle >= condition.value) unlocked = true;
+          } else if (condition.type === 'games_played') {
+               if (newStats.gamesPlayed >= condition.value) unlocked = true;
+          } else if (condition.type === 'total_score') {
+               if (newStats.totalScore >= condition.value) unlocked = true;
+          }
+
+          if (unlocked) {
+              newUnlockedSkins.push(skin.id);
+              hasUnlock = true;
+              showNotification(`UNLOCKED: ${skin.name}`, 'unlock');
+          }
+      });
+
+      if (hasUnlock) {
+          setUnlockedSkins(newUnlockedSkins);
+          audioService.playScore(); // Little celebration sound
+      }
+
       setBossInfo({ active: false, hp: 0, maxHp: 0 });
     }
-  }, [gameState, score, highScores, gameMode]);
+  }, [gameState, score, gameMode]); // Dependency on stats/highScores removed to avoid loop, computed inside
+
+  const showNotification = (msg: string, type: 'unlock' | 'info') => {
+      setNotification({ message: msg, type });
+      setTimeout(() => setNotification(null), 3000);
+  };
 
   const startGame = useCallback((forcedPowerup: PowerupType | null = null, mode: GameMode = 'standard') => {
     audioService.init();
@@ -310,6 +356,20 @@ const App: React.FC = () => {
           setPlayerHealth={(current, max) => setPlayerHealth({ current, max })}
         />
       </div>
+
+      {/* NOTIFICATION TOAST */}
+      {notification && (
+          <div className="absolute top-24 left-1/2 transform -translate-x-1/2 z-50 animate-fade-in-up">
+              <div className={`px-6 py-3 rounded-full shadow-2xl flex items-center gap-3 border backdrop-blur-md
+                  ${notification.type === 'unlock' ? 'bg-amber-500/90 border-amber-200' : 'bg-blue-500/90 border-blue-200'}
+              `}>
+                  <span className="text-2xl">{notification.type === 'unlock' ? '🎁' : 'ℹ️'}</span>
+                  <span className="text-white font-black uppercase tracking-wide text-sm drop-shadow-md">
+                      {notification.message}
+                  </span>
+              </div>
+          </div>
+      )}
 
       {/* MUTE BUTTON - Always Visible (except deep menus maybe) */}
       {!isShopOpen && !isGuideOpen && !isWeaponSelectOpen && !isLeaderboardOpen && (
@@ -770,7 +830,9 @@ const App: React.FC = () => {
                              </div>
 
                              <h3 className="text-lg font-bold text-white mb-1">{skin.name}</h3>
-                             <div className="text-xs text-slate-400">{isUnlocked ? 'Tap to Equip' : skin.unlockCondition.description}</div>
+                             <div className={`text-xs font-bold ${isUnlocked ? 'text-green-400' : 'text-red-400'}`}>
+                                 {isUnlocked ? 'Unlocked' : `🔒 ${skin.unlockCondition.description}`}
+                             </div>
                              
                              {!isUnlocked && (
                                  <div className="absolute inset-0 bg-black/40 flex items-center justify-center rounded-2xl backdrop-blur-[1px]">
