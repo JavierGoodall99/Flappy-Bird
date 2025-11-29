@@ -131,15 +131,23 @@ export const syncUserData = async (uid: string, localData: any) => {
             // Merge Settings
             const mergedMuted = remoteData.muted !== undefined ? remoteData.muted : localData.muted;
             const mergedSkinId = remoteData.currentSkinId || localData.currentSkinId;
+            
+            // Merge Stats (Keep Max / Accumulate logic is tricky without logs, assuming Max for consistency or Local if newer)
+            const mergedStats = {
+                gamesPlayed: Math.max(localData.stats?.gamesPlayed || 0, remoteData.stats?.gamesPlayed || 0),
+                totalScore: Math.max(localData.stats?.totalScore || 0, remoteData.stats?.totalScore || 0)
+            };
 
             return {
                 highScores: mergedScores,
                 unlockedSkins: mergedSkins,
                 currentSkinId: mergedSkinId,
-                muted: mergedMuted
+                muted: mergedMuted,
+                stats: mergedStats
             };
         } else {
             // First time cloud user, save local data to cloud
+            console.log("Creating new cloud user profile from local data...");
             await setDoc(userRef, localData, { merge: true });
             return localData;
         }
@@ -161,6 +169,8 @@ export const saveGameData = async (uid: string, data: any) => {
     try {
         const userRef = doc(db, 'users', uid);
         await setDoc(userRef, data, { merge: true });
+        // Log confirmation of save for debugging/user reassurance logic
+        console.log("Cloud Save Success:", Object.keys(data));
     } catch (error: any) {
         if (error.code === 'permission-denied') return;
         if (error.code === 'unavailable') return;
