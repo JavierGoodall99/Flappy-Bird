@@ -1,6 +1,6 @@
 
 import { useState, useEffect, useRef } from 'react';
-import { subscribeToAuth, loadUserGameData, saveGameData, signIn, updateUserProfile } from '../services/firebase';
+import { subscribeToAuth, loadUserGameData, saveGameData, signIn, updateUserProfile, subscribeToGameData } from '../services/firebase';
 import { GameMode, SkinId } from '../types';
 import { SKINS } from '../constants';
 import { audioService } from '../services/audioService';
@@ -38,17 +38,19 @@ export const useGameData = () => {
       getLocal('fliply_muted', false)
   );
   
-  // Optimistic User Loading: Load cached user immediately to skip "Loading..." screen
+  // Optimistic User Loading
   const [user, setUser] = useState<any>(() => 
       getLocal('fliply_user_cache', null)
   );
 
-  // Only show loading if we have absolutely no user data cached
   const [isLoading, setIsLoading] = useState(() => {
        return !localStorage.getItem('fliply_user_cache'); 
   });
   
-  const isSyncing = useRef(false);
+  // Use a ref to track if an update came from the server (to avoid infinite save loops)
+  const isRemoteUpdate = useRef(false);
+  // Store the unsubscribe function for the snapshot listener
+  const unsubSnapshot = useRef<(() => void) | null>(null);
 
   // Auth & Load
   useEffect(() => {
@@ -56,6 +58,12 @@ export const useGameData = () => {
     audioService.setMuted(isMuted);
 
     const handleAuthChange = async (authUser: any) => {
+        // Cleanup previous snapshot listener if it exists
+        if (unsubSnapshot.current) {
+            unsubSnapshot.current();
+            unsubSnapshot.current = null;
+        }
+
         if (!authUser) {
              // User is not signed in (Logged out or first visit)
              
@@ -63,7 +71,8 @@ export const useGameData = () => {
              setUser(null);
              localStorage.removeItem('fliply_user_cache');
              
-             // Reset game data to defaults to prevent leaking previous user data
+             // Reset game data to defaults
+             isRemoteUpdate.current = true; // Block effects from saving resets to DB (though user=null blocks it anyway)
              setHighScores({ standard: 0, battle: 0, danger: 0, playground: 0 });
              setStats({ gamesPlayed: 0, totalScore: 0 });
              setUnlockedSkins(['default']);
@@ -76,7 +85,7 @@ export const useGameData = () => {
 
         // We have an authUser (Anonymous or Google)
         
-        // Merge authUser properties into our user state locally first
+        // Merge authUser properties locally first
         setUser((prev: any) => {
             if (!prev) return authUser;
             return { ...prev, uid: authUser.uid, email: authUser.email }; 
@@ -88,88 +97,96 @@ export const useGameData = () => {
             photoURL: authUser.photoURL
         };
 
-        // Fetch Cloud Data
+        // 1. Initial Load to ensure document exists (and create if needed)
         const cloudData = await loadUserGameData(authUser.uid, userProfile);
         
-        if (cloudData) {
-            isSyncing.current = true;
+        // 2. Subscribe to real-time updates to handle multiple tabs
+        unsubSnapshot.current = subscribeToGameData(authUser.uid, (data) => {
+            if (!data) return;
             
-            // SMART MERGE: Cloud vs Local
-            // We take the max of high scores/stats to prevent data loss if played offline
-            // or if local data is newer than what was just fetched.
+            isRemoteUpdate.current = true;
+
             setHighScores(prev => ({
-                standard: Math.max(prev.standard, cloudData.highScores.standard || 0),
-                battle: Math.max(prev.battle, cloudData.highScores.battle || 0),
-                danger: Math.max(prev.danger, cloudData.highScores.danger || 0),
-                playground: Math.max(prev.playground, cloudData.highScores.playground || 0),
+                standard: Math.max(prev.standard, data.highScores?.standard || 0),
+                battle: Math.max(prev.battle, data.highScores?.battle || 0),
+                danger: Math.max(prev.danger, data.highScores?.danger || 0),
+                playground: Math.max(prev.playground, data.highScores?.playground || 0),
             }));
 
             setStats(prev => ({
-                gamesPlayed: Math.max(prev.gamesPlayed, cloudData.stats.gamesPlayed || 0),
-                totalScore: Math.max(prev.totalScore, cloudData.stats.totalScore || 0)
+                gamesPlayed: Math.max(prev.gamesPlayed, data.stats?.gamesPlayed || 0),
+                totalScore: Math.max(prev.totalScore, data.stats?.totalScore || 0)
             }));
 
-            // Merge unlocked skins
             setUnlockedSkins(prev => {
-                const combined = new Set([...prev, ...(cloudData.unlockedSkins || [])]);
+                const combined = new Set([...prev, ...(data.unlockedSkins || [])]);
                 return Array.from(combined);
             });
 
-            // For preferences, Cloud wins if set, otherwise keep Local
-            if (cloudData.currentSkinId) setCurrentSkinId(cloudData.currentSkinId as SkinId);
-            if (cloudData.muted !== undefined) {
-                setIsMuted(cloudData.muted);
-                audioService.setMuted(cloudData.muted);
+            if (data.currentSkinId) setCurrentSkinId(data.currentSkinId as SkinId);
+            if (data.muted !== undefined) {
+                setIsMuted(data.muted);
+                audioService.setMuted(data.muted);
             }
 
-            // Update User Profile Data
             setUser((prev: any) => ({ 
                 ...prev, 
                 uid: authUser.uid,
-                displayName: cloudData.displayName || prev?.displayName, 
-                photoURL: cloudData.photoURL || prev?.photoURL,
-                avatarColor: cloudData.avatarColor || prev?.avatarColor,
-                avatarText: cloudData.avatarText || prev?.avatarText,
-                useCustomAvatar: cloudData.useCustomAvatar ?? prev?.useCustomAvatar,
+                displayName: data.displayName || prev?.displayName, 
+                photoURL: data.photoURL || prev?.photoURL,
+                avatarColor: data.avatarColor || prev?.avatarColor,
+                avatarText: data.avatarText || prev?.avatarText,
+                useCustomAvatar: data.useCustomAvatar ?? prev?.useCustomAvatar,
                 isAnonymous: authUser.isAnonymous
             }));
-            
-            // Allow persistence to resume after state settles
-            setTimeout(() => { isSyncing.current = false; }, 100);
-        }
+        });
         
         // Hide loading screen if it was still showing
         setIsLoading(false);
     };
 
     const unsubscribe = subscribeToAuth(handleAuthChange);
-    return () => unsubscribe();
+    return () => {
+        unsubscribe();
+        if (unsubSnapshot.current) unsubSnapshot.current();
+    };
   }, []); // Run once on mount
 
   // Persistence Effects (Save to LocalStorage AND Cloud)
   useEffect(() => { 
+      // Always save to local storage
       localStorage.setItem('fliply_highScores', JSON.stringify(highScores));
-      if (!isSyncing.current && user) saveGameData(user.uid, { highScores }); 
+      
+      // Only save to Cloud if this is NOT a remote update to prevent infinite loops
+      if (isRemoteUpdate.current) {
+          isRemoteUpdate.current = false; // Reset the flag
+          return;
+      }
+      if (user) saveGameData(user.uid, { highScores }); 
   }, [highScores, user]);
 
   useEffect(() => { 
       localStorage.setItem('fliply_stats', JSON.stringify(stats));
-      if (!isSyncing.current && user) saveGameData(user.uid, { stats }); 
+      if (isRemoteUpdate.current) return;
+      if (user) saveGameData(user.uid, { stats }); 
   }, [stats, user]);
 
   useEffect(() => { 
       localStorage.setItem('fliply_unlockedSkins', JSON.stringify(unlockedSkins));
-      if (!isSyncing.current && user) saveGameData(user.uid, { unlockedSkins }); 
+      if (isRemoteUpdate.current) return;
+      if (user) saveGameData(user.uid, { unlockedSkins }); 
   }, [unlockedSkins, user]);
 
   useEffect(() => { 
       localStorage.setItem('fliply_currentSkinId', JSON.stringify(currentSkinId));
-      if (!isSyncing.current && user) saveGameData(user.uid, { currentSkinId }); 
+      if (isRemoteUpdate.current) return;
+      if (user) saveGameData(user.uid, { currentSkinId }); 
   }, [currentSkinId, user]);
 
   useEffect(() => { 
       localStorage.setItem('fliply_muted', JSON.stringify(isMuted));
-      if (!isSyncing.current && user) saveGameData(user.uid, { muted: isMuted }); 
+      if (isRemoteUpdate.current) return;
+      if (user) saveGameData(user.uid, { muted: isMuted }); 
   }, [isMuted, user]);
 
   // Cache User Display Info for Optimistic Load
