@@ -48,14 +48,37 @@ const App: React.FC = () => {
   const [isWeaponSelectOpen, setIsWeaponSelectOpen] = useState(false);
   const [isLeaderboardOpen, setIsLeaderboardOpen] = useState(false);
   const [isProfileEditOpen, setIsProfileEditOpen] = useState(false);
+  
+  // --- Notification System ---
+  const [notificationQueue, setNotificationQueue] = useState<Array<{message: string, type: 'unlock' | 'info'}>>([]);
   const [notification, setNotification] = useState<{message: string, type: 'unlock' | 'info'} | null>(null);
 
-  // --- Actions ---
-
   const showNotification = (msg: string, type: 'unlock' | 'info') => {
-      setNotification({ message: msg, type });
-      setTimeout(() => setNotification(null), 3000);
+      setNotificationQueue(prev => [...prev, { message: msg, type }]);
   };
+
+  // Process Notification Queue
+  useEffect(() => {
+    if (notification) return; // Busy showing one
+
+    if (notificationQueue.length > 0) {
+        const next = notificationQueue[0];
+        setNotification(next);
+        setNotificationQueue(prev => prev.slice(1));
+    }
+  }, [notification, notificationQueue]);
+
+  // Auto-Dismiss Notification
+  useEffect(() => {
+      if (notification) {
+          const timer = setTimeout(() => {
+              setNotification(null);
+          }, 3000);
+          return () => clearTimeout(timer);
+      }
+  }, [notification]);
+
+  // --- Actions ---
 
   const handleGameEnd = () => {
       const isRecord = processGameEnd(score, gameMode, (skinName) => {
