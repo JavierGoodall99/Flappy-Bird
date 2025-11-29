@@ -1,7 +1,7 @@
 
 
 import { GameState, ActivePowerup, GameMode, PowerupType } from '../types';
-import { GAME_CONSTANTS, COLORS, BATTLE_CONSTANTS } from '../constants';
+import { GAME_CONSTANTS, COLORS, BATTLE_CONSTANTS, ECONOMY } from '../constants';
 import { audioService } from '../services/audioService';
 import { pointToSegmentDistance } from '../utils/collision';
 
@@ -11,6 +11,7 @@ import { PowerupController } from './controllers/PowerupController';
 import { BattleController } from './controllers/BattleController';
 import { ProjectileController } from './controllers/ProjectileController';
 import { ParticleController } from './controllers/ParticleController';
+import { CoinController } from './controllers/CoinController';
 
 interface GameLogicCallbacks {
   setGameState: (state: GameState) => void;
@@ -19,6 +20,7 @@ interface GameLogicCallbacks {
   setActivePowerup: (powerup: ActivePowerup | null) => void;
   setBossActive: (active: boolean, hp: number, maxHp: number) => void;
   setPlayerHealth: (current: number, max: number) => void;
+  onCoinCollected: (total: number) => void; // Added callback
 }
 
 export class GameLogic {
@@ -27,6 +29,10 @@ export class GameLogic {
   public speed: number = GAME_CONSTANTS.BASE_PIPE_SPEED;
   public frameCount: number = 0;
   public isRoundActive: boolean = false;
+  
+  public coinsCollectedThisRun: number = 0;
+  public milestonesHit: number[] = [];
+  public streakCount: number = 0;
 
   public timeScale: number = 1.0;
   public targetTimeScale: number = 1.0;
@@ -46,6 +52,7 @@ export class GameLogic {
   public battleCtrl: BattleController;
   public projectileCtrl: ProjectileController;
   public particleCtrl: ParticleController;
+  public coinCtrl: CoinController;
 
   constructor(callbacks: GameLogicCallbacks) {
     this.callbacks = callbacks;
@@ -55,6 +62,7 @@ export class GameLogic {
     this.battleCtrl = new BattleController();
     this.projectileCtrl = new ProjectileController();
     this.particleCtrl = new ParticleController();
+    this.coinCtrl = new CoinController();
   }
 
   // Getters for Renderer compatibility
@@ -66,6 +74,7 @@ export class GameLogic {
   get bossProjectiles() { return this.battleCtrl.bossProjectiles; }
   get enemies() { return this.battleCtrl.enemies; }
   get boss() { return this.battleCtrl.boss; }
+  get coins() { return this.coinCtrl.coins; }
 
   public updateProps(gameState: GameState, gameMode: GameMode, initialPowerup: PowerupType | null, skin: any) {
     this.gameState = gameState;
@@ -78,6 +87,9 @@ export class GameLogic {
   public reset(spawnEntities: boolean = false, width: number, height: number) {
     this.isRoundActive = false;
     this.score = 0;
+    this.coinsCollectedThisRun = 0;
+    this.milestonesHit = [];
+    this.streakCount = 0;
     this.speed = GAME_CONSTANTS.BASE_PIPE_SPEED;
     this.frameCount = 0;
     this.nextBossScore = BATTLE_CONSTANTS.BOSS_INTERVAL;
@@ -88,6 +100,7 @@ export class GameLogic {
     this.callbacks.setActivePowerup(null);
     this.callbacks.setScore(0);
     this.callbacks.setBossActive(false, 0, 0);
+    this.callbacks.onCoinCollected(0);
 
     // Reset Controllers
     this.birdCtrl.reset(height);
@@ -96,6 +109,7 @@ export class GameLogic {
     this.battleCtrl.reset(width, height);
     this.projectileCtrl.reset();
     this.particleCtrl.reset();
+    this.coinCtrl.reset();
     
     // Initialize Health for Mode
     if (this.gameMode === 'battle') {
@@ -128,6 +142,26 @@ export class GameLogic {
         }
     }
   }
+  
+  public revive(width: number, height: number) {
+      // Logic to resume game after paying coins
+      this.birdCtrl.bird.hp = this.birdCtrl.bird.maxHp;
+      this.callbacks.setPlayerHealth(this.birdCtrl.bird.hp, this.birdCtrl.bird.maxHp);
+      
+      this.birdCtrl.bird.y = height / 2;
+      this.birdCtrl.bird.velocity = 0;
+      
+      // Clear immediate dangers
+      this.pipeCtrl.pipes = this.pipeCtrl.pipes.filter(p => p.x > width * 0.5 || p.x < 0);
+      this.battleCtrl.bossProjectiles = [];
+      this.projectileCtrl.projectiles = [];
+      
+      // Give shield
+      this.activatePowerup('shield', 300); // 5 seconds
+      
+      // Resume
+      this.callbacks.setGameState(GameState.PLAYING);
+  }
 
   public jump() {
     if (this.gameState !== GameState.PLAYING) return;
@@ -157,6 +191,7 @@ export class GameLogic {
     
     this.projectileCtrl.update(dt, width);
     this.battleCtrl.updateBossProjectiles(dt, height);
+    this.coinCtrl.update(dt, this.speed);
 
     if (!isPlaying) return;
     if (!this.isRoundActive) return;
@@ -189,6 +224,9 @@ export class GameLogic {
              this.battleCtrl.spawnEnemy(this.score, this.frameCount, width, height);
         }
         
+        // Spawn coins in battle mode
+        this.coinCtrl.spawn(this.frameCount, this.score, width, height, []);
+
         // Updates
         this.battleCtrl.updateEnemies(dt, this.score, this.frameCount, this.bird.y, width);
         this.battleCtrl.updateBoss(dt, this.score, width, height, this.bird.y, birdX, now);
@@ -201,6 +239,7 @@ export class GameLogic {
         // Prevent powerup spawning in playground mode
         if (this.gameMode !== 'playground') {
             this.powerupCtrl.spawn(this.frameCount, this.timeScale, width, height, this.pipes);
+            this.coinCtrl.spawn(this.frameCount, this.score, width, height, this.pipes);
         }
     }
     
@@ -212,11 +251,15 @@ export class GameLogic {
     // Entity Movement
     this.pipeCtrl.update(dt, this.speed);
     this.powerupCtrl.update(dt, this.speed);
+    
+    // MILESTONE & STREAK LOGIC
+    this.checkMilestones();
 
     // 2. CHECK COLLISIONS & INTERACTIONS
     const birdCollideRadius = (GAME_CONSTANTS.BIRD_RADIUS * this.bird.scale) - 2;
     
     this.checkPowerupCollisions(birdX, birdCollideRadius);
+    this.checkCoinCollisions(birdX, birdCollideRadius);
     this.checkPipeCollisions(birdX, birdCollideRadius);
     this.checkBattleCollisions(birdX, birdCollideRadius, dt);
     this.checkProjectileCollisions(width, dt);
@@ -225,6 +268,33 @@ export class GameLogic {
     if (this.bird.y + birdCollideRadius >= height || this.bird.y - birdCollideRadius <= 0) {
        this.handleCrash();
     }
+  }
+  
+  private checkMilestones() {
+      // In Battle Mode, coins are only earned by collecting them, not by score milestones.
+      if (this.gameMode === 'battle') return;
+
+      const ms = ECONOMY.MILESTONE_REWARDS;
+      for (const [key, reward] of Object.entries(ms)) {
+          const threshold = parseInt(key);
+          if (this.score >= threshold && !this.milestonesHit.includes(threshold)) {
+              this.milestonesHit.push(threshold);
+              this.streakCount++;
+              
+              let bonus = reward;
+              
+              // Streak Bonus
+              if (this.streakCount > 1) {
+                  bonus = Math.floor(bonus * ECONOMY.STREAK_BONUS_MULTIPLIER);
+                  // Trigger visual effect for streak?
+                  this.particleCtrl.spawnExplosion(100, 100, 0xFFD700, 30, 4); // Burst near HUD?
+              }
+              
+              this.coinsCollectedThisRun += bonus;
+              this.callbacks.onCoinCollected(this.coinsCollectedThisRun);
+              audioService.playScore(); // Or a specific coin sound
+          }
+      }
   }
 
   // --- INTERACTION LOGIC ---
@@ -324,6 +394,24 @@ export class GameLogic {
             }
             this.activatePowerup(effectiveType, duration);
         }
+      }
+  }
+  
+  private checkCoinCollisions(birdX: number, radius: number) {
+      const coins = this.coinCtrl.coins;
+      for (const coin of coins) {
+          if (coin.collected) continue;
+          
+          const dx = coin.x - birdX;
+          const dy = coin.y - this.bird.y;
+          // Coin radius roughly 15
+          if (Math.sqrt(dx*dx + dy*dy) < radius + 15) {
+              coin.collected = true;
+              this.coinsCollectedThisRun += coin.value;
+              this.callbacks.onCoinCollected(this.coinsCollectedThisRun);
+              audioService.playScore(); // Add distinct coin sound if possible
+              this.particleCtrl.spawnExplosion(coin.x, coin.y, 0xFFD700, 5, 1);
+          }
       }
   }
 

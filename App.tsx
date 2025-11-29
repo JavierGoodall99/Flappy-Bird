@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { GameEngine } from './components/GameEngine';
 import { GameState, ActivePowerup, SkinId, PowerupType, GameMode } from './types';
-import { SKINS } from './constants';
+import { SKINS, ECONOMY } from './constants';
 import { audioService } from './services/audioService';
 import { signInWithGoogle, logout } from './services/firebase';
 import { useGameData } from './hooks/useGameData';
@@ -26,6 +26,7 @@ const App: React.FC = () => {
   // --- Game Local State ---
   const [gameState, setGameState] = useState<GameState>(GameState.START);
   const [score, setScore] = useState(0);
+  const [runCoins, setRunCoins] = useState(0); // Coins collected in current run
   const [shake, setShake] = useState(false);
   const [activePowerup, setActivePowerup] = useState<ActivePowerup | null>(null);
   
@@ -33,11 +34,12 @@ const App: React.FC = () => {
   const [bossInfo, setBossInfo] = useState<{ active: boolean; hp: number; maxHp: number }>({ active: false, hp: 0, maxHp: 0 });
   const [playerHealth, setPlayerHealth] = useState({ current: 0, max: 0 });
   const [initialPowerup, setInitialPowerup] = useState<PowerupType | null>(null);
+  const [reviveTrigger, setReviveTrigger] = useState(0);
 
   // --- Persistent Data & Auth (Hook) ---
   const { 
-      user, isLoading, highScores, stats, unlockedSkins, currentSkinId, isMuted,
-      setIsMuted, setCurrentSkinId, processGameEnd, updateProfile, streak 
+      user, isLoading, highScores, stats, unlockedSkins, purchasedItems, currentSkinId, coins, isMuted,
+      setIsMuted, setCurrentSkinId, processGameEnd, updateProfile, streak, purchaseItem, spendCoins
   } = useGameData();
 
   const [isNewHighScore, setIsNewHighScore] = useState(false);
@@ -81,7 +83,7 @@ const App: React.FC = () => {
   // --- Actions ---
 
   const handleGameEnd = () => {
-      const isRecord = processGameEnd(score, gameMode, (skinName) => {
+      const isRecord = processGameEnd(score, runCoins, gameMode, (skinName) => {
           showNotification(`UNLOCKED: ${skinName}`, 'unlock');
       });
       setIsNewHighScore(isRecord);
@@ -100,6 +102,8 @@ const App: React.FC = () => {
     setInitialPowerup(forcedPowerup);
     setGameState(GameState.PLAYING);
     setIsNewHighScore(false);
+    setRunCoins(0);
+    setReviveTrigger(0); // Reset revive trigger for new game
     
     // Close menus
     setIsGuideOpen(false);
@@ -116,9 +120,18 @@ const App: React.FC = () => {
     setGameState(GameState.START);
     setIsNewHighScore(false);
     setInitialPowerup(null);
+    setRunCoins(0);
+    setReviveTrigger(0); // Reset revive trigger
     setBossInfo({ active: false, hp: 0, maxHp: 0 });
   };
   
+  const handleRevive = () => {
+      if (spendCoins(ECONOMY.REVIVE_COST)) {
+          setReviveTrigger(prev => prev + 1);
+          setGameState(GameState.PLAYING); // Force state back to playing
+      }
+  };
+
   const togglePause = useCallback(() => {
     setGameState(prev => {
       if (prev === GameState.PLAYING) return GameState.PAUSED;
@@ -146,6 +159,30 @@ const App: React.FC = () => {
   const handleSaveProfile = async (data: any) => {
       await updateProfile(data);
       showNotification("Profile Updated!", 'info');
+  };
+  
+  const handleCoinCollected = (total: number) => {
+      setRunCoins(total);
+  };
+  
+  const handleEquipSkin = (id: string) => {
+      // Check if needs purchase
+      const skin = SKINS[id];
+      if (purchasedItems.includes(id) || unlockedSkins.includes(id) || skin.price === 0) {
+          setCurrentSkinId(id as SkinId);
+      } else {
+          // Attempt Purchase
+          if (purchaseItem(id, skin.price || 0)) {
+              showNotification(`Purchased ${skin.name}!`, 'unlock');
+              setCurrentSkinId(id as SkinId);
+          } else {
+              showNotification("Not enough coins!", 'info');
+          }
+      }
+  };
+  
+  const handleEquipWeapon = (id: string) => {
+       startGame(id as PowerupType, 'battle');
   };
 
   // Global Key Handling
@@ -188,6 +225,8 @@ const App: React.FC = () => {
           gameMode={gameMode}
           setBossActive={(active, hp, maxHp) => setBossInfo({ active, hp, maxHp })}
           setPlayerHealth={(current, max) => setPlayerHealth({ current, max })}
+          onCoinCollected={handleCoinCollected}
+          reviveTrigger={reviveTrigger}
         />
       </div>
 
@@ -198,6 +237,8 @@ const App: React.FC = () => {
           <HUD 
              gameState={gameState}
              score={score}
+             runCoins={runCoins}
+             totalCoins={coins}
              highScore={highScores[gameMode]}
              gameMode={gameMode}
              activePowerup={activePowerup}
@@ -230,18 +271,24 @@ const App: React.FC = () => {
              user={user}
              handleGoogleSignIn={handleGoogleSignIn}
              streak={streak}
+             coins={coins}
+             stats={stats}
           />
       )}
 
       {gameState === GameState.GAME_OVER && !isMenuOpen && (
           <GameOverMenu 
               score={score}
+              runCoins={runCoins}
+              totalCoins={coins}
               highScore={highScores[gameMode]}
               isNewHighScore={isNewHighScore}
               gameMode={gameMode}
               initialPowerup={initialPowerup}
               onRestart={startGame}
               onHome={resetGame}
+              onRevive={handleRevive}
+              canRevive={coins >= ECONOMY.REVIVE_COST}
           />
       )}
 
@@ -251,8 +298,10 @@ const App: React.FC = () => {
           onClose={() => setIsShopOpen(false)} 
           stats={stats}
           unlockedSkins={unlockedSkins}
+          purchasedItems={purchasedItems}
           currentSkinId={currentSkinId}
-          onEquip={setCurrentSkinId}
+          onEquip={handleEquipSkin}
+          coins={coins}
       />
       
       <LeaderboardModal 
@@ -264,7 +313,10 @@ const App: React.FC = () => {
       <WeaponSelectorModal 
           isOpen={isWeaponSelectOpen} 
           onClose={() => setIsWeaponSelectOpen(false)} 
-          onSelectWeapon={(weapon) => startGame(weapon, 'battle')} 
+          onSelectWeapon={handleEquipWeapon}
+          purchasedItems={purchasedItems}
+          coins={coins}
+          onPurchase={purchaseItem}
       />
 
       <GuideModal 

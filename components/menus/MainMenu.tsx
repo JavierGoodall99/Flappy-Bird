@@ -13,70 +13,75 @@ interface MainMenuProps {
   user: any;
   handleGoogleSignIn: () => void;
   streak: number;
+  coins: number;
+  stats: { gamesPlayed: number; totalScore: number };
 }
 
 export const MainMenu: React.FC<MainMenuProps> = ({ 
-  startGame, setShopOpen, setGuideOpen, setLeaderboardOpen, setWeaponSelectOpen, setProfileOpen, user, handleGoogleSignIn, streak 
+  startGame, setShopOpen, setGuideOpen, setLeaderboardOpen, setWeaponSelectOpen, setProfileOpen, user, handleGoogleSignIn, streak, coins, stats
 }) => {
   
   const shouldUseCustomAvatar = user && (user.useCustomAvatar || !user.photoURL);
   const avatarInitials = user ? (user.avatarText || user.displayName || 'G').substring(0, 2).toUpperCase() : 'G';
   const avatarColor = user?.avatarColor || '#6366F1';
-
+  
   return (
     <>
-      {/* USER PROFILE & STREAK - TOP RIGHT */}
-      <div className="absolute top-6 right-6 md:top-8 md:right-8 z-30 animate-fade-in select-none flex items-center gap-3 md:gap-4">
-          {/* STREAK BADGE */}
-          <div className="hidden sm:flex items-center gap-2 bg-gradient-to-r from-orange-500 to-red-600 pl-3 pr-4 py-1.5 rounded-full shadow-lg border border-orange-300/30 transform hover:scale-105 transition-transform cursor-help" title="Daily Login Streak">
-              <span className="text-xl animate-pulse">🔥</span>
-              <div className="flex flex-col leading-none">
-                <span className="font-black text-white text-base">{streak}</span>
-                <span className="text-[9px] text-orange-100 font-bold uppercase tracking-wider">Day Streak</span>
+      {/* UNIFIED PILL CONTAINER - TOP RIGHT */}
+      <div className="absolute top-4 right-4 md:top-6 md:right-6 z-30 animate-fade-in select-none">
+          <div className="glass-panel rounded-full p-1.5 pr-2 flex items-center shadow-2xl">
+              
+              {/* SECTION 1: COINS */}
+              <div className="flex items-center gap-3 px-3 md:px-4 border-r border-white/10">
+                  <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-[#EAB308] flex items-center justify-center shadow-lg shadow-yellow-500/20 text-lg md:text-xl">
+                     🪙
+                  </div>
+                  <span className="text-xl md:text-2xl font-black text-white font-['Outfit'] tracking-tight leading-none">{coins}</span>
               </div>
-          </div>
-          
-          {/* Mobile Streak (Simplified) */}
-          <div className="sm:hidden flex items-center gap-1 bg-red-600/90 px-3 py-1.5 rounded-full shadow-lg border border-red-400/30">
-              <span className="text-base">🔥</span>
-              <span className="font-bold text-white text-sm">{streak}</span>
-          </div>
 
-          {user ? (
-              <button 
-                  onClick={() => setProfileOpen(true)}
-                  className="group flex items-center gap-3 bg-[#1a1b26]/90 p-1.5 pr-5 rounded-full shadow-2xl border border-white/10 backdrop-blur-md hover:border-white/20 transition-all hover:scale-105 active:scale-95 cursor-pointer"
-              >
-                  <div 
-                    className="relative w-10 h-10 rounded-full overflow-hidden border border-white/10 shadow-inner shrink-0 flex items-center justify-center transition-colors duration-300"
-                    style={{ backgroundColor: shouldUseCustomAvatar ? avatarColor : '#1e293b' }}
-                  >
-                        {!shouldUseCustomAvatar && user.photoURL ? (
-                            <img src={user.photoURL} alt="User" className="w-full h-full object-cover" />
-                        ) : (
-                            <div className="text-sm font-bold text-white tracking-wider">
-                                {avatarInitials}
-                            </div>
-                        )}
+              {/* SECTION 2: STREAK */}
+              <div className="flex items-center gap-3 px-3 md:px-4 border-r border-white/10 relative group cursor-help" title="Daily Streak">
+                  <div className="relative">
+                      <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-[#D97706] flex items-center justify-center shadow-lg shadow-orange-500/20 text-lg md:text-xl text-white">
+                          🔥
+                      </div>
+                      {streak > 0 && (
+                          <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-600 rounded-full border-2 border-[#1e293b] animate-pulse"></div>
+                      )}
                   </div>
-                  <div className="flex flex-col items-start">
-                      <span className="text-white font-bold text-sm leading-tight font-['Outfit'] max-w-[100px] truncate">
-                          {user.displayName || 'Guest'}
-                      </span>
-                      <span className="text-[10px] text-white/50 font-bold uppercase tracking-wider leading-none">
-                          EDIT PROFILE
+                  <div className="flex flex-col items-start leading-none">
+                      <span className="text-lg md:text-xl font-black text-white">{streak}</span>
+                      <span className="text-[9px] md:text-[10px] font-bold text-[#FCD34D] uppercase tracking-wider">DAY</span>
+                  </div>
+              </div>
+
+              {/* SECTION 3: PROFILE */}
+              <button 
+                  onClick={() => user ? setProfileOpen(true) : handleGoogleSignIn()}
+                  className="flex items-center gap-3 pl-3 md:pl-4 hover:opacity-80 transition-opacity text-left group"
+              >
+                  <div className="flex flex-col items-end hidden sm:flex">
+                      <span className="text-white font-bold text-sm md:text-base leading-tight max-w-[120px] truncate">
+                          {user ? (user.displayName || 'Guest') : 'Sign In'}
                       </span>
                   </div>
-                  <div className="text-white/40 group-hover:text-white transition-colors ml-1">✏️</div>
+                  <div className="relative">
+                      <div 
+                        className="w-10 h-10 md:w-12 md:h-12 rounded-full border-2 border-indigo-500/50 flex items-center justify-center overflow-hidden bg-slate-800 transition-all group-hover:border-indigo-400"
+                        style={{ backgroundColor: shouldUseCustomAvatar ? avatarColor : undefined }}
+                      >
+                           {!shouldUseCustomAvatar && user?.photoURL ? (
+                              <img src={user.photoURL} alt="User" className="w-full h-full object-cover" />
+                           ) : (
+                              <span className="font-bold text-white text-sm md:text-base">{avatarInitials}</span>
+                           )}
+                      </div>
+                      {/* Online Status Dot */}
+                      <div className="absolute bottom-0 right-0 w-3 h-3 md:w-3.5 md:h-3.5 bg-green-500 border-2 border-[#1e293b] rounded-full"></div>
+                  </div>
               </button>
-          ) : (
-              <button 
-                  onClick={handleGoogleSignIn}
-                  className="group relative px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 rounded-full font-bold text-white text-sm tracking-wider shadow-lg hover:shadow-indigo-500/50 hover:scale-105 active:scale-95 transition-all flex items-center gap-2 overflow-hidden border border-white/20"
-              >
-                  <span className="relative">SIGN IN WITH GOOGLE</span>
-              </button>
-          )}
+
+          </div>
       </div>
 
       {/* MENU CENTER */}

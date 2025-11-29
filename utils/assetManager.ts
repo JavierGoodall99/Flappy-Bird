@@ -1,5 +1,4 @@
 
-
 import * as THREE from 'three';
 import { COLORS, GAME_CONSTANTS } from '../constants';
 
@@ -29,7 +28,41 @@ export const createGeometries = () => {
     };
 };
 
+// Helper for Emoji Texture
+const createEmojiTexture = (emoji: string) => {
+  if (typeof document === 'undefined') return null;
+  const size = 128;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return null;
+  
+  ctx.clearRect(0, 0, size, size);
+  ctx.font = `${size * 0.8}px "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  
+  // Add simple shadow/glow for visibility
+  ctx.shadowColor = '#FFD700'; 
+  ctx.shadowBlur = 15;
+  ctx.fillText(emoji, size / 2, size / 2 + size * 0.05);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+};
+
 export const createMaterials = () => {
+    const coinTexture = createEmojiTexture('🪙');
+    
+    // Coin Sprite Material
+    const coinMaterial = new THREE.SpriteMaterial({
+        map: coinTexture,
+        color: 0xffffff,
+        transparent: true
+    });
+
     return {
         pipe: new THREE.MeshStandardMaterial({ color: COLORS.PIPE_FILL, roughness: 0.3, metalness: 0.1 }),
         pipeCap: new THREE.MeshStandardMaterial({ color: COLORS.PIPE_STROKE, roughness: 0.3 }),
@@ -63,6 +96,8 @@ export const createMaterials = () => {
         bossProjectile: new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xFF0000, emissiveIntensity: 3.0 }),
         particleMat: new THREE.MeshBasicMaterial({ color: 0xffffff }),
         gunMat: new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.3, metalness: 0.8 }),
-        eyebrow: new THREE.MeshStandardMaterial({ color: 0x000000, roughness: 0.9 })
+        eyebrow: new THREE.MeshStandardMaterial({ color: 0x000000, roughness: 0.9 }),
+        
+        coinMaterial: coinMaterial,
     };
 };

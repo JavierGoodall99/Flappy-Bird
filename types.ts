@@ -27,6 +27,16 @@ export interface Pipe {
   brokenBottom: boolean;
 }
 
+export interface Coin {
+  x: number;
+  y: number;
+  value: number;
+  collected: boolean;
+  scale: number;
+  rotation: number;
+  wobbleOffset: number;
+}
+
 export type PowerupType = 
   | 'shrink' | 'grow' | 'slowmo' | 'shield' | 'ghost' 
   | 'gun' | 'gun_spread' | 'gun_rapid' | 'gun_double' | 'gun_wave' | 'gun_pulse'
@@ -100,6 +110,7 @@ export interface Skin {
   name: string;
   rarity: Rarity;
   unlockCondition: UnlockCondition;
+  price?: number; // Coin cost
   
   // Visual Configuration
   modelType: 'standard' | 'neon' | 'pixel';

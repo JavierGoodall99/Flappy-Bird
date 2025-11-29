@@ -1,7 +1,6 @@
 
-
 import * as THREE from 'three';
-import { GameState, Pipe, Powerup, Enemy, Skin, Bird } from '../types';
+import { GameState, Pipe, Powerup, Enemy, Skin, Bird, Coin } from '../types';
 import { GAME_CONSTANTS, COLORS, PARTICLE_CONFIG, ENEMY_SKIN, BOSS_SKIN } from '../constants';
 import { setupThreeScene, updateCamera } from '../utils/threeSetup';
 import { createGeometries, createMaterials } from '../utils/assetManager';
@@ -17,6 +16,7 @@ export class GameRenderer {
   private birdMesh: THREE.Group | null = null;
   private pipeMeshes: Map<Pipe, THREE.Group> = new Map();
   private powerupMeshes: Map<Powerup, THREE.Mesh> = new Map();
+  private coinMeshes: Map<Coin, THREE.Sprite> = new Map();
   private projectileMeshes: THREE.Group[] = []; // Changed to Group to hold multiple types
   private bossProjectileMeshes: THREE.Mesh[] = [];
   private enemyMeshes: Map<Enemy, THREE.Group> = new Map();
@@ -121,6 +121,8 @@ export class GameRenderer {
       this.pipeMeshes.clear();
       this.powerupMeshes.forEach((mesh) => this.scene?.remove(mesh));
       this.powerupMeshes.clear();
+      this.coinMeshes.forEach((mesh) => this.scene?.remove(mesh));
+      this.coinMeshes.clear();
       this.enemyMeshes.forEach((group) => this.scene?.remove(group));
       this.enemyMeshes.clear();
       if (this.bossMesh) { this.scene.remove(this.bossMesh); this.bossMesh = null; }
@@ -160,6 +162,7 @@ export class GameRenderer {
     const pipes = gameLogic.pipes;
     const enemies = gameLogic.enemies;
     const powerups = gameLogic.powerups;
+    const coins = gameLogic.coins;
 
     const toWorldY = (gameY: number) => (logicHeight / 2) - gameY;
     const toWorldX = (gameX: number) => gameX - (logicWidth / 2);
@@ -382,6 +385,33 @@ export class GameRenderer {
         }
       }
     });
+
+    // Render Coins (Now as Sprites)
+    const currentCoins = new Set(coins);
+    for (const [c, mesh] of this.coinMeshes.entries()) {
+        if (!currentCoins.has(c)) {
+            this.scene.remove(mesh);
+            this.coinMeshes.delete(c);
+        }
+    }
+    coins.forEach(c => {
+        if (c.collected) return;
+        let mesh = this.coinMeshes.get(c);
+        if (!mesh) {
+            // New Sprite creation with emoji texture
+            mesh = new THREE.Sprite(this.material.coinMaterial);
+            mesh.scale.set(24, 24, 1); // Roughly 1.5x diameter of old coin
+            this.scene?.add(mesh);
+            this.coinMeshes.set(c, mesh);
+        }
+        
+        mesh.position.x = toWorldX(c.x);
+        mesh.position.y = toWorldY(c.y + Math.sin(c.wobbleOffset) * 5); // Floating effect
+        
+        // Scale X to simulate spinning coin flip (arcade style)
+        mesh.scale.set(24 * Math.cos(c.rotation), 24, 1); 
+    });
+
 
     // Particles
     this.particleMeshes.forEach(m => m.visible = false);

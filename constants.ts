@@ -1,34 +1,31 @@
 
-
-
-
 import { Skin } from './types';
 
 export const GAME_CONSTANTS = {
   GRAVITY: 0.55,
-  JUMP_STRENGTH: -8.2, // Increased to -8.2 (from -8.0) to make climbing larger gaps feel responsive
+  JUMP_STRENGTH: -8.2, 
   BASE_PIPE_SPEED: 4.2,
-  SPEED_INCREMENT: 0.0015, // Speed increase per frame
+  SPEED_INCREMENT: 0.0015,
   PIPE_GAP: 165, 
   PIPE_WIDTH: 65,
-  PIPE_SPAWN_RATE: 100, // Reduced from 105 (faster spawn) for better rhythm
+  PIPE_SPAWN_RATE: 100, 
   BIRD_RADIUS: 16, 
   BIRD_X_POSITION: 0.2, 
   GLASS_PIPE_CHANCE: 0.25,
   GLASS_BREAK_SCORE: 5,
-  GLASS_BREAK_PENALTY: 8, // Positive Y velocity to push down
+  GLASS_BREAK_PENALTY: 8, 
   
   // Powerups
-  POWERUP_SPAWN_RATE: 600, // Reduced frequency (approx 10s)
+  POWERUP_SPAWN_RATE: 600, 
   POWERUP_SIZE: 20,
   
-  // Durations (in frames approx 60fps)
+  // Durations
   DURATION_SIZE: 300, 
-  DURATION_SLOWMO: 180, // 3 seconds
-  DURATION_FAST: 300, // 5 seconds
-  DURATION_SHIELD: 600, // 10 seconds
-  DURATION_GHOST: 240,  // 4 seconds (Reduced)
-  DURATION_GUN: 300, // 5 seconds (Reduced)
+  DURATION_SLOWMO: 180, 
+  DURATION_FAST: 300, 
+  DURATION_SHIELD: 600, 
+  DURATION_GHOST: 240,  
+  DURATION_GUN: 300, 
 
   SCALE_NORMAL: 1,
   SCALE_SHRINK: 0.6,
@@ -39,38 +36,57 @@ export const GAME_CONSTANTS = {
   TIME_SCALE_FAST: 1.4,
   
   // Gun Stats
-  GUN_FIRE_RATE: 45, // Slower fire rate
+  GUN_FIRE_RATE: 45, 
   PROJECTILE_SPEED: 9,
   
   // Mobile Responsiveness / Camera
-  // Significantly increased to force a "zoomed out" perspective on mobile screens
   MIN_GAME_WIDTH: 850, 
   MIN_GAME_HEIGHT: 1100, 
 };
 
+export const ECONOMY = {
+  REVIVE_COST: 50, // Rebalanced for 1-coin economy
+  COIN_VALUE: 1,
+  BASE_SPAWN_INTERVAL: 300, 
+  SCORE_SPAWN_FACTOR: 0.4, 
+  MILESTONE_REWARDS: {
+    25: 5,
+    50: 10,
+    75: 15,
+    100: 25,
+    150: 40,
+    200: 50,
+    300: 75,
+    500: 100
+  },
+  STREAK_BONUS_MULTIPLIER: 1.5 
+};
+
 export const COLORS = {
-  BIRD_FILL: '#FFE600', // Brighter Vivid Yellow
-  BIRD_STROKE: '#FF9100', // Bright Orange
-  PIPE_FILL: '#22C55E', // Brighter Green
-  PIPE_STROKE: '#15803D', // Green 700
-  PIPE_GLASS: '#A5F3FC', // Cyan 200 for Glass
-  PIPE_GLASS_STROKE: '#CFFAFE', // Cyan 100
-  SKY_TOP: '#6366F1', // Indigo 500
-  SKY_BOTTOM: '#38BDF8', // Sky 400
+  BIRD_FILL: '#FFE600', 
+  BIRD_STROKE: '#FF9100', 
+  PIPE_FILL: '#22C55E', 
+  PIPE_STROKE: '#15803D', 
+  PIPE_GLASS: '#A5F3FC', 
+  PIPE_GLASS_STROKE: '#CFFAFE', 
+  SKY_TOP: '#6366F1', 
+  SKY_BOTTOM: '#38BDF8', 
   
   // Powerup Colors
-  POWERUP_SHRINK: '#3B82F6', // Blue 500
-  POWERUP_GROW: '#EF4444', // Red 500
-  POWERUP_SLOWMO: '#8B5CF6', // Violet 500
-  POWERUP_SHIELD: '#FFFFFF', // Changed to White to match pause button aesthetic
-  POWERUP_GHOST: '#EC4899', // Pink 500
-  POWERUP_GUN: '#14B8A6', // Teal 500
-  POWERUP_FAST: '#84CC16', // Lime 500
-  POWERUP_RANDOM: '#F59E0B', // Amber 500 (Gold)
+  POWERUP_SHRINK: '#3B82F6', 
+  POWERUP_GROW: '#EF4444', 
+  POWERUP_SLOWMO: '#8B5CF6', 
+  POWERUP_SHIELD: '#FFFFFF', 
+  POWERUP_GHOST: '#EC4899', 
+  POWERUP_GUN: '#14B8A6', 
+  POWERUP_FAST: '#84CC16', 
+  POWERUP_RANDOM: '#F59E0B', 
   
-  SHIELD_GLOW: '#FFFFFF', // Changed to White
-  PROJECTILE: '#FFFF00', // Yellow Projectiles
+  SHIELD_GLOW: '#FFFFFF', 
+  PROJECTILE: '#FFFF00', 
   BOSS_PROJECTILE: '#FF0000',
+
+  COIN: '#FFD700', // Single Gold Color
 };
 
 export const POWERUP_INFO = [
@@ -85,15 +101,15 @@ export const POWERUP_INFO = [
 ];
 
 export const WEAPON_LOADOUTS = [
-  { id: 'gun', name: 'Plasma Blaster', description: 'Standard rapid-fire energy weapon. Reliable & balanced.', color: '#14B8A6', stats: 'Fire Rate: ⭐⭐⭐\nDamage: ⭐⭐' },
-  { id: 'gun_spread', name: 'Tri-Shot', description: 'Fires 3 projectiles in a wide spread. Crowd control.', color: '#F97316', stats: 'Fire Rate: ⭐⭐\nSpread: ⭐⭐⭐⭐⭐' },
-  { id: 'gun_rapid', name: 'Vulcan Cannon', description: 'Extreme fire rate. Melts bosses but eats accuracy.', color: '#8B5CF6', stats: 'Fire Rate: ⭐⭐⭐⭐⭐\nAccuracy: ⭐' },
-  { id: 'gun_double', name: 'Twin Strikers', description: 'Fires two parallel shots. Double the trouble.', color: '#4ADE80', stats: 'Fire Rate: ⭐⭐⭐\nDamage: ⭐⭐⭐' },
-  { id: 'gun_wave', name: 'Sonic Wave', description: 'Oscillating energy waves that pierce through multiple enemies.', color: '#06B6D4', stats: 'Fire Rate: ⭐⭐\nPierce: ⭐⭐⭐⭐' },
-  { id: 'gun_pulse', name: 'Omega Pulse', description: 'Massive piercing energy ball. Obliterates everything in its path.', color: '#E11D48', stats: 'Fire Rate: ⭐\nDamage: ⭐⭐⭐⭐⭐' },
+  { id: 'gun', name: 'Plasma Blaster', description: 'Standard rapid-fire energy weapon. Reliable & balanced.', color: '#14B8A6', stats: 'Fire Rate: ⭐⭐⭐\nDamage: ⭐⭐', price: 0 },
+  { id: 'gun_spread', name: 'Tri-Shot', description: 'Fires 3 projectiles in a wide spread. Crowd control.', color: '#F97316', stats: 'Fire Rate: ⭐⭐\nSpread: ⭐⭐⭐⭐⭐', price: 500 },
+  { id: 'gun_rapid', name: 'Vulcan Cannon', description: 'Extreme fire rate. Melts bosses but eats accuracy.', color: '#8B5CF6', stats: 'Fire Rate: ⭐⭐⭐⭐⭐\nAccuracy: ⭐', price: 1000 },
+  { id: 'gun_double', name: 'Twin Strikers', description: 'Fires two parallel shots. Double the trouble.', color: '#4ADE80', stats: 'Fire Rate: ⭐⭐⭐\nDamage: ⭐⭐⭐', price: 750 },
+  { id: 'gun_wave', name: 'Sonic Wave', description: 'Oscillating energy waves that pierce through multiple enemies.', color: '#06B6D4', stats: 'Fire Rate: ⭐⭐\nPierce: ⭐⭐⭐⭐', price: 1500 },
+  { id: 'gun_pulse', name: 'Omega Pulse', description: 'Massive piercing energy ball. Obliterates everything in its path.', color: '#E11D48', stats: 'Fire Rate: ⭐\nDamage: ⭐⭐⭐⭐⭐', price: 5000 },
   // MELEE WEAPONS
-  { id: 'weapon_spear', name: 'Gungnir Spear', description: 'High-velocity piercing throw. Penetrates multiple enemies.', color: '#FFD700', stats: 'Fire Rate: ⭐⭐\nPierce: ⭐⭐⭐⭐⭐' },
-  { id: 'weapon_dagger', name: 'Shadow Daggers', description: 'Throw 3 knives in a burst. Fast but weak.', color: '#A8A29E', stats: 'Fire Rate: ⭐⭐⭐⭐⭐\nSpeed: ⭐⭐⭐⭐⭐' },
+  { id: 'weapon_spear', name: 'Gungnir Spear', description: 'High-velocity piercing throw. Penetrates multiple enemies.', color: '#FFD700', stats: 'Fire Rate: ⭐⭐\nPierce: ⭐⭐⭐⭐⭐', price: 2000 },
+  { id: 'weapon_dagger', name: 'Shadow Daggers', description: 'Throw 3 knives in a burst. Fast but weak.', color: '#A8A29E', stats: 'Fire Rate: ⭐⭐⭐⭐⭐\nSpeed: ⭐⭐⭐⭐⭐', price: 800 },
 ];
 
 // --- ENVIRONMENT CONSTANTS ---
@@ -136,15 +152,15 @@ export const TIME_CYCLES = {
 
 export const DANGER_CONSTANTS = {
   SPEED_MULTIPLIER: 1.5,
-  SPAWN_RATE_MODIFIER: 0.7, // Spawns hazards faster
-  DANGER_FILL_RATE: 0.05, // Per frame
-  SURGE_DURATION: 300, // 5 seconds
-  LASER_WARN_TIME: 120, // 2 seconds
-  LASER_ACTIVE_TIME: 60, // 1 second
+  SPAWN_RATE_MODIFIER: 0.7, 
+  DANGER_FILL_RATE: 0.05, 
+  SURGE_DURATION: 300, 
+  LASER_WARN_TIME: 120, 
+  LASER_ACTIVE_TIME: 60, 
   DEBRIS_SPEED: 6,
   
   COLORS: {
-    SKY_TOP: 0x450a0a, // Red 950
+    SKY_TOP: 0x450a0a, 
     SKY_BOTTOM: 0x000000,
     SURGE_VIGNETTE: 0xff0000
   }
@@ -153,18 +169,18 @@ export const DANGER_CONSTANTS = {
 // --- BATTLE MODE CONSTANTS ---
 
 export const BATTLE_CONSTANTS = {
-    ENEMY_SPAWN_RATE: 20, // Reduced from 22 for more enemies
-    ENEMY_SPEED: 12.5, // Increased from 11.0 for higher difficulty
+    ENEMY_SPAWN_RATE: 20, 
+    ENEMY_SPEED: 12.5, 
     ENEMY_SCORE: 10,
     ENEMY_HP: 1,
     ENEMY_SIZE: 20,
-    BOSS_INTERVAL: 250, // Score points between bosses
-    BOSS_BASE_HP: 30, // As requested
-    BOSS_SIZE: 50, // Reduced from 70 to make boss less overwhelming
-    BOSS_ATTACK_RATE: 50, // Frames (Faster attacks, was 65)
-    BOSS_PROJECTILE_SPEED: 11.0, // Faster boss projectiles (was 9.0)
-    PLAYER_HP: 3, // Reduced from 5 to balance the difficulty
-    DAMAGE_COOLDOWN: 60, // 1 second invulnerability
+    BOSS_INTERVAL: 250, 
+    BOSS_BASE_HP: 30, 
+    BOSS_SIZE: 50, 
+    BOSS_ATTACK_RATE: 50, 
+    BOSS_PROJECTILE_SPEED: 11.0, 
+    PLAYER_HP: 3, 
+    DAMAGE_COOLDOWN: 60, 
 };
 
 export const ENEMY_SKIN: Skin = {
@@ -197,7 +213,8 @@ export const SKINS: Record<string, Skin> = {
     modelType: 'standard',
     trail: 'none',
     unlockCondition: { type: 'default', value: 0, description: 'Default Skin' },
-    colors: { body: 0xFFE600, wing: 0xFFFFFF, beak: 0xFF9100, eye: 0xFFFFFF }
+    colors: { body: 0xFFE600, wing: 0xFFFFFF, beak: 0xFF9100, eye: 0xFFFFFF },
+    price: 0
   },
   bubblegum: {
     id: 'bubblegum',
@@ -205,26 +222,9 @@ export const SKINS: Record<string, Skin> = {
     rarity: 'Common',
     modelType: 'standard',
     trail: 'sparkle',
-    unlockCondition: { type: 'score', value: 20, description: 'Score 20 in Classic Mode' },
-    colors: { body: 0xF8BBD0, wing: 0xF48FB1, beak: 0xFFFFFF, eye: 0x000000 }
-  },
-  neon_blue: {
-    id: 'neon_blue',
-    name: 'Cyber Pulse',
-    rarity: 'Rare',
-    modelType: 'neon',
-    trail: 'neon_line',
-    unlockCondition: { type: 'score', value: 50, description: 'Score 50 in Classic Mode' },
-    colors: { body: 0x000000, wing: 0x00FFFF, beak: 0x00FFFF, eye: 0xFFFFFF, glow: 0x00FFFF }
-  },
-  pixel_bird: {
-    id: 'pixel_bird',
-    name: '8-Bit Hero',
-    rarity: 'Rare',
-    modelType: 'pixel',
-    trail: 'pixel_dust',
-    unlockCondition: { type: 'games_played', value: 50, description: 'Play 50 Games' },
-    colors: { body: 0xFCC200, wing: 0xFFFFFF, beak: 0xE65100, eye: 0x000000 }
+    unlockCondition: { type: 'score', value: 20, description: 'Score 20 or Buy' },
+    colors: { body: 0xF8BBD0, wing: 0xF48FB1, beak: 0xFFFFFF, eye: 0x000000 },
+    price: 100
   },
   bumblebee: {
     id: 'bumblebee',
@@ -232,17 +232,29 @@ export const SKINS: Record<string, Skin> = {
     rarity: 'Common',
     modelType: 'pixel',
     trail: 'pixel_dust',
-    unlockCondition: { type: 'games_played', value: 100, description: 'Play 100 Games' },
-    colors: { body: 0xFFD700, wing: 0x000000, beak: 0x000000, eye: 0xFFFFFF }
+    unlockCondition: { type: 'games_played', value: 100, description: 'Play 100 Games or Buy' },
+    colors: { body: 0xFFD700, wing: 0x000000, beak: 0x000000, eye: 0xFFFFFF },
+    price: 200
   },
-  ninja: {
-    id: 'ninja',
-    name: 'Shadow Ninja',
-    rarity: 'Epic',
-    modelType: 'standard',
-    trail: 'smoke',
-    unlockCondition: { type: 'battle_score', value: 50, description: 'Score 50 in Battle Mode' },
-    colors: { body: 0x212121, wing: 0x424242, beak: 0xD32F2F, eye: 0xFFFFFF }
+  neon_blue: {
+    id: 'neon_blue',
+    name: 'Cyber Pulse',
+    rarity: 'Rare',
+    modelType: 'neon',
+    trail: 'neon_line',
+    unlockCondition: { type: 'score', value: 50, description: 'Score 50 or Buy' },
+    colors: { body: 0x000000, wing: 0x00FFFF, beak: 0x00FFFF, eye: 0xFFFFFF, glow: 0x00FFFF },
+    price: 500
+  },
+  pixel_bird: {
+    id: 'pixel_bird',
+    name: '8-Bit Hero',
+    rarity: 'Rare',
+    modelType: 'pixel',
+    trail: 'pixel_dust',
+    unlockCondition: { type: 'games_played', value: 50, description: 'Play 50 Games or Buy' },
+    colors: { body: 0xFCC200, wing: 0xFFFFFF, beak: 0xE65100, eye: 0x000000 },
+    price: 400
   },
   neon_pink: {
     id: 'neon_pink',
@@ -250,8 +262,9 @@ export const SKINS: Record<string, Skin> = {
     rarity: 'Rare',
     modelType: 'neon',
     trail: 'sparkle',
-    unlockCondition: { type: 'score', value: 100, description: 'Score 100 in Classic Mode' },
-    colors: { body: 0x220022, wing: 0xFF00FF, beak: 0xFF00FF, eye: 0xFFFFFF, glow: 0xFF00FF }
+    unlockCondition: { type: 'score', value: 100, description: 'Score 100 in Classic' },
+    colors: { body: 0x220022, wing: 0xFF00FF, beak: 0xFF00FF, eye: 0xFFFFFF, glow: 0xFF00FF },
+    price: 600
   },
   zombie: {
     id: 'zombie',
@@ -260,7 +273,28 @@ export const SKINS: Record<string, Skin> = {
     modelType: 'pixel',
     trail: 'pixel_dust',
     unlockCondition: { type: 'games_played', value: 1, description: 'Play your first game' },
-    colors: { body: 0x558B2F, wing: 0x33691E, beak: 0x1B5E20, eye: 0xFF0000 }
+    colors: { body: 0x558B2F, wing: 0x33691E, beak: 0x1B5E20, eye: 0xFF0000 },
+    price: 300
+  },
+  ice_breaker: {
+    id: 'ice_breaker',
+    name: 'Frost Byte',
+    rarity: 'Rare',
+    modelType: 'neon',
+    trail: 'ghost_trail',
+    unlockCondition: { type: 'total_score', value: 2000, description: '2,000 Total Score' },
+    colors: { body: 0xE0FFFF, wing: 0x00FFFF, beak: 0xFFFFFF, eye: 0x0000FF, glow: 0x00FFFF },
+    price: 700
+  },
+  ninja: {
+    id: 'ninja',
+    name: 'Shadow Ninja',
+    rarity: 'Epic',
+    modelType: 'standard',
+    trail: 'smoke',
+    unlockCondition: { type: 'battle_score', value: 50, description: 'Score 50 in Battle' },
+    colors: { body: 0x212121, wing: 0x424242, beak: 0xD32F2F, eye: 0xFFFFFF },
+    price: 1500
   },
   pixel_scout: {
     id: 'pixel_scout',
@@ -269,7 +303,8 @@ export const SKINS: Record<string, Skin> = {
     modelType: 'pixel',
     trail: 'pixel_dust',
     unlockCondition: { type: 'games_played', value: 200, description: 'Play 200 Games' },
-    colors: { body: 0x4CAF50, wing: 0x1B5E20, beak: 0xFFC107, eye: 0x000000 }
+    colors: { body: 0x4CAF50, wing: 0x1B5E20, beak: 0xFFC107, eye: 0x000000 },
+    price: 1600
   },
   vampire: {
     id: 'vampire',
@@ -277,8 +312,9 @@ export const SKINS: Record<string, Skin> = {
     rarity: 'Epic',
     modelType: 'standard',
     trail: 'smoke',
-    unlockCondition: { type: 'score', value: 150, description: 'Score 150 in Classic Mode' },
-    colors: { body: 0x212121, wing: 0xB71C1C, beak: 0xFFFFFF, eye: 0xFF0000 }
+    unlockCondition: { type: 'score', value: 150, description: 'Score 150 in Classic' },
+    colors: { body: 0x212121, wing: 0xB71C1C, beak: 0xFFFFFF, eye: 0xFF0000 },
+    price: 1800
   },
   magma: {
     id: 'magma',
@@ -286,8 +322,9 @@ export const SKINS: Record<string, Skin> = {
     rarity: 'Epic',
     modelType: 'neon',
     trail: 'smoke',
-    unlockCondition: { type: 'battle_score', value: 150, description: 'Score 150 in Battle Mode' },
-    colors: { body: 0x330000, wing: 0xFF4500, beak: 0xFF0000, eye: 0xFFFF00, glow: 0xFF4500 }
+    unlockCondition: { type: 'battle_score', value: 150, description: 'Score 150 in Battle' },
+    colors: { body: 0x330000, wing: 0xFF4500, beak: 0xFF0000, eye: 0xFFFF00, glow: 0xFF4500 },
+    price: 2000
   },
   robot: {
     id: 'robot',
@@ -295,44 +332,9 @@ export const SKINS: Record<string, Skin> = {
     rarity: 'Epic',
     modelType: 'standard',
     trail: 'sparkle',
-    unlockCondition: { type: 'score', value: 200, description: 'Score 200 in Classic Mode' },
-    colors: { body: 0xB0BEC5, wing: 0xCFD8DC, beak: 0x607D8B, eye: 0x00FFFF }
-  },
-  ice_breaker: {
-    id: 'ice_breaker',
-    name: 'Frost Byte',
-    rarity: 'Rare',
-    modelType: 'neon',
-    trail: 'ghost_trail',
-    unlockCondition: { type: 'total_score', value: 2000, description: 'Accumulate 2,000 Total Score' },
-    colors: { body: 0xE0FFFF, wing: 0x00FFFF, beak: 0xFFFFFF, eye: 0x0000FF, glow: 0x00FFFF }
-  },
-  ninja_sage: {
-    id: 'ninja_sage',
-    name: 'Ninja Toad Sage',
-    rarity: 'Legendary',
-    modelType: 'standard',
-    trail: 'smoke',
-    unlockCondition: { type: 'battle_score', value: 300, description: 'Score 300 in Battle Mode' },
-    colors: { body: 0xFF8C00, wing: 0x212121, beak: 0xFFD700, eye: 0xFFFFFF }
-  },
-  saiyan: {
-    id: 'saiyan',
-    name: 'Super Saiyan',
-    rarity: 'Legendary',
-    modelType: 'standard',
-    trail: 'neon_line',
-    unlockCondition: { type: 'score', value: 300, description: 'Score 300 in Classic Mode' },
-    colors: { body: 0xFFE0BD, wing: 0xFF4500, beak: 0xFFD700, eye: 0x00FFFF, glow: 0xFFD700 }
-  },
-  golden: {
-    id: 'golden',
-    name: 'Golden Legend',
-    rarity: 'Legendary',
-    modelType: 'standard',
-    trail: 'sparkle',
-    unlockCondition: { type: 'total_score', value: 10000, description: 'Accumulate 10,000 Total Score' },
-    colors: { body: 0xFFD700, wing: 0xFFFFFF, beak: 0xFFA000, eye: 0xFFFFFF }
+    unlockCondition: { type: 'score', value: 200, description: 'Score 200 in Classic' },
+    colors: { body: 0xB0BEC5, wing: 0xCFD8DC, beak: 0x607D8B, eye: 0x00FFFF },
+    price: 2400
   },
   toxic: {
     id: 'toxic',
@@ -340,8 +342,39 @@ export const SKINS: Record<string, Skin> = {
     rarity: 'Epic',
     modelType: 'neon',
     trail: 'neon_line',
-    unlockCondition: { type: 'total_score', value: 25000, description: 'Accumulate 25,000 Total Score' },
-    colors: { body: 0x000000, wing: 0x00FF00, beak: 0xCCFF00, eye: 0x00FF00, glow: 0x00FF00 }
+    unlockCondition: { type: 'total_score', value: 25000, description: '25,000 Total Score' },
+    colors: { body: 0x000000, wing: 0x00FF00, beak: 0xCCFF00, eye: 0x00FF00, glow: 0x00FF00 },
+    price: 2200
+  },
+  ninja_sage: {
+    id: 'ninja_sage',
+    name: 'Ninja Toad Sage',
+    rarity: 'Legendary',
+    modelType: 'standard',
+    trail: 'smoke',
+    unlockCondition: { type: 'battle_score', value: 300, description: 'Score 300 in Battle' },
+    colors: { body: 0xFF8C00, wing: 0x212121, beak: 0xFFD700, eye: 0xFFFFFF },
+    price: 5000
+  },
+  saiyan: {
+    id: 'saiyan',
+    name: 'Super Saiyan',
+    rarity: 'Legendary',
+    modelType: 'standard',
+    trail: 'neon_line',
+    unlockCondition: { type: 'score', value: 300, description: 'Score 300 in Classic' },
+    colors: { body: 0xFFE0BD, wing: 0xFF4500, beak: 0xFFD700, eye: 0x00FFFF, glow: 0xFFD700 },
+    price: 6000
+  },
+  golden: {
+    id: 'golden',
+    name: 'Golden Legend',
+    rarity: 'Legendary',
+    modelType: 'standard',
+    trail: 'sparkle',
+    unlockCondition: { type: 'total_score', value: 10000, description: '10,000 Total Score' },
+    colors: { body: 0xFFD700, wing: 0xFFFFFF, beak: 0xFFA000, eye: 0xFFFFFF },
+    price: 10000
   },
   pirate_king: {
     id: 'pirate_king',
@@ -349,12 +382,13 @@ export const SKINS: Record<string, Skin> = {
     rarity: 'Legendary',
     modelType: 'standard',
     trail: 'pixel_dust',
-    unlockCondition: { type: 'total_score', value: 50000, description: 'Accumulate 50,000 Total Score' },
-    colors: { body: 0xFFE0BD, wing: 0xFF0000, beak: 0xFFD700, eye: 0x000000 }
+    unlockCondition: { type: 'total_score', value: 50000, description: '50,000 Total Score' },
+    colors: { body: 0xFFE0BD, wing: 0xFF0000, beak: 0xFFD700, eye: 0x000000 },
+    price: 9000
   }
 };
 
 export const PARTICLE_CONFIG = {
   MAX_PARTICLES: 50,
-  TRAIL_SPAWN_RATE: 3, // Frame interval
+  TRAIL_SPAWN_RATE: 3, 
 };

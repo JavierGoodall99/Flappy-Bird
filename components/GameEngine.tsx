@@ -17,6 +17,8 @@ interface GameEngineProps {
   gameMode: GameMode;
   setBossActive: (active: boolean, hp: number, maxHp: number) => void;
   setPlayerHealth: (current: number, max: number) => void;
+  onCoinCollected: (total: number) => void;
+  reviveTrigger: number;
 }
 
 export const GameEngine: React.FC<GameEngineProps> = (props) => {
@@ -30,7 +32,8 @@ export const GameEngine: React.FC<GameEngineProps> = (props) => {
       triggerEffect: props.triggerEffect,
       setActivePowerup: props.setActivePowerup,
       setBossActive: props.setBossActive,
-      setPlayerHealth: props.setPlayerHealth
+      setPlayerHealth: props.setPlayerHealth,
+      onCoinCollected: props.onCoinCollected
   }));
   
   const rendererRef = useRef<GameRenderer>(new GameRenderer());
@@ -42,16 +45,25 @@ export const GameEngine: React.FC<GameEngineProps> = (props) => {
      rendererRef.current.updateSkin(props.currentSkin);
   }, [props.gameState, props.gameMode, props.initialPowerup, props.currentSkin]);
 
+  // Handle Revive
+  useEffect(() => {
+      if (props.reviveTrigger > 0) {
+          const width = window.innerWidth;
+          const height = window.innerHeight;
+          const scale = Math.max(1, GAME_CONSTANTS.MIN_GAME_WIDTH / width, GAME_CONSTANTS.MIN_GAME_HEIGHT / height);
+          const logicWidth = width * scale;
+          const logicHeight = height * scale;
+          
+          logicRef.current.revive(logicWidth, logicHeight);
+      }
+  }, [props.reviveTrigger]);
+
   // Main Loop
   const loop = () => {
     const width = window.innerWidth;
     const height = window.innerHeight;
     
-    // Calculate scale factor using max of width/height constraints
-    // This ensures game world is never too small on either axis
     const scale = Math.max(1, GAME_CONSTANTS.MIN_GAME_WIDTH / width, GAME_CONSTANTS.MIN_GAME_HEIGHT / height);
-    
-    // Apply scale to both width and height to maintain aspect ratio coverage
     const logicWidth = width * scale;
     const logicHeight = height * scale;
     
@@ -61,10 +73,7 @@ export const GameEngine: React.FC<GameEngineProps> = (props) => {
     lastTimeRef.current = now;
     const rawDeltaFactor = rawDeltaMS / 16.666;
 
-    // Update Logic using SCALED dimensions
     logicRef.current.update(rawDeltaFactor, logicWidth, logicHeight);
-
-    // Render (Renderer handles mapping Logic -> Screen)
     rendererRef.current.render(logicRef.current);
 
     requestRef.current = requestAnimationFrame(loop);
@@ -73,7 +82,6 @@ export const GameEngine: React.FC<GameEngineProps> = (props) => {
   useEffect(() => {
     if (containerRef.current) {
         rendererRef.current.init(containerRef.current);
-        // Start loop
         requestRef.current = requestAnimationFrame(loop);
     }
     
@@ -98,62 +106,48 @@ export const GameEngine: React.FC<GameEngineProps> = (props) => {
       const logicHeight = height * scale;
 
       if (props.gameState === GameState.START) {
+          // Full Reset on START
           logicRef.current.reset(false, logicWidth, logicHeight);
           rendererRef.current.reset();
       } else if (props.gameState === GameState.PLAYING) {
+          // Transitioning to PLAYING
           if (prevGameStateRef.current === GameState.START || prevGameStateRef.current === GameState.GAME_OVER) {
-              logicRef.current.reset(true, logicWidth, logicHeight);
-              rendererRef.current.reset();
+              // Only reset and spawn entities if we are NOT reviving.
+              if (props.reviveTrigger === 0) {
+                  logicRef.current.reset(true, logicWidth, logicHeight);
+              }
           }
       }
       prevGameStateRef.current = props.gameState;
-  }, [props.gameState]);
+  }, [props.gameState, props.reviveTrigger]);
 
-  // Input Handling
+  // Input Handlers
+  const handlePointerDown = (e: React.PointerEvent) => {
+      if (props.gameState === GameState.PLAYING) {
+          if (e.button !== 0) return; // Only left click
+          logicRef.current.jump();
+      }
+  };
+
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.code === 'Space') {
-        e.preventDefault();
-        logicRef.current.jump();
-      }
-    };
-
-    const handleInput = (e: Event) => {
-      // Prevent default behavior for touch events on the GAME CANVAS only.
-      // This prevents scrolling the page while playing, but allows scrolling on other UI elements
-      // because they won't trigger this listener.
-      if (e.type === 'touchstart') {
-          if (e.cancelable) e.preventDefault();
-      }
-
-      logicRef.current.jump();
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    
-    // Attach listeners strictly to the container
-    // This ensures inputs on Z-indexed overlays (like Shop/Menus) do NOT trigger game jumps
-    // and are NOT prevented by e.preventDefault() here.
-    const container = containerRef.current;
-    if (container) {
-        container.addEventListener('touchstart', handleInput, { passive: false });
-        container.addEventListener('mousedown', handleInput);
-    }
-
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      if (container) {
-          container.removeEventListener('touchstart', handleInput);
-          container.removeEventListener('mousedown', handleInput);
-      }
-    };
-  }, []);
-
+      const handleKeyDown = (e: KeyboardEvent) => {
+          if (props.gameState === GameState.PLAYING) {
+              if (e.code === 'Space' || e.code === 'ArrowUp') {
+                  // e.preventDefault(); // handled in App for Space, but good here too
+                  logicRef.current.jump();
+              }
+          }
+      };
+      window.addEventListener('keydown', handleKeyDown);
+      return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [props.gameState]);
+  
   return (
     <div 
         ref={containerRef} 
-        className="w-full h-full cursor-pointer touch-none" 
+        className="w-full h-full cursor-pointer touch-none select-none outline-none" 
         onContextMenu={(e) => e.preventDefault()}
+        onPointerDown={handlePointerDown}
     />
   );
 };

@@ -1,4 +1,6 @@
 
+
+
 import { initializeApp } from "firebase/app";
 import { getAnalytics } from "firebase/analytics";
 import { 
@@ -226,7 +228,9 @@ export const loadUserGameData = async (uid: string, userProfile?: { displayName:
     const defaultData = {
         highScores: { standard: 0, battle: 0, danger: 0, playground: 0 },
         unlockedSkins: ['default'],
+        purchasedItems: ['default'],
         currentSkinId: 'default',
+        coins: 0,
         muted: false,
         stats: { gamesPlayed: 0, totalScore: 0 },
         streak: 0,
@@ -279,7 +283,9 @@ export const loadUserGameData = async (uid: string, userProfile?: { displayName:
             return {
                 highScores: { ...defaultData.highScores, ...remoteData.highScores },
                 unlockedSkins: remoteData.unlockedSkins || defaultData.unlockedSkins,
+                purchasedItems: remoteData.purchasedItems || defaultData.purchasedItems,
                 currentSkinId: remoteData.currentSkinId || defaultData.currentSkinId,
+                coins: remoteData.coins || 0,
                 muted: remoteData.muted !== undefined ? remoteData.muted : defaultData.muted,
                 stats: { ...defaultData.stats, ...remoteData.stats },
                 streak: remoteData.streak || defaultData.streak,

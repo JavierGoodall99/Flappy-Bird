@@ -6,6 +6,8 @@ import { WEAPON_LOADOUTS } from '../../constants';
 interface HUDProps {
     gameState: GameState;
     score: number;
+    runCoins: number;
+    totalCoins: number;
     highScore: number;
     gameMode: GameMode;
     activePowerup: ActivePowerup | null;
@@ -17,7 +19,7 @@ interface HUDProps {
 }
 
 export const HUD: React.FC<HUDProps> = ({ 
-    gameState, score, highScore, gameMode, activePowerup, bossInfo, playerHealth, isMuted, toggleMute, togglePause
+    gameState, score, runCoins, totalCoins, highScore, gameMode, activePowerup, bossInfo, playerHealth, isMuted, toggleMute, togglePause
 }) => {
     
     // Helper for Powerup Names
@@ -70,7 +72,7 @@ export const HUD: React.FC<HUDProps> = ({
 
             {/* PLAYER HP HUD (Battle Mode) */}
             {gameMode === 'battle' && gameState === GameState.PLAYING && (
-                <div className="absolute top-16 left-4 md:top-24 md:left-8 z-30 pointer-events-none animate-fade-in">
+                <div className="absolute top-24 left-4 md:top-36 md:left-8 z-30 pointer-events-none animate-fade-in">
                     <div className="flex flex-col gap-1">
                         <div className="text-[10px] md:text-xs font-bold text-white/80 tracking-widest uppercase shadow-black drop-shadow-md">ARMOR INTEGRITY</div>
                         <div className="flex gap-1">
@@ -140,6 +142,12 @@ export const HUD: React.FC<HUDProps> = ({
                     <span className={`text-4xl md:text-6xl font-black drop-shadow-lg select-none font-['Outfit'] transition-all text-white leading-none scale-100`}>
                         {score}
                     </span>
+                    
+                    {/* Coin Counter */}
+                    <div className="flex items-center gap-1.5 mt-2 bg-slate-900/40 px-3 py-1 rounded-full border border-yellow-500/30 backdrop-blur-md shadow-lg animate-fade-in">
+                        <span className="text-sm">🪙</span>
+                        <span className="text-white font-bold font-mono text-sm">{runCoins}</span>
+                    </div>
                     
                     {/* Always show Best Score */}
                     {gameMode !== 'playground' && (
