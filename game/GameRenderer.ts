@@ -271,14 +271,14 @@ export class GameRenderer {
         this.bossMesh.visible = true;
         this.bossMesh.position.x = toWorldX(gameLogic.boss.x);
         this.bossMesh.position.y = toWorldY(gameLogic.boss.y);
-        this.bossMesh.scale.set(5, 5, 5);
+        this.bossMesh.scale.set(4, 4, 4); // Reduced from 5 to match new smaller constant
         this.bossMesh.rotation.z = Math.sin(gameLogic.frameCount * 0.05) * 0.1;
 
         if (gameLogic.boss.hp < gameLogic.boss.maxHp * 0.3) {
              const shake = (Math.random() - 0.5) * 10;
              this.bossMesh.position.x += shake;
              this.bossMesh.position.y += shake;
-             const pulse = 5 + Math.sin(performance.now() * 0.02) * 0.5;
+             const pulse = 4 + Math.sin(performance.now() * 0.02) * 0.5; // Adjusted base pulse
              this.bossMesh.scale.set(pulse, pulse, pulse);
         }
     } else if (this.bossMesh) {

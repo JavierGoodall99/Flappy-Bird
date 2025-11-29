@@ -1,4 +1,3 @@
-
 import React, { useRef, useEffect } from 'react';
 import { GameState, ActivePowerup, Skin, GameMode, PowerupType } from '../types';
 import { GameLogic } from '../game/GameLogic';
@@ -117,25 +116,48 @@ export const GameEngine: React.FC<GameEngineProps> = (props) => {
         logicRef.current.jump();
       }
     };
-    const handleTouchOrClick = (e: Event) => {
-      // Prevent jump if interacting with UI buttons
+
+    const handleInput = (e: Event) => {
+      // Check if interacting with UI buttons
       const target = e.target as HTMLElement;
-      if (target.closest('button') || target.closest('[role="button"]')) {
+      if (target.closest('button') || target.closest('[role="button"]') || target.closest('a')) {
           return;
       }
+      
+      // Prevent default behavior for touch events to stop scrolling/zooming/selection
+      if (e.type === 'touchstart') {
+          // IMPORTANT: Prevent default to stop scrolling/zooming AND prevent synthesized mouse events
+          if (e.cancelable) e.preventDefault();
+      }
+
+      // Only jump if we are not hitting a UI element
       logicRef.current.jump();
     };
+
     window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('mousedown', handleTouchOrClick);
-    window.addEventListener('touchstart', handleTouchOrClick, { passive: false });
+    
+    // Add non-passive touch listener to allow preventDefault
+    // 'mousedown' is needed for desktop mouse clicks
+    const container = containerRef.current;
+    if (container) {
+        // We bind to the container specifically to avoid global interference where possible, 
+        // but window listeners are safer for capturing fast taps anywhere.
+    }
+    window.addEventListener('touchstart', handleInput, { passive: false });
+    window.addEventListener('mousedown', handleInput);
+
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('mousedown', handleTouchOrClick);
-      window.removeEventListener('touchstart', handleTouchOrClick);
+      window.removeEventListener('touchstart', handleInput);
+      window.removeEventListener('mousedown', handleInput);
     };
   }, []);
 
   return (
-    <div ref={containerRef} className="w-full h-full cursor-pointer" />
+    <div 
+        ref={containerRef} 
+        className="w-full h-full cursor-pointer touch-none" 
+        onContextMenu={(e) => e.preventDefault()}
+    />
   );
 };

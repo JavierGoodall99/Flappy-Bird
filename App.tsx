@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { GameEngine } from './components/GameEngine';
 import { GameState, ActivePowerup, SkinId, PowerupType, GameMode } from './types';
@@ -164,14 +163,6 @@ const App: React.FC = () => {
       }
     };
     
-    // Use window listeners for game input to ensure it works even if focus is lost from div
-    const handleTouchOrClick = (e: Event) => {
-         // Simple check to prevent firing jump when clicking UI buttons
-         const target = e.target as HTMLElement;
-         if (target.closest('button') || target.closest('[role="button"]')) return;
-         // Logic is inside GameEngine for jumps, but we prevent defaults here if needed
-    };
-
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [togglePause, gameState, startGame, isShopOpen, isGuideOpen, isWeaponSelectOpen, isLeaderboardOpen, isProfileEditOpen, initialPowerup, gameMode, isMuted, isLoading]);
@@ -181,7 +172,7 @@ const App: React.FC = () => {
   const isMenuOpen = isShopOpen || isGuideOpen || isWeaponSelectOpen || isLeaderboardOpen || isProfileEditOpen;
 
   return (
-    <div className={`relative w-full h-screen overflow-hidden ${shake ? 'animate-pulse' : ''}`}>
+    <div className={`relative w-full h-[100dvh] overflow-hidden ${shake ? 'animate-pulse' : ''}`}>
       {/* Game Engine Layer */}
       <div className="absolute inset-0 z-0">
         <GameEngine 

@@ -1,6 +1,4 @@
 
-
-
 import { Skin } from './types';
 
 export const GAME_CONSTANTS = {
@@ -11,8 +9,8 @@ export const GAME_CONSTANTS = {
   PIPE_GAP: 155,
   PIPE_WIDTH: 65,
   PIPE_SPAWN_RATE: 105, // Frames between pipes
-  BIRD_RADIUS: 17,
-  BIRD_X_POSITION: 0.3, // 30% of screen width
+  BIRD_RADIUS: 16, // Slightly reduced
+  BIRD_X_POSITION: 0.2, // Moved left (was 0.22) to give more reaction time
   GLASS_PIPE_CHANCE: 0.25,
   GLASS_BREAK_SCORE: 5,
   GLASS_BREAK_PENALTY: 8, // Positive Y velocity to push down
@@ -41,9 +39,10 @@ export const GAME_CONSTANTS = {
   GUN_FIRE_RATE: 45, // Slower fire rate
   PROJECTILE_SPEED: 9,
   
-  // Mobile Responsiveness
-  MIN_GAME_WIDTH: 600,
-  MIN_GAME_HEIGHT: 600,
+  // Mobile Responsiveness / Camera
+  // Significantly increased to force a "zoomed out" perspective on mobile screens
+  MIN_GAME_WIDTH: 850, 
+  MIN_GAME_HEIGHT: 1100, 
 };
 
 export const COLORS = {
@@ -158,7 +157,7 @@ export const BATTLE_CONSTANTS = {
     ENEMY_SIZE: 20,
     BOSS_INTERVAL: 250, // Score points between bosses
     BOSS_BASE_HP: 30, // As requested
-    BOSS_SIZE: 70,
+    BOSS_SIZE: 50, // Reduced from 70 to make boss less overwhelming
     BOSS_ATTACK_RATE: 50, // Frames (Faster attacks, was 65)
     BOSS_PROJECTILE_SPEED: 11.0, // Faster boss projectiles (was 9.0)
     PLAYER_HP: 3, // Reduced from 5 to balance the difficulty
