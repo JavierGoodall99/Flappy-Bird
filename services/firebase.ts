@@ -1,11 +1,11 @@
-
 import { initializeApp } from "firebase/app";
 import { getAnalytics } from "firebase/analytics";
 import { 
   getAuth, 
   signInAnonymously, 
   GoogleAuthProvider, 
-  signInWithPopup, 
+  signInWithPopup,
+  linkWithPopup,
   signOut,
   onAuthStateChanged,
   User
@@ -76,7 +76,24 @@ export const signIn = async () => {
 // Authenticate with Google
 export const signInWithGoogle = async () => {
     try {
-        const result = await signInWithPopup(auth, googleProvider);
+        let result;
+        // Check if current user is anonymous. If so, try to link.
+        if (auth.currentUser && auth.currentUser.isAnonymous) {
+            try {
+                result = await linkWithPopup(auth.currentUser, googleProvider);
+            } catch (linkError: any) {
+                if (linkError.code === 'auth/credential-already-in-use') {
+                    // Google account already exists, so we must sign in to it instead of linking.
+                    // This creates a separate session if the anon user had data, but is necessary if the account exists.
+                    result = await signInWithPopup(auth, googleProvider);
+                } else {
+                    throw linkError;
+                }
+            }
+        } else {
+            // Not anonymous or not logged in, just sign in normally
+            result = await signInWithPopup(auth, googleProvider);
+        }
         return result.user;
     } catch (error: any) {
         if (error.code === 'auth/unauthorized-domain') {
