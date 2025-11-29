@@ -35,13 +35,6 @@ export const ProfileEditModal: React.FC<ProfileEditModalProps> = ({ isOpen, onCl
     return (
         <div className="absolute inset-0 z-50 bg-black/40 backdrop-blur-sm flex flex-col items-center justify-center p-6 animate-fade-in">
               <div className="w-full max-w-sm glass-panel p-6 rounded-3xl shadow-2xl relative">
-                  <button 
-                      onClick={onClose}
-                      className="absolute top-6 right-6 text-white/50 hover:text-white transition-colors"
-                  >
-                      ✕
-                  </button>
-
                   <h2 className="text-xl font-black text-white mb-8 text-center tracking-wide drop-shadow-md">PROFILE SETTINGS</h2>
                   
                   <div className="flex flex-col items-center mb-8">
