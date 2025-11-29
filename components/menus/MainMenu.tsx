@@ -17,6 +17,11 @@ interface MainMenuProps {
 export const MainMenu: React.FC<MainMenuProps> = ({ 
   startGame, setShopOpen, setGuideOpen, setLeaderboardOpen, setWeaponSelectOpen, setProfileOpen, user, handleGoogleSignIn 
 }) => {
+  
+  const shouldUseCustomAvatar = user && (user.useCustomAvatar || !user.photoURL);
+  const avatarInitials = user ? (user.avatarText || user.displayName || 'G').substring(0, 2).toUpperCase() : 'G';
+  const avatarColor = user?.avatarColor || '#6366F1';
+
   return (
     <>
       {/* USER PROFILE - TOP RIGHT */}
@@ -26,12 +31,15 @@ export const MainMenu: React.FC<MainMenuProps> = ({
                   onClick={() => setProfileOpen(true)}
                   className="group flex items-center gap-3 bg-[#1a1b26]/90 p-1.5 pr-5 rounded-full shadow-2xl border border-white/10 backdrop-blur-md hover:border-white/20 transition-all hover:scale-105 active:scale-95 cursor-pointer"
               >
-                  <div className="relative w-10 h-10 rounded-full bg-slate-800 overflow-hidden border border-white/10 shadow-inner shrink-0">
-                        {user.photoURL ? (
+                  <div 
+                    className="relative w-10 h-10 rounded-full overflow-hidden border border-white/10 shadow-inner shrink-0 flex items-center justify-center transition-colors duration-300"
+                    style={{ backgroundColor: shouldUseCustomAvatar ? avatarColor : '#1e293b' }}
+                  >
+                        {!shouldUseCustomAvatar && user.photoURL ? (
                             <img src={user.photoURL} alt="User" className="w-full h-full object-cover" />
                         ) : (
-                            <div className="w-full h-full flex items-center justify-center text-sm font-bold bg-gradient-to-br from-indigo-500 to-purple-600 text-white">
-                                {user.displayName ? user.displayName.charAt(0).toUpperCase() : 'G'}
+                            <div className="text-sm font-bold text-white tracking-wider">
+                                {avatarInitials}
                             </div>
                         )}
                   </div>

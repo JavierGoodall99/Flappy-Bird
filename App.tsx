@@ -37,7 +37,7 @@ const App: React.FC = () => {
   // --- Persistent Data & Auth (Hook) ---
   const { 
       user, isLoading, highScores, stats, unlockedSkins, currentSkinId, isMuted,
-      setIsMuted, setCurrentSkinId, processGameEnd, updateProfileName 
+      setIsMuted, setCurrentSkinId, processGameEnd, updateProfile 
   } = useGameData();
 
   const [isNewHighScore, setIsNewHighScore] = useState(false);
@@ -120,8 +120,8 @@ const App: React.FC = () => {
       showNotification("Account Linked Successfully!", 'info');
   };
 
-  const handleSaveProfile = async (name: string) => {
-      await updateProfileName(name);
+  const handleSaveProfile = async (data: any) => {
+      await updateProfile(data);
       showNotification("Profile Updated!", 'info');
   };
 

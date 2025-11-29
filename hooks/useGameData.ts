@@ -46,7 +46,14 @@ export const useGameData = () => {
                 audioService.setMuted(cloudData.muted);
 
                 if (cloudData.displayName) {
-                    setUser((prev: any) => ({ ...prev, displayName: cloudData.displayName, photoURL: cloudData.photoURL }));
+                    setUser((prev: any) => ({ 
+                        ...prev, 
+                        displayName: cloudData.displayName, 
+                        photoURL: cloudData.photoURL,
+                        avatarColor: cloudData.avatarColor,
+                        avatarText: cloudData.avatarText,
+                        useCustomAvatar: cloudData.useCustomAvatar
+                    }));
                 }
                 setTimeout(() => { isSyncing.current = false; }, 100);
             }
@@ -68,9 +75,17 @@ export const useGameData = () => {
   useEffect(() => { if (!isSyncing.current && user) saveGameData(user.uid, { muted: isMuted }); }, [isMuted, user]);
 
   const updateProfileName = async (name: string) => {
-      if (user && name.trim().length > 0) {
-          await updateUserProfile(user.uid, name.trim());
-          setUser((prev: any) => ({ ...prev, displayName: name.trim() }));
+      // Deprecated, mapped to updateProfile for backward compatibility if needed
+      await updateProfile({ displayName: name });
+  };
+
+  const updateProfile = async (data: { displayName?: string, avatarColor?: string, avatarText?: string, useCustomAvatar?: boolean }) => {
+      if (user) {
+          const newData = { ...data };
+          if (newData.displayName && newData.displayName.trim().length === 0) delete newData.displayName;
+          
+          await updateUserProfile(user.uid, newData);
+          setUser((prev: any) => ({ ...prev, ...newData }));
       }
   };
 
@@ -145,6 +160,7 @@ export const useGameData = () => {
       setIsMuted,
       setCurrentSkinId,
       processGameEnd,
-      updateProfileName
+      updateProfileName,
+      updateProfile
   };
 };

@@ -1,3 +1,4 @@
+
 import { initializeApp } from "firebase/app";
 import { getAnalytics } from "firebase/analytics";
 import { 
@@ -127,12 +128,14 @@ export const subscribeToAuth = (callback: (user: User | null) => void) => {
     return onAuthStateChanged(auth, callback);
 };
 
-// Update user profile name manually
-export const updateUserProfile = async (uid: string, name: string) => {
+// Update user profile data
+export const updateUserProfile = async (uid: string, data: any) => {
     if (!uid) return;
     try {
         const userRef = doc(db, 'users', uid);
-        await setDoc(userRef, { displayName: name }, { merge: true });
+        // Ensure data is an object
+        const payload = typeof data === 'string' ? { displayName: data } : data;
+        await setDoc(userRef, payload, { merge: true });
     } catch (e) {
         console.error("Error updating profile", e);
     }
@@ -150,7 +153,10 @@ export const loadUserGameData = async (uid: string, userProfile?: { displayName:
         muted: false,
         stats: { gamesPlayed: 0, totalScore: 0 },
         displayName: null as string | null,
-        photoURL: null as string | null
+        photoURL: null as string | null,
+        avatarColor: '#6366F1',
+        avatarText: '',
+        useCustomAvatar: false
     };
 
     try {
@@ -203,7 +209,10 @@ export const loadUserGameData = async (uid: string, userProfile?: { displayName:
                 muted: remoteData.muted !== undefined ? remoteData.muted : defaultData.muted,
                 stats: { ...defaultData.stats, ...remoteData.stats },
                 displayName: finalDisplayName || defaultData.displayName,
-                photoURL: remoteData.photoURL || userProfile?.photoURL || defaultData.photoURL
+                photoURL: remoteData.photoURL || userProfile?.photoURL || defaultData.photoURL,
+                avatarColor: remoteData.avatarColor || defaultData.avatarColor,
+                avatarText: remoteData.avatarText || defaultData.avatarText,
+                useCustomAvatar: remoteData.useCustomAvatar ?? defaultData.useCustomAvatar
             };
         } else {
             // New User: Create default document

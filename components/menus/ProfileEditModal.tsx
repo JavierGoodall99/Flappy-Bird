@@ -6,21 +6,44 @@ interface ProfileEditModalProps {
     isOpen: boolean;
     onClose: () => void;
     user: any;
-    onSaveName: (name: string) => void;
+    onSaveName: (data: any) => void;
 }
+
+const AVATAR_COLORS = [
+    '#6366F1', // Indigo
+    '#EF4444', // Red
+    '#F59E0B', // Amber
+    '#10B981', // Emerald
+    '#3B82F6', // Blue
+    '#EC4899', // Pink
+    '#8B5CF6', // Violet
+    '#14B8A6', // Teal
+    '#111827', // Slate
+];
 
 export const ProfileEditModal: React.FC<ProfileEditModalProps> = ({ isOpen, onClose, user, onSaveName }) => {
     const [editNameValue, setEditNameValue] = useState("");
+    const [avatarColor, setAvatarColor] = useState('#6366F1');
+    const [avatarText, setAvatarText] = useState("");
+    const [useCustom, setUseCustom] = useState(false);
 
     useEffect(() => {
         if (isOpen && user) {
             setEditNameValue(user.displayName || "");
+            setAvatarColor(user.avatarColor || '#6366F1');
+            setAvatarText(user.avatarText || "");
+            setUseCustom(!!user.useCustomAvatar);
         }
     }, [isOpen, user]);
 
     const handleSave = () => {
         if (editNameValue.trim().length > 0) {
-            onSaveName(editNameValue);
+            onSaveName({
+                displayName: editNameValue,
+                avatarColor,
+                avatarText: avatarText.toUpperCase(),
+                useCustomAvatar: useCustom
+            });
             onClose();
         }
     };
@@ -32,29 +55,71 @@ export const ProfileEditModal: React.FC<ProfileEditModalProps> = ({ isOpen, onCl
 
     if (!isOpen) return null;
 
+    const displayInitials = (avatarText || editNameValue || 'GU').substring(0, 2).toUpperCase();
+
     return (
         <div className="absolute inset-0 z-50 bg-black/40 backdrop-blur-sm flex flex-col items-center justify-center p-6 animate-fade-in">
-              <div className="w-full max-w-sm glass-panel p-6 rounded-3xl shadow-2xl relative">
-                  <h2 className="text-xl font-black text-white mb-8 text-center tracking-wide drop-shadow-md">PROFILE SETTINGS</h2>
+              <div className="w-full max-w-sm glass-panel p-6 rounded-3xl shadow-2xl relative max-h-[90vh] overflow-y-auto no-scrollbar">
+                  <h2 className="text-xl font-black text-white mb-6 text-center tracking-wide drop-shadow-md">PROFILE SETTINGS</h2>
                   
-                  <div className="flex flex-col items-center mb-8">
-                      <div className="relative group cursor-pointer">
-                          <div className="w-24 h-24 rounded-full border-4 border-[#6366F1] flex items-center justify-center overflow-hidden bg-black/20 shadow-inner">
-                               {user?.photoURL ? (
+                  {/* Avatar Preview */}
+                  <div className="flex flex-col items-center mb-6">
+                      <div className="relative group cursor-pointer transition-transform active:scale-95" onClick={() => user?.photoURL && setUseCustom(!useCustom)}>
+                          <div 
+                            className="w-24 h-24 rounded-full border-4 border-white/20 flex items-center justify-center overflow-hidden shadow-inner transition-colors duration-300"
+                            style={{ backgroundColor: (useCustom || !user?.photoURL) ? avatarColor : 'transparent' }}
+                          >
+                               {!useCustom && user?.photoURL ? (
                                    <img src={user.photoURL} alt="User" className="w-full h-full object-cover" />
                                ) : (
-                                   <div className="text-3xl font-bold text-white">
-                                       {user?.displayName ? user.displayName.substring(0, 2).toUpperCase() : 'GU'}
+                                   <div className="text-3xl font-bold text-white tracking-wider">
+                                       {displayInitials}
                                    </div>
                                )}
                           </div>
-                          <div className="absolute bottom-0 right-0 w-8 h-8 bg-[#4F46E5] rounded-full border-2 border-white/20 flex items-center justify-center text-white text-xs shadow-lg">
-                              ✏️
-                          </div>
+                          {user?.photoURL && (
+                            <div className="absolute bottom-0 right-0 w-8 h-8 bg-black/60 backdrop-blur-md rounded-full border border-white/20 flex items-center justify-center text-white text-[10px] shadow-lg">
+                                {useCustom ? '📷' : '🎨'}
+                            </div>
+                          )}
                       </div>
+                      {user?.photoURL && (
+                          <button 
+                            onClick={() => setUseCustom(!useCustom)}
+                            className="mt-2 text-[10px] font-bold uppercase tracking-widest text-white/50 hover:text-white transition-colors"
+                          >
+                              {useCustom ? 'Switch to Google Photo' : 'Use Custom Avatar'}
+                          </button>
+                      )}
                   </div>
                   
-                  <div className="mb-8">
+                  {/* Customization Options */}
+                  {(useCustom || !user?.photoURL) && (
+                      <div className="mb-6 bg-black/20 p-4 rounded-2xl">
+                          <label className="text-[10px] font-bold text-white/70 uppercase tracking-widest mb-3 block">Avatar Color</label>
+                          <div className="flex flex-wrap gap-2 mb-4 justify-center">
+                              {AVATAR_COLORS.map(c => (
+                                  <button
+                                      key={c}
+                                      onClick={() => setAvatarColor(c)}
+                                      className={`w-6 h-6 rounded-full border-2 transition-all hover:scale-110 ${avatarColor === c ? 'border-white scale-110 shadow-lg' : 'border-transparent opacity-70 hover:opacity-100'}`}
+                                      style={{ backgroundColor: c }}
+                                  />
+                              ))}
+                          </div>
+                          <label className="text-[10px] font-bold text-white/70 uppercase tracking-widest mb-2 block">Custom Initials (Optional)</label>
+                          <input 
+                             type="text" 
+                             value={avatarText}
+                             onChange={(e) => setAvatarText(e.target.value.substring(0, 2))}
+                             maxLength={2}
+                             className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-2 text-white font-bold outline-none text-center tracking-widest uppercase placeholder-white/20"
+                             placeholder={displayInitials}
+                          />
+                      </div>
+                  )}
+                  
+                  <div className="mb-6">
                       <label className="text-[10px] font-bold text-white/70 uppercase tracking-widest mb-2 block">Display Name</label>
                       <div className="relative">
                           <input 
@@ -72,7 +137,7 @@ export const ProfileEditModal: React.FC<ProfileEditModalProps> = ({ isOpen, onCl
                   </div>
                   
                   <div className="mb-8 border-t border-white/10 pt-6">
-                      <label className="text-[10px] font-bold text-white/70 uppercase tracking-widest mb-3 block">Connected Accounts</label>
+                      <label className="text-[10px] font-bold text-white/70 uppercase tracking-widest mb-3 block">Account</label>
                       
                       {user && user.isAnonymous ? (
                            <button 
@@ -87,12 +152,12 @@ export const ProfileEditModal: React.FC<ProfileEditModalProps> = ({ isOpen, onCl
                                       <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
                                   </svg>
                                </div>
-                               Sign in with Google
+                               Link Google Account
                            </button>
                       ) : (
                            <div className="flex gap-2">
                                <div className="flex-1 py-3 rounded-xl bg-green-500/20 border border-green-500/30 text-green-300 font-bold text-center text-sm flex items-center justify-center gap-2">
-                                   <span>✓</span> Connected
+                                   <span>✓</span> Linked
                                </div>
                                <button 
                                    onClick={() => { logout(); onClose(); }}
@@ -115,7 +180,7 @@ export const ProfileEditModal: React.FC<ProfileEditModalProps> = ({ isOpen, onCl
                          onClick={handleSave}
                          className="flex-1 py-3.5 rounded-xl font-bold bg-gradient-to-r from-amber-500 to-orange-600 text-white shadow-lg hover:shadow-orange-500/20 transition-all active:scale-95 text-sm tracking-wide"
                       >
-                         SAVE CHANGES
+                         SAVE
                       </button>
                   </div>
               </div>
