@@ -1,13 +1,11 @@
 
-
-
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { GameEngine } from './components/GameEngine';
 import { Button } from './components/Button';
 import { GameState, ActivePowerup, SkinId, Skin, PowerupType, GameMode } from './types';
 import { SKINS, POWERUP_INFO, WEAPON_LOADOUTS } from './constants';
 import { audioService } from './services/audioService';
-import { signIn, signInWithGoogle, logout, subscribeToAuth, loadUserGameData, saveGameData, getLeaderboard, LeaderboardEntry } from './services/firebase';
+import { signIn, signInWithGoogle, logout, subscribeToAuth, loadUserGameData, saveGameData, getLeaderboard, LeaderboardEntry, updateUserProfile } from './services/firebase';
 
 const App: React.FC = () => {
   const [gameState, setGameState] = useState<GameState>(GameState.START);
@@ -49,6 +47,10 @@ const App: React.FC = () => {
   const [leaderboardData, setLeaderboardData] = useState<LeaderboardEntry[]>([]);
   const [leaderboardLoading, setLeaderboardLoading] = useState(false);
 
+  // Profile Edit State
+  const [isProfileEditOpen, setIsProfileEditOpen] = useState(false);
+  const [editNameValue, setEditNameValue] = useState("");
+
   // Testing State
   const [initialPowerup, setInitialPowerup] = useState<PowerupType | null>(null);
 
@@ -62,6 +64,7 @@ const App: React.FC = () => {
     const handleAuthChange = async (authUser: any) => {
         setIsLoading(true);
         if (authUser) {
+            // Temporary set before loading DB details
             setUser(authUser);
 
             // Prepare User Identity Data
@@ -83,6 +86,12 @@ const App: React.FC = () => {
                 setStats(cloudData.stats);
                 setIsMuted(cloudData.muted);
                 audioService.setMuted(cloudData.muted);
+
+                // Update local user object with the displayName from DB (which might be the generated random name)
+                // We create a new object to avoid mutating the readonly authUser
+                if (cloudData.displayName) {
+                    setUser((prev: any) => ({ ...prev, displayName: cloudData.displayName, photoURL: cloudData.photoURL }));
+                }
 
                 setTimeout(() => { isSyncing.current = false; }, 100);
             }
@@ -213,6 +222,7 @@ const App: React.FC = () => {
     setIsGuideOpen(false);
     setIsWeaponSelectOpen(false);
     setIsLeaderboardOpen(false);
+    setIsProfileEditOpen(false);
     setBossInfo({ active: false, hp: 0, maxHp: 0 });
     setPlayerHealth({ current: 1, max: 1 });
   }, []);
@@ -248,8 +258,10 @@ const App: React.FC = () => {
       setCurrentSkinId(id);
   };
   
-  const handleGoogleSignIn = () => {
-      signInWithGoogle();
+  const handleGoogleSignIn = async () => {
+      await signInWithGoogle();
+      setIsProfileEditOpen(false);
+      showNotification("Account Linked Successfully!", 'info');
   };
   
   const handleLogout = () => {
@@ -259,6 +271,20 @@ const App: React.FC = () => {
   const handleOpenLeaderboard = () => {
       setIsLeaderboardOpen(true);
       // Data fetching is handled by the useEffect below
+  };
+
+  const handleOpenProfileEdit = () => {
+      setEditNameValue(user?.displayName || "");
+      setIsProfileEditOpen(true);
+  };
+
+  const handleSaveProfile = async () => {
+      if (editNameValue.trim().length > 0 && user) {
+          await updateUserProfile(user.uid, editNameValue.trim());
+          setUser((prev: any) => ({ ...prev, displayName: editNameValue.trim() }));
+          setIsProfileEditOpen(false);
+          showNotification("Profile Updated!", 'info');
+      }
   };
 
   // Automatically fetch leaderboard data when open or tab changes
@@ -277,7 +303,7 @@ const App: React.FC = () => {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (isLoading) return;
-      if (isShopOpen || isGuideOpen || isWeaponSelectOpen || isLeaderboardOpen) return; // Disable game controls in menus
+      if (isShopOpen || isGuideOpen || isWeaponSelectOpen || isLeaderboardOpen || isProfileEditOpen) return; // Disable game controls in menus
       if (e.code === 'Escape' || e.code === 'KeyP') togglePause();
       if (e.code === 'KeyM') toggleMute({ stopPropagation: () => {} } as React.MouseEvent);
       if (e.code === 'Space') {
@@ -295,7 +321,7 @@ const App: React.FC = () => {
       window.removeEventListener('mousedown', handleTouchOrClick);
       window.removeEventListener('touchstart', handleTouchOrClick);
     };
-  }, [togglePause, gameState, startGame, isShopOpen, isGuideOpen, isWeaponSelectOpen, isLeaderboardOpen, initialPowerup, gameMode, isMuted, isLoading]);
+  }, [togglePause, gameState, startGame, isShopOpen, isGuideOpen, isWeaponSelectOpen, isLeaderboardOpen, isProfileEditOpen, initialPowerup, gameMode, isMuted, isLoading]);
   
   // Dummy handler to prevent errors in cleanup
   const handleTouchOrClick = () => {};
@@ -372,7 +398,7 @@ const App: React.FC = () => {
       )}
 
       {/* MUTE BUTTON - Always Visible (except deep menus maybe) */}
-      {!isShopOpen && !isGuideOpen && !isWeaponSelectOpen && !isLeaderboardOpen && (
+      {!isShopOpen && !isGuideOpen && !isWeaponSelectOpen && !isLeaderboardOpen && !isProfileEditOpen && (
           <button 
             onClick={toggleMute}
             className="absolute top-6 left-6 md:top-8 md:left-8 z-30 w-10 h-10 md:w-12 md:h-12 bg-white/20 backdrop-blur-md border border-white/30 rounded-full flex items-center justify-center hover:bg-white/30 transition-all active:scale-95 group"
@@ -386,36 +412,45 @@ const App: React.FC = () => {
       )}
 
       {/* USER PROFILE / AUTH - TOP RIGHT on START SCREEN */}
-      {gameState === GameState.START && !isShopOpen && !isGuideOpen && !isWeaponSelectOpen && !isLeaderboardOpen && (
-          <div className="absolute top-6 right-6 md:top-8 md:right-8 z-30 flex flex-col items-end gap-2 animate-fade-in">
-              {user && !user.isAnonymous ? (
-                  <div className="flex items-center gap-2 bg-slate-900/80 backdrop-blur-md border border-white/20 rounded-full pl-1 pr-4 py-1 shadow-lg">
-                      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-xs font-bold text-white overflow-hidden border border-white/30">
-                          {user.photoURL ? (
-                              <img src={user.photoURL} alt="User" className="w-full h-full object-cover" />
-                          ) : (
-                              <span>{user.displayName ? user.displayName.charAt(0).toUpperCase() : 'U'}</span>
-                          )}
+      {gameState === GameState.START && !isShopOpen && !isGuideOpen && !isWeaponSelectOpen && !isLeaderboardOpen && !isProfileEditOpen && (
+          <div className="absolute top-6 right-6 md:top-8 md:right-8 z-30 animate-fade-in select-none">
+              {user ? (
+                  <button 
+                      onClick={handleOpenProfileEdit}
+                      className="group flex items-center gap-3 bg-[#1a1b26]/90 p-1.5 pr-5 rounded-full shadow-2xl border border-white/10 backdrop-blur-md hover:border-white/20 transition-all hover:scale-105 active:scale-95 cursor-pointer"
+                  >
+                      {/* Avatar */}
+                      <div className="relative w-10 h-10 rounded-full bg-slate-800 overflow-hidden border border-white/10 shadow-inner shrink-0">
+                           {user.photoURL ? (
+                               <img src={user.photoURL} alt="User" className="w-full h-full object-cover" />
+                           ) : (
+                               <div className="w-full h-full flex items-center justify-center text-sm font-bold bg-gradient-to-br from-indigo-500 to-purple-600 text-white">
+                                   {user.displayName ? user.displayName.charAt(0).toUpperCase() : 'G'}
+                               </div>
+                           )}
                       </div>
-                      <div className="flex flex-col">
-                           <span className="text-xs font-bold text-white leading-tight max-w-[100px] truncate">
-                               {user.displayName || 'Player'}
-                           </span>
-                           <button 
-                              onClick={handleLogout}
-                              className="text-[10px] text-red-400 hover:text-red-300 font-bold uppercase tracking-wide text-left"
-                           >
-                              Log Out
-                           </button>
+
+                      {/* Name Info */}
+                      <div className="flex flex-col items-start">
+                          <span className="text-white font-bold text-sm leading-tight font-['Outfit'] max-w-[100px] truncate">
+                              {user.displayName || 'Guest'}
+                          </span>
+                          <span className="text-[10px] text-white/50 font-bold uppercase tracking-wider leading-none">
+                              EDIT PROFILE
+                          </span>
                       </div>
-                  </div>
+
+                      {/* Edit Pencil Icon */}
+                      <div className="text-white/40 group-hover:text-white transition-colors ml-1">
+                          ✏️
+                      </div>
+                  </button>
               ) : (
                   <button 
                       onClick={handleGoogleSignIn}
-                      className="px-4 py-2 bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/20 rounded-full text-white text-xs font-bold tracking-wide flex items-center gap-2 transition-all shadow-lg active:scale-95 group"
+                      className="group relative px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 rounded-full font-bold text-white text-sm tracking-wider shadow-lg hover:shadow-indigo-500/50 hover:scale-105 active:scale-95 transition-all flex items-center gap-2 overflow-hidden border border-white/20"
                   >
-                      <span className="group-hover:scale-110 transition-transform">👤</span>
-                      <span>SIGN IN</span>
+                      <span className="relative">SIGN IN WITH GOOGLE</span>
                   </button>
               )}
           </div>
@@ -556,7 +591,7 @@ const App: React.FC = () => {
       )}
 
       {/* Start Screen */}
-      {gameState === GameState.START && !isShopOpen && !isGuideOpen && !isWeaponSelectOpen && !isLeaderboardOpen && (
+      {gameState === GameState.START && !isShopOpen && !isGuideOpen && !isWeaponSelectOpen && !isLeaderboardOpen && !isProfileEditOpen && (
         <div className="absolute inset-0 flex items-center justify-center z-20 bg-black/20 backdrop-blur-sm">
           <div className="glass-panel p-6 md:p-10 rounded-3xl text-center w-full max-w-md mx-4 shadow-2xl transform transition-all animate-fade-in-up max-h-[90vh] overflow-y-auto no-scrollbar">
             <h1 className="text-5xl md:text-7xl font-black text-white mb-2 drop-shadow-xl tracking-tighter italic transform -rotate-2">
@@ -676,8 +711,8 @@ const App: React.FC = () => {
                                                            {entry.photoURL ? (
                                                                <img src={entry.photoURL} alt="avi" className="w-full h-full object-cover" />
                                                            ) : (
-                                                               <div className="w-full h-full flex items-center justify-center text-white/50 font-bold">
-                                                                   {entry.displayName.charAt(0).toUpperCase()}
+                                                               <div className="w-full h-full flex items-center justify-center text-white/50 font-bold bg-gradient-to-br from-indigo-500 to-purple-600">
+                                                                   {entry.displayName ? entry.displayName.charAt(0).toUpperCase() : '?'}
                                                                </div>
                                                            )}
                                                        </div>
@@ -701,6 +736,114 @@ const App: React.FC = () => {
                   
                   <div className="mt-4 text-center text-white/30 text-xs">
                       Top players for {leaderboardTab === 'standard' ? 'Classic' : 'Battle'} Mode
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {/* EDIT PROFILE MODAL */}
+      {isProfileEditOpen && (
+          <div className="absolute inset-0 z-50 bg-black/40 backdrop-blur-sm flex flex-col items-center justify-center p-6 animate-fade-in">
+              <div className="w-full max-w-sm glass-panel p-6 rounded-3xl shadow-2xl relative">
+                  {/* Close Button */}
+                  <button 
+                      onClick={() => setIsProfileEditOpen(false)}
+                      className="absolute top-6 right-6 text-white/50 hover:text-white transition-colors"
+                  >
+                      ✕
+                  </button>
+
+                  <h2 className="text-xl font-black text-white mb-8 text-center tracking-wide drop-shadow-md">PROFILE SETTINGS</h2>
+                  
+                  {/* Avatar Section */}
+                  <div className="flex flex-col items-center mb-8">
+                      <div className="relative group cursor-pointer">
+                          <div className="w-24 h-24 rounded-full border-4 border-[#6366F1] flex items-center justify-center overflow-hidden bg-black/20 shadow-inner">
+                               {user?.photoURL ? (
+                                   <img src={user.photoURL} alt="User" className="w-full h-full object-cover" />
+                               ) : (
+                                   <div className="text-3xl font-bold text-white">
+                                       {user?.displayName ? user.displayName.substring(0, 2).toUpperCase() : 'GU'}
+                                   </div>
+                               )}
+                          </div>
+                          {/* Edit Pencil Badge */}
+                          <div className="absolute bottom-0 right-0 w-8 h-8 bg-[#4F46E5] rounded-full border-2 border-white/20 flex items-center justify-center text-white text-xs shadow-lg">
+                              ✏️
+                          </div>
+                      </div>
+                      <div className="mt-3 text-[10px] font-bold text-white/70 uppercase tracking-widest hover:text-white transition-colors cursor-pointer">
+                          Change Avatar
+                      </div>
+                  </div>
+                  
+                  {/* Display Name Section */}
+                  <div className="mb-8">
+                      <label className="text-[10px] font-bold text-white/70 uppercase tracking-widest mb-2 block">Display Name</label>
+                      <div className="relative">
+                          <input 
+                             type="text" 
+                             value={editNameValue}
+                             onChange={(e) => setEditNameValue(e.target.value)}
+                             maxLength={20}
+                             className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-white font-bold outline-none focus:border-[#6366F1] transition-colors pr-16 placeholder-white/30 focus:bg-black/30"
+                             placeholder="Enter name"
+                          />
+                          <div className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-bold text-white/50">
+                              {editNameValue.length}/20
+                          </div>
+                      </div>
+                  </div>
+                  
+                  {/* Account / Google Section */}
+                  <div className="mb-8 border-t border-white/10 pt-6">
+                      <label className="text-[10px] font-bold text-white/70 uppercase tracking-widest mb-3 block">Connected Accounts</label>
+                      
+                      {user && user.isAnonymous ? (
+                           <button 
+                               onClick={handleGoogleSignIn}
+                               className="w-full py-3 rounded-xl font-bold bg-white text-slate-900 shadow-lg flex items-center justify-center gap-3 hover:bg-slate-100 transition-all active:scale-95"
+                           >
+                               <div className="w-5 h-5">
+                                  {/* Google G Logo SVG */}
+                                  <svg viewBox="0 0 24 24" className="w-full h-full">
+                                      <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                                      <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                                      <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+                                      <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                                  </svg>
+                               </div>
+                               Sign in with Google
+                           </button>
+                      ) : (
+                           <div className="flex gap-2">
+                               <div className="flex-1 py-3 rounded-xl bg-green-500/20 border border-green-500/30 text-green-300 font-bold text-center text-sm flex items-center justify-center gap-2">
+                                   <span>✓</span> Connected
+                               </div>
+                               <button 
+                                   onClick={() => { handleLogout(); setIsProfileEditOpen(false); }}
+                                   className="px-4 py-3 rounded-xl font-bold bg-red-500/10 text-red-300 border border-red-500/20 hover:bg-red-500/20 transition-all text-sm"
+                               >
+                                   Log Out
+                               </button>
+                           </div>
+                      )}
+                  </div>
+
+                  {/* Footer Buttons */}
+                  <div className="flex gap-4">
+                      <button 
+                         onClick={() => setIsProfileEditOpen(false)}
+                         className="flex-1 py-3.5 rounded-xl font-bold bg-white/10 hover:bg-white/20 text-white border border-white/10 transition-all text-sm tracking-wide"
+                      >
+                         CANCEL
+                      </button>
+                      <button 
+                         onClick={handleSaveProfile}
+                         className="flex-1 py-3.5 rounded-xl font-bold bg-gradient-to-r from-amber-500 to-orange-600 text-white shadow-lg hover:shadow-orange-500/20 transition-all active:scale-95 text-sm tracking-wide"
+                      >
+                         SAVE CHANGES
+                      </button>
                   </div>
               </div>
           </div>
@@ -848,7 +991,7 @@ const App: React.FC = () => {
       )}
 
       {/* Game Over Screen */}
-      {gameState === GameState.GAME_OVER && !isShopOpen && !isGuideOpen && !isWeaponSelectOpen && !isLeaderboardOpen && (
+      {gameState === GameState.GAME_OVER && !isShopOpen && !isGuideOpen && !isWeaponSelectOpen && !isLeaderboardOpen && !isProfileEditOpen && (
         <div className="absolute inset-0 flex items-center justify-center z-20 bg-slate-900/60 backdrop-blur-md">
           <div className="glass-panel p-6 md:p-8 rounded-3xl text-center w-full max-w-xs mx-4 shadow-2xl border border-white/10 relative max-h-[90vh] overflow-y-auto no-scrollbar">
             <h2 className={`text-3xl md:text-4xl font-bold text-white mb-4 md:mb-6 tracking-wide`}>GAME OVER</h2>

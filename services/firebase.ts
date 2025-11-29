@@ -1,4 +1,3 @@
-
 import { initializeApp } from "firebase/app";
 import { getAnalytics } from "firebase/analytics";
 import { 
@@ -31,7 +30,6 @@ const db = getFirestore(app);
 const googleProvider = new GoogleAuthProvider();
 
 // Enable offline persistence
-// This allows the DB to work even if the network is down (caches reads/writes)
 try {
     enableIndexedDbPersistence(db).catch((err) => {
         if (err.code == 'failed-precondition') {
@@ -43,6 +41,17 @@ try {
 } catch (e) {
     // Ignore persistence errors
 }
+
+// --- NAME GENERATOR ---
+const ADJECTIVES = ["Neon", "Cyber", "Turbo", "Hyper", "Pixel", "Mega", "Super", "Quantum", "Rapid", "Swift", "Epic", "Shadow", "Cosmic", "Rogue", "Iron", "Golden", "Mystic", "Solar", "Lunar", "Aero"];
+const NOUNS = ["Pilot", "Flyer", "Ace", "Scout", "Bird", "Wing", "Glider", "Striker", "Dash", "Falcon", "Eagle", "Raven", "Phoenix", "Viper", "Hawk", "Storm", "Rider", "Ghost", "Surfer"];
+
+const generateRandomName = () => {
+    const adj = ADJECTIVES[Math.floor(Math.random() * ADJECTIVES.length)];
+    const noun = NOUNS[Math.floor(Math.random() * NOUNS.length)];
+    const num = Math.floor(Math.random() * 1000);
+    return `${adj} ${noun} ${num}`;
+};
 
 // Authenticate Anonymously
 export const signIn = async () => {
@@ -118,6 +127,17 @@ export const subscribeToAuth = (callback: (user: User | null) => void) => {
     return onAuthStateChanged(auth, callback);
 };
 
+// Update user profile name manually
+export const updateUserProfile = async (uid: string, name: string) => {
+    if (!uid) return;
+    try {
+        const userRef = doc(db, 'users', uid);
+        await setDoc(userRef, { displayName: name }, { merge: true });
+    } catch (e) {
+        console.error("Error updating profile", e);
+    }
+};
+
 // Load User Data: Fetches directly from DB or creates defaults. No LocalStorage.
 export const loadUserGameData = async (uid: string, userProfile?: { displayName: string | null, email: string | null, photoURL: string | null }) => {
     if (!uid) return null;
@@ -128,7 +148,9 @@ export const loadUserGameData = async (uid: string, userProfile?: { displayName:
         unlockedSkins: ['default'],
         currentSkinId: 'default',
         muted: false,
-        stats: { gamesPlayed: 0, totalScore: 0 }
+        stats: { gamesPlayed: 0, totalScore: 0 },
+        displayName: null as string | null,
+        photoURL: null as string | null
     };
 
     try {
@@ -138,9 +160,39 @@ export const loadUserGameData = async (uid: string, userProfile?: { displayName:
         if (snap.exists()) {
             const remoteData = snap.data();
             
-            // If we have a user profile update, apply it
-            if (userProfile) {
-                await setDoc(userRef, { ...userProfile }, { merge: true });
+            // LOGIC: Ensure User has a Display Name
+            // If they signed in with Google, use that.
+            // If they are Anonymous and have no name in DB, generate one.
+            // If they are Anonymous and HAVE a name in DB, keep it.
+            
+            let finalDisplayName = remoteData.displayName;
+            let shouldUpdate = false;
+            let updatePayload: any = {};
+
+            // If we have a fresh Google profile, sync it
+            if (userProfile?.displayName && userProfile.displayName !== remoteData.displayName) {
+                finalDisplayName = userProfile.displayName;
+                updatePayload.displayName = finalDisplayName;
+                shouldUpdate = true;
+            }
+            if (userProfile?.photoURL && userProfile.photoURL !== remoteData.photoURL) {
+                updatePayload.photoURL = userProfile.photoURL;
+                shouldUpdate = true;
+            }
+            if (userProfile?.email && userProfile.email !== remoteData.email) {
+                updatePayload.email = userProfile.email;
+                shouldUpdate = true;
+            }
+
+            // If still no name (Anonymous user first time or existing anonymous), generate one
+            if (!finalDisplayName || finalDisplayName === 'Anonymous') {
+                finalDisplayName = generateRandomName();
+                updatePayload.displayName = finalDisplayName;
+                shouldUpdate = true;
+            }
+
+            if (shouldUpdate) {
+                await setDoc(userRef, updatePayload, { merge: true });
             }
 
             // Return remote data merged with structure to ensure all fields exist
@@ -149,17 +201,31 @@ export const loadUserGameData = async (uid: string, userProfile?: { displayName:
                 unlockedSkins: remoteData.unlockedSkins || defaultData.unlockedSkins,
                 currentSkinId: remoteData.currentSkinId || defaultData.currentSkinId,
                 muted: remoteData.muted !== undefined ? remoteData.muted : defaultData.muted,
-                stats: { ...defaultData.stats, ...remoteData.stats }
+                stats: { ...defaultData.stats, ...remoteData.stats },
+                displayName: finalDisplayName || defaultData.displayName,
+                photoURL: remoteData.photoURL || userProfile?.photoURL || defaultData.photoURL
             };
         } else {
             // New User: Create default document
             console.log("Creating new cloud user profile...");
+            
+            let finalDisplayName = userProfile?.displayName;
+            if (!finalDisplayName) {
+                finalDisplayName = generateRandomName();
+            }
+
             const newData = { 
                 ...defaultData, 
-                ...(userProfile || {}) 
+                ...(userProfile || {}),
+                displayName: finalDisplayName
             };
             await setDoc(userRef, newData, { merge: true });
-            return defaultData;
+            
+            return {
+                ...defaultData,
+                displayName: finalDisplayName,
+                photoURL: userProfile?.photoURL || null
+            };
         }
     } catch (error: any) {
         if (error.code === 'permission-denied') {
@@ -167,7 +233,7 @@ export const loadUserGameData = async (uid: string, userProfile?: { displayName:
         } else {
             console.error("Load Error", error);
         }
-        // Fallback to defaults if DB fails, but we don't save locally
+        // Fallback to defaults
         return defaultData; 
     }
 };
