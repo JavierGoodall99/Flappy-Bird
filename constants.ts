@@ -1,16 +1,19 @@
 
+
+
+
 import { Skin } from './types';
 
 export const GAME_CONSTANTS = {
   GRAVITY: 0.55,
-  JUMP_STRENGTH: -8.2, // Negative because Y is down
+  JUMP_STRENGTH: -8.2, // Increased to -8.2 (from -8.0) to make climbing larger gaps feel responsive
   BASE_PIPE_SPEED: 4.2,
   SPEED_INCREMENT: 0.0015, // Speed increase per frame
-  PIPE_GAP: 155,
+  PIPE_GAP: 165, 
   PIPE_WIDTH: 65,
-  PIPE_SPAWN_RATE: 105, // Frames between pipes
-  BIRD_RADIUS: 16, // Slightly reduced
-  BIRD_X_POSITION: 0.2, // Moved left (was 0.22) to give more reaction time
+  PIPE_SPAWN_RATE: 100, // Reduced from 105 (faster spawn) for better rhythm
+  BIRD_RADIUS: 16, 
+  BIRD_X_POSITION: 0.2, 
   GLASS_PIPE_CHANCE: 0.25,
   GLASS_BREAK_SCORE: 5,
   GLASS_BREAK_PENALTY: 8, // Positive Y velocity to push down

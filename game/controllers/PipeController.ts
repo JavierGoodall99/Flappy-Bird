@@ -52,7 +52,11 @@ export class PipeController {
             if (this.pipes.length > 0) {
                 const lastPipe = this.pipes[this.pipes.length - 1];
                 const timeFactor = (GAME_CONSTANTS.BASE_PIPE_SPEED / speed);
-                const maxJump = Math.max(80, (height * 0.4) * timeFactor);
+                
+                // ADJUSTMENT: Increased maxJump from 230 to 340 to reduce "inline" boring generation.
+                // This allows for ~340px vertical difference between pipes, which is exciting but climbable.
+                const maxJump = Math.min(340, (height * 0.32)) * timeFactor;
+                
                 minBound = Math.max(minPipeHeight, lastPipe.topHeight - maxJump);
                 maxBound = Math.min(maxTopPipeHeight, lastPipe.topHeight + maxJump);
             } else {

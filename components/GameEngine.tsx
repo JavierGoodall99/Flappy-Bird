@@ -1,3 +1,4 @@
+
 import React, { useRef, useEffect } from 'react';
 import { GameState, ActivePowerup, Skin, GameMode, PowerupType } from '../types';
 import { GameLogic } from '../game/GameLogic';
@@ -118,40 +119,33 @@ export const GameEngine: React.FC<GameEngineProps> = (props) => {
     };
 
     const handleInput = (e: Event) => {
-      const target = e.target as HTMLElement;
-
-      // CRITICAL FIX: If the interaction is NOT within the game container (e.g., it's on a Modal or HUD),
-      // we return early. This allows the browser to handle the event normally (scrolling, clicking UI).
-      if (containerRef.current && !containerRef.current.contains(target)) {
-          return;
-      }
-
-      // Check if interacting with buttons inside the game container (unlikely but good safety)
-      if (target.closest('button') || target.closest('[role="button"]') || target.closest('a') || target.closest('input')) {
-          return;
-      }
-      
-      // Prevent default behavior for touch events ONLY if we are interacting with the game
+      // Prevent default behavior for touch events on the GAME CANVAS only.
+      // This prevents scrolling the page while playing, but allows scrolling on other UI elements
+      // because they won't trigger this listener.
       if (e.type === 'touchstart') {
-          // IMPORTANT: Prevent default to stop scrolling/zooming AND prevent synthesized mouse events
           if (e.cancelable) e.preventDefault();
       }
 
-      // Only jump if we are explicitly touching the game world
       logicRef.current.jump();
     };
 
     window.addEventListener('keydown', handleKeyDown);
     
-    // Add non-passive touch listener to allow preventDefault
-    // 'mousedown' is needed for desktop mouse clicks
-    window.addEventListener('touchstart', handleInput, { passive: false });
-    window.addEventListener('mousedown', handleInput);
+    // Attach listeners strictly to the container
+    // This ensures inputs on Z-indexed overlays (like Shop/Menus) do NOT trigger game jumps
+    // and are NOT prevented by e.preventDefault() here.
+    const container = containerRef.current;
+    if (container) {
+        container.addEventListener('touchstart', handleInput, { passive: false });
+        container.addEventListener('mousedown', handleInput);
+    }
 
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('touchstart', handleInput);
-      window.removeEventListener('mousedown', handleInput);
+      if (container) {
+          container.removeEventListener('touchstart', handleInput);
+          container.removeEventListener('mousedown', handleInput);
+      }
     };
   }, []);
 
