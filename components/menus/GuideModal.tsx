@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { POWERUP_INFO } from '../../constants';
 import { PowerupType } from '../../types';
@@ -20,7 +19,7 @@ export const GuideModal: React.FC<GuideModalProps> = ({ isOpen, onClose, onTryPo
                     <button onClick={onClose} className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-white hover:bg-white/20">✕</button>
                 </div>
                 
-                <div className="flex-1 overflow-y-auto flex flex-col gap-3 no-scrollbar">
+                <div className="flex-1 overflow-y-auto flex flex-col gap-3 no-scrollbar touch-pan-y">
                    {POWERUP_INFO.map(p => (
                       <div key={p.type} className="bg-white/5 border border-white/10 rounded-2xl p-4 flex items-center gap-4 hover:bg-white/10 transition-colors">
                           <div className="w-12 h-12 rounded-full shadow-lg flex-shrink-0" style={{ backgroundColor: p.color }}></div>

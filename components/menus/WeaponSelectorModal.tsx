@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { WEAPON_LOADOUTS } from '../../constants';
 import { PowerupType } from '../../types';
@@ -20,11 +19,12 @@ export const WeaponSelectorModal: React.FC<WeaponSelectorModalProps> = ({ isOpen
                      <button onClick={onClose} className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-white hover:bg-white/20 transition-colors">✕</button>
                   </div>
                   
-                  <div className="flex-1 overflow-y-auto no-scrollbar w-full">
+                  <div className="flex-1 overflow-y-auto no-scrollbar w-full touch-pan-y">
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4 pb-20 px-1">
                           {WEAPON_LOADOUTS.map((weapon) => (
                               <div 
                                  key={weapon.id}
+                                 role="button"
                                  onClick={() => onSelectWeapon(weapon.id as PowerupType)}
                                  className="bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/30 rounded-2xl p-4 cursor-pointer transition-all hover:-translate-y-1 group flex flex-col h-full"
                               >

@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from 'react';
 import { getLeaderboard, LeaderboardEntry } from '../../services/firebase';
 
@@ -61,7 +60,7 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({ isOpen, onCl
                           <div className="col-span-1 text-right">Score</div>
                       </div>
                       
-                      <div className="flex-1 overflow-y-auto no-scrollbar relative">
+                      <div className="flex-1 overflow-y-auto no-scrollbar relative touch-pan-y">
                           {leaderboardLoading ? (
                                <div className="absolute inset-0 flex items-center justify-center">
                                    <div className="w-8 h-8 border-2 border-amber-400 border-t-transparent rounded-full animate-spin"></div>

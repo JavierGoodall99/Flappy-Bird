@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Button } from '../Button';
 import { GameMode, PowerupType } from '../../types';
@@ -18,7 +17,7 @@ export const GameOverMenu: React.FC<GameOverMenuProps> = ({
 }) => {
     return (
         <div className="absolute inset-0 flex items-center justify-center z-20 bg-slate-900/60 backdrop-blur-md">
-          <div className="glass-panel p-6 md:p-8 rounded-3xl text-center w-full max-w-xs mx-4 shadow-2xl border border-white/10 relative max-h-[90vh] overflow-y-auto no-scrollbar">
+          <div className="glass-panel p-6 md:p-8 rounded-3xl text-center w-full max-w-xs mx-4 shadow-2xl border border-white/10 relative max-h-[90vh] overflow-y-auto no-scrollbar touch-pan-y">
             <h2 className={`text-3xl md:text-4xl font-bold text-white mb-4 md:mb-6 tracking-wide`}>GAME OVER</h2>
 
             <div className="flex flex-col gap-3 md:gap-4 mb-6 md:mb-8">

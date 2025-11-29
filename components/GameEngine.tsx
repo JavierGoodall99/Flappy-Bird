@@ -118,19 +118,26 @@ export const GameEngine: React.FC<GameEngineProps> = (props) => {
     };
 
     const handleInput = (e: Event) => {
-      // Check if interacting with UI buttons
       const target = e.target as HTMLElement;
-      if (target.closest('button') || target.closest('[role="button"]') || target.closest('a')) {
+
+      // CRITICAL FIX: If the interaction is NOT within the game container (e.g., it's on a Modal or HUD),
+      // we return early. This allows the browser to handle the event normally (scrolling, clicking UI).
+      if (containerRef.current && !containerRef.current.contains(target)) {
+          return;
+      }
+
+      // Check if interacting with buttons inside the game container (unlikely but good safety)
+      if (target.closest('button') || target.closest('[role="button"]') || target.closest('a') || target.closest('input')) {
           return;
       }
       
-      // Prevent default behavior for touch events to stop scrolling/zooming/selection
+      // Prevent default behavior for touch events ONLY if we are interacting with the game
       if (e.type === 'touchstart') {
           // IMPORTANT: Prevent default to stop scrolling/zooming AND prevent synthesized mouse events
           if (e.cancelable) e.preventDefault();
       }
 
-      // Only jump if we are not hitting a UI element
+      // Only jump if we are explicitly touching the game world
       logicRef.current.jump();
     };
 
@@ -138,11 +145,6 @@ export const GameEngine: React.FC<GameEngineProps> = (props) => {
     
     // Add non-passive touch listener to allow preventDefault
     // 'mousedown' is needed for desktop mouse clicks
-    const container = containerRef.current;
-    if (container) {
-        // We bind to the container specifically to avoid global interference where possible, 
-        // but window listeners are safer for capturing fast taps anywhere.
-    }
     window.addEventListener('touchstart', handleInput, { passive: false });
     window.addEventListener('mousedown', handleInput);
 

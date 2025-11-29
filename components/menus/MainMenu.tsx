@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Button } from '../Button';
 import { GameMode, PowerupType } from '../../types';
@@ -65,7 +64,7 @@ export const MainMenu: React.FC<MainMenuProps> = ({
 
       {/* MENU CENTER */}
       <div className="absolute inset-0 flex items-center justify-center z-20 bg-black/20 backdrop-blur-sm">
-        <div className="glass-panel p-6 md:p-10 rounded-3xl text-center w-full max-w-md mx-4 shadow-2xl transform transition-all animate-fade-in-up max-h-[90vh] overflow-y-auto no-scrollbar">
+        <div className="glass-panel p-6 md:p-10 rounded-3xl text-center w-full max-w-md mx-4 shadow-2xl transform transition-all animate-fade-in-up max-h-[90vh] overflow-y-auto no-scrollbar touch-pan-y">
           <h1 className="text-5xl md:text-7xl font-black text-white mb-2 drop-shadow-xl tracking-tighter italic transform -rotate-2">
             Fliply
           </h1>

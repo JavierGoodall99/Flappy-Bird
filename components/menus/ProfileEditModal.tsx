@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { signInWithGoogle, logout } from '../../services/firebase';
 
@@ -59,7 +58,7 @@ export const ProfileEditModal: React.FC<ProfileEditModalProps> = ({ isOpen, onCl
 
     return (
         <div className="absolute inset-0 z-50 bg-black/40 backdrop-blur-sm flex flex-col items-center justify-center p-6 animate-fade-in">
-              <div className="w-full max-w-sm glass-panel p-6 rounded-3xl shadow-2xl relative max-h-[90vh] overflow-y-auto no-scrollbar">
+              <div className="w-full max-w-sm glass-panel p-6 rounded-3xl shadow-2xl relative max-h-[90vh] overflow-y-auto no-scrollbar touch-pan-y">
                   <h2 className="text-xl font-black text-white mb-6 text-center tracking-wide drop-shadow-md">PROFILE SETTINGS</h2>
                   
                   {/* Avatar Preview */}

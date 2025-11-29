@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { SKINS } from '../../constants';
 import { SkinId, Skin } from '../../types';
@@ -30,13 +29,14 @@ export const ShopModal: React.FC<ShopModalProps> = ({ isOpen, onClose, stats, un
                   </div>
               </div>
 
-              <div className="flex-1 overflow-y-auto grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 pb-8 no-scrollbar content-start">
+              <div className="flex-1 overflow-y-auto grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 pb-8 no-scrollbar content-start touch-pan-y">
                  {Object.values(SKINS).map((skin) => {
                      const isUnlocked = unlockedSkins.includes(skin.id);
                      const isEquipped = currentSkinId === skin.id;
 
                      return (
                          <div key={skin.id} 
+                              role="button"
                               onClick={() => isUnlocked && onEquip(skin.id)}
                               className={`relative p-3 rounded-xl border transition-all cursor-pointer group flex items-center sm:block
                                 ${isEquipped ? 'bg-amber-500/20 border-amber-500' : 'bg-white/5 border-white/10 hover:border-white/30'}
