@@ -5,7 +5,7 @@ import { Button } from './components/Button';
 import { GameState, ActivePowerup, SkinId, Skin, PowerupType, GameMode } from './types';
 import { SKINS, POWERUP_INFO, WEAPON_LOADOUTS } from './constants';
 import { audioService } from './services/audioService';
-import { signIn, signInWithGoogle, logout, subscribeToAuth, syncUserData, saveGameData } from './services/firebase';
+import { signIn, signInWithGoogle, logout, subscribeToAuth, loadUserGameData, saveGameData } from './services/firebase';
 
 const App: React.FC = () => {
   const [gameState, setGameState] = useState<GameState>(GameState.START);
@@ -45,69 +45,15 @@ const App: React.FC = () => {
 
   // User State
   const [user, setUser] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const isSyncing = useRef(false);
 
-  // 1. INITIAL LOAD (Local Storage)
-  useEffect(() => {
-    // Load highscores for all modes
-    const storedStandard = localStorage.getItem('flapai-highscore-standard') || localStorage.getItem('flapai-highscore');
-    const storedBattle = localStorage.getItem('flapai-highscore-battle');
-    const storedDanger = localStorage.getItem('flapai-highscore-danger');
-    
-    setHighScores({
-        standard: storedStandard ? parseInt(storedStandard, 10) : 0,
-        battle: storedBattle ? parseInt(storedBattle, 10) : 0,
-        danger: storedDanger ? parseInt(storedDanger, 10) : 0,
-        playground: 0
-    });
-    
-    // Load Stats
-    const storedStats = localStorage.getItem('flapai-stats');
-    if (storedStats) {
-        setStats(JSON.parse(storedStats));
-    }
-    
-    // Force unlock all default skins for existing users
-    const allDefaultSkins = Object.values(SKINS)
-        .filter(s => s.unlockCondition.type === 'default')
-        .map(s => s.id);
-    
-    const storedSkins = localStorage.getItem('flapai-unlockedskins');
-    let currentUnlocked = storedSkins ? JSON.parse(storedSkins) : [];
-    
-    // Merge defaults
-    const merged = [...new Set([...currentUnlocked, ...allDefaultSkins])];
-    setUnlockedSkins(merged);
-    localStorage.setItem('flapai-unlockedskins', JSON.stringify(merged));
-
-    const storedCurrentSkin = localStorage.getItem('flapai-currentskin');
-    if (storedCurrentSkin && SKINS[storedCurrentSkin]) setCurrentSkinId(storedCurrentSkin as SkinId);
-
-    // Load Mute State
-    const storedMute = localStorage.getItem('flapai-muted');
-    if (storedMute === 'true') {
-        setIsMuted(true);
-        audioService.setMuted(true);
-    }
-  }, []);
-
-  // 2. FIREBASE AUTH & SYNC FLOW
+  // 1. FIREBASE AUTH & DB LOADING
   useEffect(() => {
     const handleAuthChange = async (authUser: any) => {
+        setIsLoading(true);
         if (authUser) {
             setUser(authUser);
-            // Prepare local data for sync (User's current device state)
-            const localData = {
-                highScores: {
-                    standard: parseInt(localStorage.getItem('flapai-highscore-standard') || '0', 10),
-                    battle: parseInt(localStorage.getItem('flapai-highscore-battle') || '0', 10),
-                    danger: parseInt(localStorage.getItem('flapai-highscore-danger') || '0', 10),
-                },
-                unlockedSkins: JSON.parse(localStorage.getItem('flapai-unlockedskins') || '[]'),
-                currentSkinId: localStorage.getItem('flapai-currentskin') || 'default',
-                muted: localStorage.getItem('flapai-muted') === 'true',
-                stats: JSON.parse(localStorage.getItem('flapai-stats') || '{"gamesPlayed": 0, "totalScore": 0}')
-            };
 
             // Prepare User Identity Data
             const userProfile = {
@@ -116,37 +62,27 @@ const App: React.FC = () => {
                 photoURL: authUser.photoURL
             };
 
-            // Sync with Cloud
-            const cloudData = await syncUserData(authUser.uid, localData, userProfile);
+            // Load from Cloud (Source of Truth)
+            const cloudData = await loadUserGameData(authUser.uid, userProfile);
             
-            // Apply Cloud Data (Remote Wins or Merged)
             if (cloudData) {
                 isSyncing.current = true; // Prevent triggering save effects during load
                 
-                if (cloudData.highScores) setHighScores(prev => ({ ...prev, ...cloudData.highScores }));
-                if (cloudData.unlockedSkins) setUnlockedSkins(cloudData.unlockedSkins);
-                if (cloudData.currentSkinId) setCurrentSkinId(cloudData.currentSkinId as SkinId);
-                if (cloudData.stats) setStats(cloudData.stats);
-                if (cloudData.muted !== undefined) {
-                    setIsMuted(cloudData.muted);
-                    audioService.setMuted(cloudData.muted);
-                }
-
-                // Update Local Storage to match Cloud (Keep them in sync)
-                localStorage.setItem('flapai-highscore-standard', (cloudData.highScores?.standard || 0).toString());
-                localStorage.setItem('flapai-highscore-battle', (cloudData.highScores?.battle || 0).toString());
-                localStorage.setItem('flapai-highscore-danger', (cloudData.highScores?.danger || 0).toString());
-                localStorage.setItem('flapai-unlockedskins', JSON.stringify(cloudData.unlockedSkins || []));
-                localStorage.setItem('flapai-currentskin', cloudData.currentSkinId || 'default');
-                localStorage.setItem('flapai-muted', String(cloudData.muted));
-                localStorage.setItem('flapai-stats', JSON.stringify(cloudData.stats || {gamesPlayed: 0, totalScore: 0}));
+                setHighScores(cloudData.highScores);
+                setUnlockedSkins(cloudData.unlockedSkins);
+                setCurrentSkinId(cloudData.currentSkinId as SkinId);
+                setStats(cloudData.stats);
+                setIsMuted(cloudData.muted);
+                audioService.setMuted(cloudData.muted);
 
                 setTimeout(() => { isSyncing.current = false; }, 100);
             }
+            setIsLoading(false);
         } else {
             setUser(null);
             // If not logged in, try anonymous login for Guest Mode
             signIn(); 
+            // Note: isLoading stays true until signIn completes and triggers handleAuthChange again
         }
     };
 
@@ -154,46 +90,36 @@ const App: React.FC = () => {
     return () => unsubscribe();
   }, []);
 
-  // 3. PERSISTENCE EFFECTS (Save when state changes)
+  // 2. PERSISTENCE EFFECTS (Save to DB when state changes)
 
   // Save High Scores
   useEffect(() => {
       if (isSyncing.current) return;
-      if (user) {
-          saveGameData(user.uid, { highScores });
-      }
+      if (user) saveGameData(user.uid, { highScores });
   }, [highScores, user]);
 
   // Save Stats
   useEffect(() => {
       if (isSyncing.current) return;
-      if (user) {
-          saveGameData(user.uid, { stats });
-      }
+      if (user) saveGameData(user.uid, { stats });
   }, [stats, user]);
 
   // Save Skins
   useEffect(() => {
       if (isSyncing.current) return;
-      if (user) {
-          saveGameData(user.uid, { unlockedSkins });
-      }
+      if (user) saveGameData(user.uid, { unlockedSkins });
   }, [unlockedSkins, user]);
 
   // Save Current Skin
   useEffect(() => {
       if (isSyncing.current) return;
-      if (user) {
-          saveGameData(user.uid, { currentSkinId });
-      }
+      if (user) saveGameData(user.uid, { currentSkinId });
   }, [currentSkinId, user]);
 
   // Save Settings
   useEffect(() => {
       if (isSyncing.current) return;
-      if (user) {
-          saveGameData(user.uid, { muted: isMuted });
-      }
+      if (user) saveGameData(user.uid, { muted: isMuted });
   }, [isMuted, user]);
 
 
@@ -206,7 +132,6 @@ const App: React.FC = () => {
                    gamesPlayed: prev.gamesPlayed + 1,
                    totalScore: prev.totalScore + score
                };
-               localStorage.setItem('flapai-stats', JSON.stringify(newStats));
                return newStats;
            });
       }
@@ -216,20 +141,10 @@ const App: React.FC = () => {
         const currentHigh = highScores[gameMode];
         
         if (score > currentHigh) {
-          // Update state
           setHighScores(prev => ({
               ...prev,
               [gameMode]: score
           }));
-          
-          // Update Local Storage
-          localStorage.setItem(`flapai-highscore-${gameMode}`, score.toString());
-          
-          // Maintain legacy key for standard mode
-          if (gameMode === 'standard') {
-              localStorage.setItem('flapai-highscore', score.toString());
-          }
-
           setIsNewHighScore(true);
         }
       }
@@ -269,7 +184,6 @@ const App: React.FC = () => {
       const newState = !isMuted;
       setIsMuted(newState);
       audioService.setMuted(newState);
-      localStorage.setItem('flapai-muted', String(newState));
   };
 
   const triggerShake = () => {
@@ -279,7 +193,6 @@ const App: React.FC = () => {
 
   const handleEquipSkin = (id: SkinId) => {
       setCurrentSkinId(id);
-      localStorage.setItem('flapai-currentskin', id);
   };
   
   const handleGoogleSignIn = () => {
@@ -292,6 +205,7 @@ const App: React.FC = () => {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (isLoading) return;
       if (isShopOpen || isGuideOpen || isWeaponSelectOpen) return; // Disable game controls in menus
       if (e.code === 'Escape' || e.code === 'KeyP') togglePause();
       if (e.code === 'KeyM') toggleMute({ stopPropagation: () => {} } as React.MouseEvent);
@@ -310,7 +224,7 @@ const App: React.FC = () => {
       window.removeEventListener('mousedown', handleTouchOrClick);
       window.removeEventListener('touchstart', handleTouchOrClick);
     };
-  }, [togglePause, gameState, startGame, isShopOpen, isGuideOpen, isWeaponSelectOpen, initialPowerup, gameMode, isMuted]);
+  }, [togglePause, gameState, startGame, isShopOpen, isGuideOpen, isWeaponSelectOpen, initialPowerup, gameMode, isMuted, isLoading]);
   
   // Dummy handler to prevent errors in cleanup
   const handleTouchOrClick = () => {};
@@ -342,6 +256,16 @@ const App: React.FC = () => {
                       healthPercent > 0.4 ? 'from-yellow-500 to-amber-500' : 'from-red-600 to-red-500';
   const healthShadow = healthPercent > 0.7 ? 'shadow-[0_0_8px_rgba(74,222,128,0.5)]' : 
                        healthPercent > 0.4 ? 'shadow-[0_0_8px_rgba(245,158,11,0.5)]' : 'shadow-[0_0_8px_rgba(239,68,68,0.5)]';
+
+  // --- LOADING SCREEN ---
+  if (isLoading) {
+      return (
+          <div className="w-full h-screen bg-slate-900 flex flex-col items-center justify-center">
+              <div className="w-16 h-16 border-4 border-amber-400 border-t-transparent rounded-full animate-spin mb-4"></div>
+              <h1 className="text-2xl font-bold text-white tracking-widest animate-pulse">LOADING PROFILE...</h1>
+          </div>
+      );
+  }
 
   return (
     <div className={`relative w-full h-screen overflow-hidden ${shake ? 'animate-pulse' : ''}`}>
