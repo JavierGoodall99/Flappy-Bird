@@ -105,7 +105,7 @@ export const subscribeToAuth = (callback: (user: User | null) => void) => {
 };
 
 // Sync Logic: Merges local data with cloud data
-export const syncUserData = async (uid: string, localData: any) => {
+export const syncUserData = async (uid: string, localData: any, userProfile?: { displayName: string | null, email: string | null, photoURL: string | null }) => {
     if (!uid) return localData;
     
     try {
@@ -132,11 +132,16 @@ export const syncUserData = async (uid: string, localData: any) => {
             const mergedMuted = remoteData.muted !== undefined ? remoteData.muted : localData.muted;
             const mergedSkinId = remoteData.currentSkinId || localData.currentSkinId;
             
-            // Merge Stats (Keep Max / Accumulate logic is tricky without logs, assuming Max for consistency or Local if newer)
+            // Merge Stats (Keep Max)
             const mergedStats = {
                 gamesPlayed: Math.max(localData.stats?.gamesPlayed || 0, remoteData.stats?.gamesPlayed || 0),
                 totalScore: Math.max(localData.stats?.totalScore || 0, remoteData.stats?.totalScore || 0)
             };
+
+            // Update user profile info in the database if provided
+            if (userProfile) {
+                await setDoc(userRef, { ...userProfile }, { merge: true });
+            }
 
             return {
                 highScores: mergedScores,
@@ -148,7 +153,12 @@ export const syncUserData = async (uid: string, localData: any) => {
         } else {
             // First time cloud user, save local data to cloud
             console.log("Creating new cloud user profile from local data...");
-            await setDoc(userRef, localData, { merge: true });
+            // Combine local game data with user profile data
+            const newData = { 
+                ...localData, 
+                ...(userProfile || {}) 
+            };
+            await setDoc(userRef, newData, { merge: true });
             return localData;
         }
     } catch (error: any) {
