@@ -10,7 +10,7 @@ import {
   onAuthStateChanged,
   User
 } from "firebase/auth";
-import { getFirestore, doc, setDoc, getDoc } from "firebase/firestore";
+import { getFirestore, doc, setDoc, getDoc, enableIndexedDbPersistence } from "firebase/firestore";
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
@@ -29,6 +29,20 @@ const analytics = getAnalytics(app);
 const auth = getAuth(app);
 const db = getFirestore(app);
 const googleProvider = new GoogleAuthProvider();
+
+// Enable offline persistence
+// This allows the DB to work even if the network is down (caches reads/writes)
+try {
+    enableIndexedDbPersistence(db).catch((err) => {
+        if (err.code == 'failed-precondition') {
+            console.warn('Persistence failed: Multiple tabs open');
+        } else if (err.code == 'unimplemented') {
+            console.warn('Persistence not supported by browser');
+        }
+    });
+} catch (e) {
+    // Ignore persistence errors
+}
 
 // Authenticate Anonymously
 export const signIn = async () => {
@@ -104,10 +118,19 @@ export const subscribeToAuth = (callback: (user: User | null) => void) => {
     return onAuthStateChanged(auth, callback);
 };
 
-// Sync Logic: Merges local data with cloud data
-export const syncUserData = async (uid: string, localData: any, userProfile?: { displayName: string | null, email: string | null, photoURL: string | null }) => {
-    if (!uid) return localData;
+// Load User Data: Fetches directly from DB or creates defaults. No LocalStorage.
+export const loadUserGameData = async (uid: string, userProfile?: { displayName: string | null, email: string | null, photoURL: string | null }) => {
+    if (!uid) return null;
     
+    // Default State
+    const defaultData = {
+        highScores: { standard: 0, battle: 0, danger: 0, playground: 0 },
+        unlockedSkins: ['default'],
+        currentSkinId: 'default',
+        muted: false,
+        stats: { gamesPlayed: 0, totalScore: 0 }
+    };
+
     try {
         const userRef = doc(db, 'users', uid);
         const snap = await getDoc(userRef);
@@ -115,61 +138,37 @@ export const syncUserData = async (uid: string, localData: any, userProfile?: { 
         if (snap.exists()) {
             const remoteData = snap.data();
             
-            // Merge High Scores (Keep Highest)
-            const mergedScores = {
-                standard: Math.max(localData.highScores?.standard || 0, remoteData.highScores?.standard || 0),
-                battle: Math.max(localData.highScores?.battle || 0, remoteData.highScores?.battle || 0),
-                danger: Math.max(localData.highScores?.danger || 0, remoteData.highScores?.danger || 0),
-                playground: 0
-            };
-
-            // Merge Skins (Union)
-            const localSkins = Array.isArray(localData.unlockedSkins) ? localData.unlockedSkins : [];
-            const remoteSkins = Array.isArray(remoteData.unlockedSkins) ? remoteData.unlockedSkins : [];
-            const mergedSkins = [...new Set([...localSkins, ...remoteSkins])];
-
-            // Merge Settings
-            const mergedMuted = remoteData.muted !== undefined ? remoteData.muted : localData.muted;
-            const mergedSkinId = remoteData.currentSkinId || localData.currentSkinId;
-            
-            // Merge Stats (Keep Max)
-            const mergedStats = {
-                gamesPlayed: Math.max(localData.stats?.gamesPlayed || 0, remoteData.stats?.gamesPlayed || 0),
-                totalScore: Math.max(localData.stats?.totalScore || 0, remoteData.stats?.totalScore || 0)
-            };
-
-            // Update user profile info in the database if provided
+            // If we have a user profile update, apply it
             if (userProfile) {
                 await setDoc(userRef, { ...userProfile }, { merge: true });
             }
 
+            // Return remote data merged with structure to ensure all fields exist
             return {
-                highScores: mergedScores,
-                unlockedSkins: mergedSkins,
-                currentSkinId: mergedSkinId,
-                muted: mergedMuted,
-                stats: mergedStats
+                highScores: { ...defaultData.highScores, ...remoteData.highScores },
+                unlockedSkins: remoteData.unlockedSkins || defaultData.unlockedSkins,
+                currentSkinId: remoteData.currentSkinId || defaultData.currentSkinId,
+                muted: remoteData.muted !== undefined ? remoteData.muted : defaultData.muted,
+                stats: { ...defaultData.stats, ...remoteData.stats }
             };
         } else {
-            // First time cloud user, save local data to cloud
-            console.log("Creating new cloud user profile from local data...");
-            // Combine local game data with user profile data
+            // New User: Create default document
+            console.log("Creating new cloud user profile...");
             const newData = { 
-                ...localData, 
+                ...defaultData, 
                 ...(userProfile || {}) 
             };
             await setDoc(userRef, newData, { merge: true });
-            return localData;
+            return defaultData;
         }
     } catch (error: any) {
         if (error.code === 'permission-denied') {
-            console.warn("Firestore Permission Error: Database access denied. Check your Firestore Security Rules in Firebase Console.");
-        } else if (error.code === 'unavailable') {
-             console.warn("Firestore unavailable (offline).");
+            console.warn("Firestore Permission Error: Check console rules.");
         } else {
-            console.error("Sync Error", error);
+            console.error("Load Error", error);
         }
-        return localData; 
+        // Fallback to defaults if DB fails, but we don't save locally
+        return defaultData; 
     }
 };
 
@@ -179,11 +178,9 @@ export const saveGameData = async (uid: string, data: any) => {
     try {
         const userRef = doc(db, 'users', uid);
         await setDoc(userRef, data, { merge: true });
-        // Log confirmation of save for debugging/user reassurance logic
-        console.log("Cloud Save Success:", Object.keys(data));
     } catch (error: any) {
         if (error.code === 'permission-denied') return;
-        if (error.code === 'unavailable') return;
+        if (error.code === 'unavailable') return; // Offline, Firebase handles it via queue
         console.warn("Save Error", error); 
     }
 };
