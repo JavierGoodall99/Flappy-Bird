@@ -229,6 +229,8 @@ export const loadUserGameData = async (uid: string, userProfile?: { displayName:
         currentSkinId: 'default',
         muted: false,
         stats: { gamesPlayed: 0, totalScore: 0 },
+        streak: 0,
+        lastLoginDate: null as string | null,
         displayName: null as string | null,
         photoURL: null as string | null,
         avatarColor: '#6366F1',
@@ -280,6 +282,8 @@ export const loadUserGameData = async (uid: string, userProfile?: { displayName:
                 currentSkinId: remoteData.currentSkinId || defaultData.currentSkinId,
                 muted: remoteData.muted !== undefined ? remoteData.muted : defaultData.muted,
                 stats: { ...defaultData.stats, ...remoteData.stats },
+                streak: remoteData.streak || defaultData.streak,
+                lastLoginDate: remoteData.lastLoginDate || defaultData.lastLoginDate,
                 displayName: finalDisplayName || defaultData.displayName,
                 photoURL: remoteData.photoURL || userProfile?.photoURL || defaultData.photoURL,
                 avatarColor: remoteData.avatarColor || defaultData.avatarColor,
@@ -298,14 +302,15 @@ export const loadUserGameData = async (uid: string, userProfile?: { displayName:
             const newData = { 
                 ...defaultData, 
                 ...(userProfile || {}),
-                displayName: finalDisplayName
+                displayName: finalDisplayName,
+                // Initialize streak for new user
+                streak: 1,
+                lastLoginDate: new Date().toDateString()
             };
             await setDoc(userRef, newData, { merge: true });
             
             return {
-                ...defaultData,
-                displayName: finalDisplayName,
-                photoURL: userProfile?.photoURL || null
+                ...newData
             };
         }
     } catch (error: any) {

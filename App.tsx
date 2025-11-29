@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { GameEngine } from './components/GameEngine';
 import { GameState, ActivePowerup, SkinId, PowerupType, GameMode } from './types';
@@ -36,7 +37,7 @@ const App: React.FC = () => {
   // --- Persistent Data & Auth (Hook) ---
   const { 
       user, isLoading, highScores, stats, unlockedSkins, currentSkinId, isMuted,
-      setIsMuted, setCurrentSkinId, processGameEnd, updateProfile 
+      setIsMuted, setCurrentSkinId, processGameEnd, updateProfile, streak 
   } = useGameData();
 
   const [isNewHighScore, setIsNewHighScore] = useState(false);
@@ -228,6 +229,7 @@ const App: React.FC = () => {
              setProfileOpen={setIsProfileEditOpen}
              user={user}
              handleGoogleSignIn={handleGoogleSignIn}
+             streak={streak}
           />
       )}
 

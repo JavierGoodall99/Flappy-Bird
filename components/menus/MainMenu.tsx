@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { Button } from '../Button';
 import { GameMode, PowerupType } from '../../types';
@@ -11,10 +12,11 @@ interface MainMenuProps {
   setProfileOpen: (open: boolean) => void;
   user: any;
   handleGoogleSignIn: () => void;
+  streak: number;
 }
 
 export const MainMenu: React.FC<MainMenuProps> = ({ 
-  startGame, setShopOpen, setGuideOpen, setLeaderboardOpen, setWeaponSelectOpen, setProfileOpen, user, handleGoogleSignIn 
+  startGame, setShopOpen, setGuideOpen, setLeaderboardOpen, setWeaponSelectOpen, setProfileOpen, user, handleGoogleSignIn, streak 
 }) => {
   
   const shouldUseCustomAvatar = user && (user.useCustomAvatar || !user.photoURL);
@@ -23,8 +25,23 @@ export const MainMenu: React.FC<MainMenuProps> = ({
 
   return (
     <>
-      {/* USER PROFILE - TOP RIGHT */}
-      <div className="absolute top-6 right-6 md:top-8 md:right-8 z-30 animate-fade-in select-none">
+      {/* USER PROFILE & STREAK - TOP RIGHT */}
+      <div className="absolute top-6 right-6 md:top-8 md:right-8 z-30 animate-fade-in select-none flex items-center gap-3 md:gap-4">
+          {/* STREAK BADGE */}
+          <div className="hidden sm:flex items-center gap-2 bg-gradient-to-r from-orange-500 to-red-600 pl-3 pr-4 py-1.5 rounded-full shadow-lg border border-orange-300/30 transform hover:scale-105 transition-transform cursor-help" title="Daily Login Streak">
+              <span className="text-xl animate-pulse">🔥</span>
+              <div className="flex flex-col leading-none">
+                <span className="font-black text-white text-base">{streak}</span>
+                <span className="text-[9px] text-orange-100 font-bold uppercase tracking-wider">Day Streak</span>
+              </div>
+          </div>
+          
+          {/* Mobile Streak (Simplified) */}
+          <div className="sm:hidden flex items-center gap-1 bg-red-600/90 px-3 py-1.5 rounded-full shadow-lg border border-red-400/30">
+              <span className="text-base">🔥</span>
+              <span className="font-bold text-white text-sm">{streak}</span>
+          </div>
+
           {user ? (
               <button 
                   onClick={() => setProfileOpen(true)}
