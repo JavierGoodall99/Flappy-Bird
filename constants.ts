@@ -1,5 +1,6 @@
 
 
+
 import { Skin } from './types';
 
 export const GAME_CONSTANTS = {
@@ -193,117 +194,8 @@ export const SKINS: Record<string, Skin> = {
     rarity: 'Common',
     modelType: 'standard',
     trail: 'none',
-    unlockCondition: { type: 'default', value: 0, description: 'Unlocked' },
+    unlockCondition: { type: 'default', value: 0, description: 'Default Skin' },
     colors: { body: 0xFFE600, wing: 0xFFFFFF, beak: 0xFF9100, eye: 0xFFFFFF }
-  },
-  neon_blue: {
-    id: 'neon_blue',
-    name: 'Cyber Pulse',
-    rarity: 'Rare',
-    modelType: 'neon',
-    trail: 'neon_line',
-    unlockCondition: { type: 'default', value: 0, description: 'Unlocked' },
-    colors: { body: 0x000000, wing: 0x00FFFF, beak: 0x00FFFF, eye: 0xFFFFFF, glow: 0x00FFFF }
-  },
-  neon_pink: {
-    id: 'neon_pink',
-    name: 'Neon Drift',
-    rarity: 'Rare',
-    modelType: 'neon',
-    trail: 'sparkle',
-    unlockCondition: { type: 'default', value: 0, description: 'Unlocked' },
-    colors: { body: 0x220022, wing: 0xFF00FF, beak: 0xFF00FF, eye: 0xFFFFFF, glow: 0xFF00FF }
-  },
-  pixel_bird: {
-    id: 'pixel_bird',
-    name: '8-Bit Hero',
-    rarity: 'Rare',
-    modelType: 'pixel',
-    trail: 'pixel_dust',
-    unlockCondition: { type: 'default', value: 0, description: 'Unlocked' },
-    colors: { body: 0xFCC200, wing: 0xFFFFFF, beak: 0xE65100, eye: 0x000000 }
-  },
-  pixel_scout: {
-    id: 'pixel_scout',
-    name: 'Voxel Scout',
-    rarity: 'Epic',
-    modelType: 'pixel',
-    trail: 'pixel_dust',
-    unlockCondition: { type: 'default', value: 0, description: 'Unlocked' },
-    colors: { body: 0x4CAF50, wing: 0x1B5E20, beak: 0xFFC107, eye: 0x000000 }
-  },
-  ninja: {
-    id: 'ninja',
-    name: 'Shadow Ninja',
-    rarity: 'Epic',
-    modelType: 'standard',
-    trail: 'smoke',
-    unlockCondition: { type: 'default', value: 0, description: 'Unlocked' },
-    colors: { body: 0x212121, wing: 0x424242, beak: 0xD32F2F, eye: 0xFFFFFF }
-  },
-  robot: {
-    id: 'robot',
-    name: 'Mecha-01',
-    rarity: 'Epic',
-    modelType: 'standard',
-    trail: 'sparkle',
-    unlockCondition: { type: 'default', value: 0, description: 'Unlocked' },
-    colors: { body: 0xB0BEC5, wing: 0xCFD8DC, beak: 0x607D8B, eye: 0x00FFFF }
-  },
-  golden: {
-    id: 'golden',
-    name: 'Golden Legend',
-    rarity: 'Legendary',
-    modelType: 'standard',
-    trail: 'sparkle',
-    unlockCondition: { type: 'default', value: 0, description: 'Unlocked' },
-    colors: { body: 0xFFD700, wing: 0xFFFFFF, beak: 0xFFA000, eye: 0xFFFFFF }
-  },
-  // --- NEW FUN SKINS ---
-  magma: {
-    id: 'magma',
-    name: 'Molten Core',
-    rarity: 'Epic',
-    modelType: 'neon',
-    trail: 'smoke',
-    unlockCondition: { type: 'default', value: 0, description: 'Unlocked' },
-    colors: { body: 0x330000, wing: 0xFF4500, beak: 0xFF0000, eye: 0xFFFF00, glow: 0xFF4500 }
-  },
-  ice_breaker: {
-    id: 'ice_breaker',
-    name: 'Frost Byte',
-    rarity: 'Rare',
-    modelType: 'neon',
-    trail: 'ghost_trail',
-    unlockCondition: { type: 'default', value: 0, description: 'Unlocked' },
-    colors: { body: 0xE0FFFF, wing: 0x00FFFF, beak: 0xFFFFFF, eye: 0x0000FF, glow: 0x00FFFF }
-  },
-  bumblebee: {
-    id: 'bumblebee',
-    name: 'Buzzy Bee',
-    rarity: 'Common',
-    modelType: 'pixel',
-    trail: 'pixel_dust',
-    unlockCondition: { type: 'default', value: 0, description: 'Unlocked' },
-    colors: { body: 0xFFD700, wing: 0x000000, beak: 0x000000, eye: 0xFFFFFF }
-  },
-  zombie: {
-    id: 'zombie',
-    name: 'Zom-Bird',
-    rarity: 'Rare',
-    modelType: 'pixel',
-    trail: 'pixel_dust',
-    unlockCondition: { type: 'default', value: 0, description: 'Unlocked' },
-    colors: { body: 0x558B2F, wing: 0x33691E, beak: 0x1B5E20, eye: 0xFF0000 }
-  },
-  vampire: {
-    id: 'vampire',
-    name: 'Count Flapula',
-    rarity: 'Epic',
-    modelType: 'standard',
-    trail: 'smoke',
-    unlockCondition: { type: 'default', value: 0, description: 'Unlocked' },
-    colors: { body: 0x212121, wing: 0xB71C1C, beak: 0xFFFFFF, eye: 0xFF0000 }
   },
   bubblegum: {
     id: 'bubblegum',
@@ -311,17 +203,116 @@ export const SKINS: Record<string, Skin> = {
     rarity: 'Common',
     modelType: 'standard',
     trail: 'sparkle',
-    unlockCondition: { type: 'default', value: 0, description: 'Unlocked' },
+    unlockCondition: { type: 'score', value: 20, description: 'Score 20 in Classic Mode' },
     colors: { body: 0xF8BBD0, wing: 0xF48FB1, beak: 0xFFFFFF, eye: 0x000000 }
   },
-  toxic: {
-    id: 'toxic',
-    name: 'Radioactive',
-    rarity: 'Epic',
+  neon_blue: {
+    id: 'neon_blue',
+    name: 'Cyber Pulse',
+    rarity: 'Rare',
     modelType: 'neon',
     trail: 'neon_line',
-    unlockCondition: { type: 'default', value: 0, description: 'Unlocked' },
-    colors: { body: 0x000000, wing: 0x00FF00, beak: 0xCCFF00, eye: 0x00FF00, glow: 0x00FF00 }
+    unlockCondition: { type: 'score', value: 50, description: 'Score 50 in Classic Mode' },
+    colors: { body: 0x000000, wing: 0x00FFFF, beak: 0x00FFFF, eye: 0xFFFFFF, glow: 0x00FFFF }
+  },
+  pixel_bird: {
+    id: 'pixel_bird',
+    name: '8-Bit Hero',
+    rarity: 'Rare',
+    modelType: 'pixel',
+    trail: 'pixel_dust',
+    unlockCondition: { type: 'games_played', value: 50, description: 'Play 50 Games' },
+    colors: { body: 0xFCC200, wing: 0xFFFFFF, beak: 0xE65100, eye: 0x000000 }
+  },
+  bumblebee: {
+    id: 'bumblebee',
+    name: 'Buzzy Bee',
+    rarity: 'Common',
+    modelType: 'pixel',
+    trail: 'pixel_dust',
+    unlockCondition: { type: 'games_played', value: 100, description: 'Play 100 Games' },
+    colors: { body: 0xFFD700, wing: 0x000000, beak: 0x000000, eye: 0xFFFFFF }
+  },
+  ninja: {
+    id: 'ninja',
+    name: 'Shadow Ninja',
+    rarity: 'Epic',
+    modelType: 'standard',
+    trail: 'smoke',
+    unlockCondition: { type: 'battle_score', value: 50, description: 'Score 50 in Battle Mode' },
+    colors: { body: 0x212121, wing: 0x424242, beak: 0xD32F2F, eye: 0xFFFFFF }
+  },
+  neon_pink: {
+    id: 'neon_pink',
+    name: 'Neon Drift',
+    rarity: 'Rare',
+    modelType: 'neon',
+    trail: 'sparkle',
+    unlockCondition: { type: 'score', value: 100, description: 'Score 100 in Classic Mode' },
+    colors: { body: 0x220022, wing: 0xFF00FF, beak: 0xFF00FF, eye: 0xFFFFFF, glow: 0xFF00FF }
+  },
+  zombie: {
+    id: 'zombie',
+    name: 'Zom-Bird',
+    rarity: 'Rare',
+    modelType: 'pixel',
+    trail: 'pixel_dust',
+    unlockCondition: { type: 'games_played', value: 1, description: 'Play your first game' },
+    colors: { body: 0x558B2F, wing: 0x33691E, beak: 0x1B5E20, eye: 0xFF0000 }
+  },
+  pixel_scout: {
+    id: 'pixel_scout',
+    name: 'Voxel Scout',
+    rarity: 'Epic',
+    modelType: 'pixel',
+    trail: 'pixel_dust',
+    unlockCondition: { type: 'games_played', value: 200, description: 'Play 200 Games' },
+    colors: { body: 0x4CAF50, wing: 0x1B5E20, beak: 0xFFC107, eye: 0x000000 }
+  },
+  vampire: {
+    id: 'vampire',
+    name: 'Count Flapula',
+    rarity: 'Epic',
+    modelType: 'standard',
+    trail: 'smoke',
+    unlockCondition: { type: 'score', value: 150, description: 'Score 150 in Classic Mode' },
+    colors: { body: 0x212121, wing: 0xB71C1C, beak: 0xFFFFFF, eye: 0xFF0000 }
+  },
+  magma: {
+    id: 'magma',
+    name: 'Molten Core',
+    rarity: 'Epic',
+    modelType: 'neon',
+    trail: 'smoke',
+    unlockCondition: { type: 'battle_score', value: 150, description: 'Score 150 in Battle Mode' },
+    colors: { body: 0x330000, wing: 0xFF4500, beak: 0xFF0000, eye: 0xFFFF00, glow: 0xFF4500 }
+  },
+  robot: {
+    id: 'robot',
+    name: 'Mecha-01',
+    rarity: 'Epic',
+    modelType: 'standard',
+    trail: 'sparkle',
+    unlockCondition: { type: 'score', value: 200, description: 'Score 200 in Classic Mode' },
+    colors: { body: 0xB0BEC5, wing: 0xCFD8DC, beak: 0x607D8B, eye: 0x00FFFF }
+  },
+  ice_breaker: {
+    id: 'ice_breaker',
+    name: 'Frost Byte',
+    rarity: 'Rare',
+    modelType: 'neon',
+    trail: 'ghost_trail',
+    unlockCondition: { type: 'total_score', value: 2000, description: 'Accumulate 2,000 Total Score' },
+    colors: { body: 0xE0FFFF, wing: 0x00FFFF, beak: 0xFFFFFF, eye: 0x0000FF, glow: 0x00FFFF }
+  },
+  ninja_sage: {
+    id: 'ninja_sage',
+    name: 'Ninja Toad Sage',
+    rarity: 'Legendary',
+    modelType: 'standard',
+    trail: 'smoke',
+    unlockCondition: { type: 'battle_score', value: 300, description: 'Score 300 in Battle Mode' },
+    colors: { body: 0xFF8C00, wing: 0x212121, beak: 0xFFD700, eye: 0xFFFFFF }
   },
   saiyan: {
     id: 'saiyan',
@@ -329,18 +320,26 @@ export const SKINS: Record<string, Skin> = {
     rarity: 'Legendary',
     modelType: 'standard',
     trail: 'neon_line',
-    unlockCondition: { type: 'default', value: 0, description: 'Unlocked' },
+    unlockCondition: { type: 'score', value: 300, description: 'Score 300 in Classic Mode' },
     colors: { body: 0xFFE0BD, wing: 0xFF4500, beak: 0xFFD700, eye: 0x00FFFF, glow: 0xFFD700 }
   },
-  // --- ANIME SKINS ---
-  ninja_sage: {
-    id: 'ninja_sage',
-    name: 'Ninja Toad Sage',
+  golden: {
+    id: 'golden',
+    name: 'Golden Legend',
     rarity: 'Legendary',
     modelType: 'standard',
-    trail: 'smoke',
-    unlockCondition: { type: 'default', value: 0, description: 'Unlocked' },
-    colors: { body: 0xFF8C00, wing: 0x212121, beak: 0xFFD700, eye: 0xFFFFFF }
+    trail: 'sparkle',
+    unlockCondition: { type: 'total_score', value: 10000, description: 'Accumulate 10,000 Total Score' },
+    colors: { body: 0xFFD700, wing: 0xFFFFFF, beak: 0xFFA000, eye: 0xFFFFFF }
+  },
+  toxic: {
+    id: 'toxic',
+    name: 'Radioactive',
+    rarity: 'Epic',
+    modelType: 'neon',
+    trail: 'neon_line',
+    unlockCondition: { type: 'total_score', value: 25000, description: 'Accumulate 25,000 Total Score' },
+    colors: { body: 0x000000, wing: 0x00FF00, beak: 0xCCFF00, eye: 0x00FF00, glow: 0x00FF00 }
   },
   pirate_king: {
     id: 'pirate_king',
@@ -348,7 +347,7 @@ export const SKINS: Record<string, Skin> = {
     rarity: 'Legendary',
     modelType: 'standard',
     trail: 'pixel_dust',
-    unlockCondition: { type: 'default', value: 0, description: 'Unlocked' },
+    unlockCondition: { type: 'total_score', value: 50000, description: 'Accumulate 50,000 Total Score' },
     colors: { body: 0xFFE0BD, wing: 0xFF0000, beak: 0xFFD700, eye: 0x000000 }
   }
 };
