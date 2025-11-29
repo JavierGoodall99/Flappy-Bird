@@ -416,34 +416,46 @@ export class GameLogic {
   }
 
   private checkPipeCollisions(birdX: number, radius: number) {
-      const isGhost = this.activePowerup?.type === 'ghost';
-      if (isGhost) return; // No collision
-
       const pipes = this.pipeCtrl.pipes;
+      
+      // Removed early return to allow scoring while in ghost mode
+      // const isGhost = this.activePowerup?.type === 'ghost';
+      // if (isGhost) return;
+
       for (const pipe of pipes) {
-         if (birdX + radius > pipe.x && birdX - radius < pipe.x + GAME_CONSTANTS.PIPE_WIDTH) {
-              const hitTop = !pipe.brokenTop && this.bird.y - radius < pipe.topHeight;
-              const hitBottom = !pipe.brokenBottom && this.bird.y + radius > pipe.topHeight + GAME_CONSTANTS.PIPE_GAP;
-              
-              if (hitTop || hitBottom) {
-                 if (pipe.type === 'glass') {
-                     if ((hitTop && !pipe.brokenTop) || (hitBottom && !pipe.brokenBottom)) {
-                         if (hitTop) pipe.brokenTop = true;
-                         if (hitBottom) pipe.brokenBottom = true;
-                         this.score += GAME_CONSTANTS.GLASS_BREAK_SCORE;
-                         this.callbacks.setScore(this.score);
-                         audioService.playGlassBreak();
-                         this.callbacks.triggerEffect();
-                         this.bird.velocity = Math.max(this.bird.velocity + GAME_CONSTANTS.GLASS_BREAK_PENALTY, GAME_CONSTANTS.GLASS_BREAK_PENALTY / 2);
+         const isGhost = this.activePowerup?.type === 'ghost';
+         
+         // Only check for physical collisions if we are NOT a ghost
+         if (!isGhost) {
+             if (birdX + radius > pipe.x && birdX - radius < pipe.x + GAME_CONSTANTS.PIPE_WIDTH) {
+                  const hitTop = !pipe.brokenTop && this.bird.y - radius < pipe.topHeight;
+                  const hitBottom = !pipe.brokenBottom && this.bird.y + radius > pipe.topHeight + GAME_CONSTANTS.PIPE_GAP;
+                  
+                  if (hitTop || hitBottom) {
+                     if (pipe.type === 'glass') {
+                         if ((hitTop && !pipe.brokenTop) || (hitBottom && !pipe.brokenBottom)) {
+                             if (hitTop) pipe.brokenTop = true;
+                             if (hitBottom) pipe.brokenBottom = true;
+                             this.score += GAME_CONSTANTS.GLASS_BREAK_SCORE;
+                             this.callbacks.setScore(this.score);
+                             audioService.playGlassBreak();
+                             this.callbacks.triggerEffect();
+                             this.bird.velocity = Math.max(this.bird.velocity + GAME_CONSTANTS.GLASS_BREAK_PENALTY, GAME_CONSTANTS.GLASS_BREAK_PENALTY / 2);
+                         }
+                     } else if (this.activePowerup?.type === 'shield') {
+                         this.handleShieldBreak(birdX);
+                         // Return immediately to prevent double-collision crash in the same frame
+                         // and allow "ghost" state to take over on next frame
+                         return;
+                     } else {
+                         this.handleCrash();
+                         return;
                      }
-                 } else if (this.activePowerup?.type === 'shield') {
-                     this.handleShieldBreak(birdX);
-                 } else {
-                     this.handleCrash();
-                 }
-              }
+                  }
+             }
          }
          
+         // Score check happens independently of collision/ghost status
          if (!pipe.passed && birdX > pipe.x + GAME_CONSTANTS.PIPE_WIDTH) {
              pipe.passed = true;
              this.score += 1;
@@ -456,7 +468,8 @@ export class GameLogic {
   private checkBattleCollisions(birdX: number, radius: number, dt: number) {
       if (this.gameMode !== 'battle') return;
       
-      const isGhost = this.bird.invulnerabilityTimer > 0;
+      // Check for Ghost Powerup or Invulnerability (I-Frames)
+      const isGhost = this.bird.invulnerabilityTimer > 0 || this.activePowerup?.type === 'ghost';
       if (isGhost) return;
 
       // Enemy Collision
@@ -491,6 +504,7 @@ export class GameLogic {
               if (this.activePowerup?.type === 'shield') {
                   this.handleShieldBreak(birdX);
                   bossProjs.splice(i, 1);
+                  return; // Return immediately to avoid processing further damage in the same frame
               } else {
                   this.handlePlayerHit(1, birdX);
                   bossProjs.splice(i, 1);
