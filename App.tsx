@@ -1,217 +1,75 @@
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { GameEngine } from './components/GameEngine';
-import { Button } from './components/Button';
-import { GameState, ActivePowerup, SkinId, Skin, PowerupType, GameMode } from './types';
-import { SKINS, POWERUP_INFO, WEAPON_LOADOUTS } from './constants';
+import { GameState, ActivePowerup, SkinId, PowerupType, GameMode } from './types';
+import { SKINS } from './constants';
 import { audioService } from './services/audioService';
-import { signIn, signInWithGoogle, logout, subscribeToAuth, loadUserGameData, saveGameData, getLeaderboard, LeaderboardEntry, updateUserProfile } from './services/firebase';
+import { signInWithGoogle, logout } from './services/firebase';
+import { useGameData } from './hooks/useGameData';
+
+// UI Components
+import { LoadingScreen } from './components/ui/LoadingScreen';
+import { HUD } from './components/ui/HUD';
+import { NotificationToast } from './components/ui/NotificationToast';
+
+// Menu Components
+import { MainMenu } from './components/menus/MainMenu';
+import { GameOverMenu } from './components/menus/GameOverMenu';
+import { PauseMenu } from './components/menus/PauseMenu';
+import { ShopModal } from './components/menus/ShopModal';
+import { LeaderboardModal } from './components/menus/LeaderboardModal';
+import { WeaponSelectorModal } from './components/menus/WeaponSelectorModal';
+import { GuideModal } from './components/menus/GuideModal';
+import { ProfileEditModal } from './components/menus/ProfileEditModal';
 
 const App: React.FC = () => {
+  // --- Game Local State ---
   const [gameState, setGameState] = useState<GameState>(GameState.START);
   const [score, setScore] = useState(0);
-  
-  // Separate highscores for different modes
-  const [highScores, setHighScores] = useState<Record<GameMode, number>>({ 
-      standard: 0, 
-      battle: 0,
-      danger: 0,
-      playground: 0
-  });
-  
-  // Player Stats
-  const [stats, setStats] = useState({ gamesPlayed: 0, totalScore: 0 });
-  
-  const [isNewHighScore, setIsNewHighScore] = useState(false);
-  
   const [shake, setShake] = useState(false);
   const [activePowerup, setActivePowerup] = useState<ActivePowerup | null>(null);
-  const [isMuted, setIsMuted] = useState(false);
   
-  // Game Mode
   const [gameMode, setGameMode] = useState<GameMode>('standard');
   const [bossInfo, setBossInfo] = useState<{ active: boolean; hp: number; maxHp: number }>({ active: false, hp: 0, maxHp: 0 });
   const [playerHealth, setPlayerHealth] = useState({ current: 0, max: 0 });
+  const [initialPowerup, setInitialPowerup] = useState<PowerupType | null>(null);
 
-  // Cosmetics State
-  const [currentSkinId, setCurrentSkinId] = useState<SkinId>('default');
-  const [unlockedSkins, setUnlockedSkins] = useState<SkinId[]>(['default']);
+  // --- Persistent Data & Auth (Hook) ---
+  const { 
+      user, isLoading, highScores, stats, unlockedSkins, currentSkinId, isMuted,
+      setIsMuted, setCurrentSkinId, processGameEnd, updateProfileName 
+  } = useGameData();
+
+  const [isNewHighScore, setIsNewHighScore] = useState(false);
+
+  // --- Modal States ---
   const [isShopOpen, setIsShopOpen] = useState(false);
   const [isGuideOpen, setIsGuideOpen] = useState(false);
   const [isWeaponSelectOpen, setIsWeaponSelectOpen] = useState(false);
+  const [isLeaderboardOpen, setIsLeaderboardOpen] = useState(false);
+  const [isProfileEditOpen, setIsProfileEditOpen] = useState(false);
   const [notification, setNotification] = useState<{message: string, type: 'unlock' | 'info'} | null>(null);
 
-  // Leaderboard State
-  const [isLeaderboardOpen, setIsLeaderboardOpen] = useState(false);
-  const [leaderboardTab, setLeaderboardTab] = useState<'standard' | 'battle'>('standard');
-  const [leaderboardData, setLeaderboardData] = useState<LeaderboardEntry[]>([]);
-  const [leaderboardLoading, setLeaderboardLoading] = useState(false);
-
-  // Profile Edit State
-  const [isProfileEditOpen, setIsProfileEditOpen] = useState(false);
-  const [editNameValue, setEditNameValue] = useState("");
-
-  // Testing State
-  const [initialPowerup, setInitialPowerup] = useState<PowerupType | null>(null);
-
-  // User State
-  const [user, setUser] = useState<any>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const isSyncing = useRef(false);
-
-  // 1. FIREBASE AUTH & DB LOADING
-  useEffect(() => {
-    const handleAuthChange = async (authUser: any) => {
-        setIsLoading(true);
-        if (authUser) {
-            // Temporary set before loading DB details
-            setUser(authUser);
-
-            // Prepare User Identity Data
-            const userProfile = {
-                displayName: authUser.displayName,
-                email: authUser.email,
-                photoURL: authUser.photoURL
-            };
-
-            // Load from Cloud (Source of Truth)
-            const cloudData = await loadUserGameData(authUser.uid, userProfile);
-            
-            if (cloudData) {
-                isSyncing.current = true; // Prevent triggering save effects during load
-                
-                setHighScores(cloudData.highScores);
-                setUnlockedSkins(cloudData.unlockedSkins);
-                setCurrentSkinId(cloudData.currentSkinId as SkinId);
-                setStats(cloudData.stats);
-                setIsMuted(cloudData.muted);
-                audioService.setMuted(cloudData.muted);
-
-                // Update local user object with the displayName from DB (which might be the generated random name)
-                // We create a new object to avoid mutating the readonly authUser
-                if (cloudData.displayName) {
-                    setUser((prev: any) => ({ ...prev, displayName: cloudData.displayName, photoURL: cloudData.photoURL }));
-                }
-
-                setTimeout(() => { isSyncing.current = false; }, 100);
-            }
-            setIsLoading(false);
-        } else {
-            setUser(null);
-            // If not logged in, try anonymous login for Guest Mode
-            signIn(); 
-            // Note: isLoading stays true until signIn completes and triggers handleAuthChange again
-        }
-    };
-
-    const unsubscribe = subscribeToAuth(handleAuthChange);
-    return () => unsubscribe();
-  }, []);
-
-  // 2. PERSISTENCE EFFECTS (Save to DB when state changes)
-
-  // Save High Scores
-  useEffect(() => {
-      if (isSyncing.current) return;
-      if (user) saveGameData(user.uid, { highScores });
-  }, [highScores, user]);
-
-  // Save Stats
-  useEffect(() => {
-      if (isSyncing.current) return;
-      if (user) saveGameData(user.uid, { stats });
-  }, [stats, user]);
-
-  // Save Skins
-  useEffect(() => {
-      if (isSyncing.current) return;
-      if (user) saveGameData(user.uid, { unlockedSkins });
-  }, [unlockedSkins, user]);
-
-  // Save Current Skin
-  useEffect(() => {
-      if (isSyncing.current) return;
-      if (user) saveGameData(user.uid, { currentSkinId });
-  }, [currentSkinId, user]);
-
-  // Save Settings
-  useEffect(() => {
-      if (isSyncing.current) return;
-      if (user) saveGameData(user.uid, { muted: isMuted });
-  }, [isMuted, user]);
-
-
-  useEffect(() => {
-    if (gameState === GameState.GAME_OVER) {
-      let newStats = { ...stats };
-      let newHighScores = { ...highScores };
-
-      // Update Stats
-      if (gameMode !== 'playground') {
-           newStats = {
-               gamesPlayed: stats.gamesPlayed + 1,
-               totalScore: stats.totalScore + score
-           };
-           setStats(newStats);
-      }
-
-      // Only check and update high scores if NOT in playground mode
-      if (gameMode !== 'playground') {
-        const currentHigh = highScores[gameMode];
-        
-        if (score > currentHigh) {
-          newHighScores = {
-              ...highScores,
-              [gameMode]: score
-          };
-          setHighScores(newHighScores);
-          setIsNewHighScore(true);
-        }
-      }
-
-      // CHECK FOR UNLOCKS
-      const newUnlockedSkins = [...unlockedSkins];
-      let hasUnlock = false;
-
-      Object.values(SKINS).forEach(skin => {
-          if (newUnlockedSkins.includes(skin.id)) return;
-
-          let unlocked = false;
-          const condition = skin.unlockCondition;
-          
-          if (condition.type === 'score') {
-               // Check current run score AND stored high score
-               if (score >= condition.value && gameMode === 'standard') unlocked = true;
-               if (newHighScores.standard >= condition.value) unlocked = true;
-          } else if (condition.type === 'battle_score') {
-               if (score >= condition.value && gameMode === 'battle') unlocked = true;
-               if (newHighScores.battle >= condition.value) unlocked = true;
-          } else if (condition.type === 'games_played') {
-               if (newStats.gamesPlayed >= condition.value) unlocked = true;
-          } else if (condition.type === 'total_score') {
-               if (newStats.totalScore >= condition.value) unlocked = true;
-          }
-
-          if (unlocked) {
-              newUnlockedSkins.push(skin.id);
-              hasUnlock = true;
-              showNotification(`UNLOCKED: ${skin.name}`, 'unlock');
-          }
-      });
-
-      if (hasUnlock) {
-          setUnlockedSkins(newUnlockedSkins);
-          audioService.playScore(); // Little celebration sound
-      }
-
-      setBossInfo({ active: false, hp: 0, maxHp: 0 });
-    }
-  }, [gameState, score, gameMode]); // Dependency on stats/highScores removed to avoid loop, computed inside
+  // --- Actions ---
 
   const showNotification = (msg: string, type: 'unlock' | 'info') => {
       setNotification({ message: msg, type });
       setTimeout(() => setNotification(null), 3000);
   };
+
+  const handleGameEnd = () => {
+      const isRecord = processGameEnd(score, gameMode, (skinName) => {
+          showNotification(`UNLOCKED: ${skinName}`, 'unlock');
+      });
+      setIsNewHighScore(isRecord);
+      setBossInfo({ active: false, hp: 0, maxHp: 0 });
+  };
+
+  useEffect(() => {
+    if (gameState === GameState.GAME_OVER) {
+        handleGameEnd();
+    }
+  }, [gameState]);
 
   const startGame = useCallback((forcedPowerup: PowerupType | null = null, mode: GameMode = 'standard') => {
     audioService.init();
@@ -219,10 +77,14 @@ const App: React.FC = () => {
     setInitialPowerup(forcedPowerup);
     setGameState(GameState.PLAYING);
     setIsNewHighScore(false);
+    
+    // Close menus
     setIsGuideOpen(false);
     setIsWeaponSelectOpen(false);
     setIsLeaderboardOpen(false);
     setIsProfileEditOpen(false);
+    setIsShopOpen(false);
+    
     setBossInfo({ active: false, hp: 0, maxHp: 0 });
     setPlayerHealth({ current: 1, max: 1 });
   }, []);
@@ -244,9 +106,7 @@ const App: React.FC = () => {
 
   const toggleMute = (e: React.MouseEvent) => {
       e.stopPropagation();
-      const newState = !isMuted;
-      setIsMuted(newState);
-      audioService.setMuted(newState);
+      setIsMuted(!isMuted);
   };
 
   const triggerShake = () => {
@@ -254,119 +114,52 @@ const App: React.FC = () => {
     setTimeout(() => setShake(false), 300);
   };
 
-  const handleEquipSkin = (id: SkinId) => {
-      setCurrentSkinId(id);
-  };
-  
   const handleGoogleSignIn = async () => {
       await signInWithGoogle();
       setIsProfileEditOpen(false);
       showNotification("Account Linked Successfully!", 'info');
   };
-  
-  const handleLogout = () => {
-      logout();
+
+  const handleSaveProfile = async (name: string) => {
+      await updateProfileName(name);
+      showNotification("Profile Updated!", 'info');
   };
 
-  const handleOpenLeaderboard = () => {
-      setIsLeaderboardOpen(true);
-      // Data fetching is handled by the useEffect below
-  };
-
-  const handleOpenProfileEdit = () => {
-      setEditNameValue(user?.displayName || "");
-      setIsProfileEditOpen(true);
-  };
-
-  const handleSaveProfile = async () => {
-      if (editNameValue.trim().length > 0 && user) {
-          await updateUserProfile(user.uid, editNameValue.trim());
-          setUser((prev: any) => ({ ...prev, displayName: editNameValue.trim() }));
-          setIsProfileEditOpen(false);
-          showNotification("Profile Updated!", 'info');
-      }
-  };
-
-  // Automatically fetch leaderboard data when open or tab changes
-  useEffect(() => {
-      if (isLeaderboardOpen) {
-          const fetchLeaderboard = async () => {
-              setLeaderboardLoading(true);
-              const data = await getLeaderboard(leaderboardTab);
-              setLeaderboardData(data);
-              setLeaderboardLoading(false);
-          };
-          fetchLeaderboard();
-      }
-  }, [isLeaderboardOpen, leaderboardTab]);
-
+  // Global Key Handling
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (isLoading) return;
-      if (isShopOpen || isGuideOpen || isWeaponSelectOpen || isLeaderboardOpen || isProfileEditOpen) return; // Disable game controls in menus
+      if (isShopOpen || isGuideOpen || isWeaponSelectOpen || isLeaderboardOpen || isProfileEditOpen) return;
+      
       if (e.code === 'Escape' || e.code === 'KeyP') togglePause();
       if (e.code === 'KeyM') toggleMute({ stopPropagation: () => {} } as React.MouseEvent);
+      
       if (e.code === 'Space') {
         e.preventDefault(); 
         if (gameState === GameState.PAUSED) togglePause();
-        // Pass initialPowerup to persist test mode if active
         else if (gameState === GameState.START || gameState === GameState.GAME_OVER) startGame(initialPowerup, gameMode);
       }
     };
-    window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('mousedown', handleTouchOrClick);
-    window.addEventListener('touchstart', handleTouchOrClick, { passive: false });
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('mousedown', handleTouchOrClick);
-      window.removeEventListener('touchstart', handleTouchOrClick);
+    
+    // Use window listeners for game input to ensure it works even if focus is lost from div
+    const handleTouchOrClick = (e: Event) => {
+         // Simple check to prevent firing jump when clicking UI buttons
+         const target = e.target as HTMLElement;
+         if (target.closest('button') || target.closest('[role="button"]')) return;
+         // Logic is inside GameEngine for jumps, but we prevent defaults here if needed
     };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
   }, [togglePause, gameState, startGame, isShopOpen, isGuideOpen, isWeaponSelectOpen, isLeaderboardOpen, isProfileEditOpen, initialPowerup, gameMode, isMuted, isLoading]);
-  
-  // Dummy handler to prevent errors in cleanup
-  const handleTouchOrClick = () => {};
 
-  const getPowerupName = (p: ActivePowerup) => {
-      if (p.type === 'slowmo') return 'TIME WARP';
-      if (p.type === 'shield') return 'SHIELD ACTIVE';
-      if (p.type === 'ghost') return 'GHOST MODE';
-      if (p.type === 'shrink') return 'TINY BIRD';
-      if (p.type === 'fast') return 'TURBO BOOST';
-      if (p.type === 'grow') return 'GIANT BIRD';
-      
-      // Weapon Names
-      if (p.type === 'gun') return 'BLASTER';
-      if (p.type === 'gun_spread') return 'TRI-SHOT';
-      if (p.type === 'gun_rapid') return 'VULCAN';
-      if (p.type.startsWith('weapon_')) {
-          const w = WEAPON_LOADOUTS.find(l => l.id === p.type);
-          return w ? w.name.toUpperCase() : 'WEAPON';
-      }
-      
-      return 'POWER UP';
-  };
+  if (isLoading) return <LoadingScreen />;
 
-  // Dynamic Health Bar Logic
-  const healthPercent = playerHealth.current / Math.max(1, playerHealth.max);
-  // Adjusted thresholds for 3 HP: 3=1.0(Green), 2=0.66(Green), 1=0.33(Red)
-  const healthColor = healthPercent > 0.7 ? 'from-green-600 to-green-400' : 
-                      healthPercent > 0.4 ? 'from-yellow-500 to-amber-500' : 'from-red-600 to-red-500';
-  const healthShadow = healthPercent > 0.7 ? 'shadow-[0_0_8px_rgba(74,222,128,0.5)]' : 
-                       healthPercent > 0.4 ? 'shadow-[0_0_8px_rgba(245,158,11,0.5)]' : 'shadow-[0_0_8px_rgba(239,68,68,0.5)]';
-
-  // --- LOADING SCREEN ---
-  if (isLoading) {
-      return (
-          <div className="w-full h-screen bg-slate-900 flex flex-col items-center justify-center">
-              <div className="w-16 h-16 border-4 border-amber-400 border-t-transparent rounded-full animate-spin mb-4"></div>
-              <h1 className="text-2xl font-bold text-white tracking-widest animate-pulse">LOADING PROFILE...</h1>
-          </div>
-      );
-  }
+  const isMenuOpen = isShopOpen || isGuideOpen || isWeaponSelectOpen || isLeaderboardOpen || isProfileEditOpen;
 
   return (
     <div className={`relative w-full h-screen overflow-hidden ${shake ? 'animate-pulse' : ''}`}>
-      {/* Game Layer */}
+      {/* Game Engine Layer */}
       <div className="absolute inset-0 z-0">
         <GameEngine 
           gameState={gameState} 
@@ -383,642 +176,93 @@ const App: React.FC = () => {
         />
       </div>
 
-      {/* NOTIFICATION TOAST */}
-      {notification && (
-          <div className="absolute top-24 left-1/2 transform -translate-x-1/2 z-50 animate-fade-in-up">
-              <div className={`px-6 py-3 rounded-full shadow-2xl flex items-center gap-3 border backdrop-blur-md
-                  ${notification.type === 'unlock' ? 'bg-amber-500/90 border-amber-200' : 'bg-blue-500/90 border-blue-200'}
-              `}>
-                  <span className="text-2xl">{notification.type === 'unlock' ? '🎁' : 'ℹ️'}</span>
-                  <span className="text-white font-black uppercase tracking-wide text-sm drop-shadow-md">
-                      {notification.message}
-                  </span>
-              </div>
-          </div>
+      <NotificationToast notification={notification} />
+
+      {/* Heads Up Display */}
+      {!isMenuOpen && (
+          <HUD 
+             gameState={gameState}
+             score={score}
+             highScore={highScores[gameMode]}
+             gameMode={gameMode}
+             activePowerup={activePowerup}
+             bossInfo={bossInfo}
+             playerHealth={playerHealth}
+             isMuted={isMuted}
+             toggleMute={toggleMute}
+             togglePause={togglePause}
+          />
       )}
 
-      {/* MUTE BUTTON - Always Visible (except deep menus maybe) */}
-      {!isShopOpen && !isGuideOpen && !isWeaponSelectOpen && !isLeaderboardOpen && !isProfileEditOpen && (
-          <button 
-            onClick={toggleMute}
-            className="absolute top-6 left-6 md:top-8 md:left-8 z-30 w-10 h-10 md:w-12 md:h-12 bg-white/20 backdrop-blur-md border border-white/30 rounded-full flex items-center justify-center hover:bg-white/30 transition-all active:scale-95 group"
-          >
-             {isMuted ? (
-                 <span className="text-xl md:text-2xl text-white">🔇</span>
-             ) : (
-                 <span className="text-xl md:text-2xl text-white">🔊</span>
-             )}
-          </button>
-      )}
-
-      {/* USER PROFILE / AUTH - TOP RIGHT on START SCREEN */}
-      {gameState === GameState.START && !isShopOpen && !isGuideOpen && !isWeaponSelectOpen && !isLeaderboardOpen && !isProfileEditOpen && (
-          <div className="absolute top-6 right-6 md:top-8 md:right-8 z-30 animate-fade-in select-none">
-              {user ? (
-                  <button 
-                      onClick={handleOpenProfileEdit}
-                      className="group flex items-center gap-3 bg-[#1a1b26]/90 p-1.5 pr-5 rounded-full shadow-2xl border border-white/10 backdrop-blur-md hover:border-white/20 transition-all hover:scale-105 active:scale-95 cursor-pointer"
-                  >
-                      {/* Avatar */}
-                      <div className="relative w-10 h-10 rounded-full bg-slate-800 overflow-hidden border border-white/10 shadow-inner shrink-0">
-                           {user.photoURL ? (
-                               <img src={user.photoURL} alt="User" className="w-full h-full object-cover" />
-                           ) : (
-                               <div className="w-full h-full flex items-center justify-center text-sm font-bold bg-gradient-to-br from-indigo-500 to-purple-600 text-white">
-                                   {user.displayName ? user.displayName.charAt(0).toUpperCase() : 'G'}
-                               </div>
-                           )}
-                      </div>
-
-                      {/* Name Info */}
-                      <div className="flex flex-col items-start">
-                          <span className="text-white font-bold text-sm leading-tight font-['Outfit'] max-w-[100px] truncate">
-                              {user.displayName || 'Guest'}
-                          </span>
-                          <span className="text-[10px] text-white/50 font-bold uppercase tracking-wider leading-none">
-                              EDIT PROFILE
-                          </span>
-                      </div>
-
-                      {/* Edit Pencil Icon */}
-                      <div className="text-white/40 group-hover:text-white transition-colors ml-1">
-                          ✏️
-                      </div>
-                  </button>
-              ) : (
-                  <button 
-                      onClick={handleGoogleSignIn}
-                      className="group relative px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 rounded-full font-bold text-white text-sm tracking-wider shadow-lg hover:shadow-indigo-500/50 hover:scale-105 active:scale-95 transition-all flex items-center gap-2 overflow-hidden border border-white/20"
-                  >
-                      <span className="relative">SIGN IN WITH GOOGLE</span>
-                  </button>
-              )}
-          </div>
-      )}
-
-      {/* PLAYER HP HUD (Battle Mode) */}
-      {gameMode === 'battle' && gameState === GameState.PLAYING && (
-         <div className="absolute top-20 left-6 md:top-24 md:left-8 z-30 pointer-events-none animate-fade-in">
-             <div className="flex flex-col gap-1">
-                 <div className="text-xs font-bold text-white/80 tracking-widest uppercase">ARMOR INTEGRITY</div>
-                 <div className="flex gap-1">
-                     {Array.from({ length: playerHealth.max }).map((_, i) => (
-                         <div 
-                             key={i}
-                             className={`w-4 h-6 md:w-5 md:h-8 rounded-sm transform skew-x-[-12deg] transition-all duration-300 border border-white/20
-                               ${i < playerHealth.current ? `bg-gradient-to-t ${healthColor} ${healthShadow}` : 'bg-slate-800/50'}
-                             `}
-                         />
-                     ))}
-                 </div>
-             </div>
-         </div>
-      )}
-
-      {/* Powerup HUD - Hidden in Battle Mode */}
-      {(gameState === GameState.PLAYING) && activePowerup && gameMode !== 'battle' && (
-          <div className="absolute top-32 md:top-44 left-0 right-0 flex justify-center z-10 pointer-events-none">
-              <div className="bg-slate-900/60 backdrop-blur-md rounded-full px-6 py-2 border border-white/20 flex items-center gap-3 shadow-xl">
-                  <div className={`w-3 h-3 rounded-full animate-pulse 
-                      ${activePowerup.type === 'shield' ? 'bg-white shadow-[0_0_8px_rgba(255,255,255,0.6)]' : 
-                        activePowerup.type === 'slowmo' ? 'bg-violet-500' :
-                        activePowerup.type === 'ghost' ? 'bg-pink-500' : 
-                        activePowerup.type === 'shrink' ? 'bg-blue-500' : 
-                        activePowerup.type === 'fast' ? 'bg-lime-500' : 
-                        activePowerup.type.startsWith('gun') || activePowerup.type.startsWith('weapon_') ? 'bg-teal-500' : 'bg-red-500'
-                      }`} 
-                  />
-                  <div className="text-white font-bold text-sm tracking-wider uppercase">
-                      {getPowerupName(activePowerup)}
-                  </div>
-                  <div className="w-16 h-1.5 bg-white/20 rounded-full overflow-hidden">
-                      <div 
-                        className="h-full bg-white"
-                        style={{ width: `${Math.max(0, (activePowerup.timeLeft / activePowerup.totalTime) * 100)}%` }}
-                      />
-                  </div>
-              </div>
-          </div>
-      )}
-
-      {/* BOSS HUD */}
-      {bossInfo.active && (
-         <div className="absolute top-28 md:top-32 left-0 right-0 flex justify-center z-20 animate-fade-in-up pointer-events-none">
-            <div className="w-full max-w-md px-4">
-               <div className="bg-slate-900/80 backdrop-blur-md p-3 rounded-xl border border-red-500/50 shadow-2xl">
-                   <div className="flex justify-between items-center mb-1">
-                      <span className="text-red-500 font-black tracking-widest text-xs uppercase">WARNING: GIANT BIRD DETECTED</span>
-                      <span className="text-white font-bold text-xs">{Math.ceil(bossInfo.hp)} / {bossInfo.maxHp}</span>
-                   </div>
-                   <div className="w-full h-4 bg-slate-800 rounded-full overflow-hidden border border-white/10 relative">
-                      <div className="absolute inset-0 bg-red-900/50"></div>
-                      <div 
-                         className="h-full bg-gradient-to-r from-red-600 to-red-500 transition-all duration-200"
-                         style={{ width: `${(bossInfo.hp / bossInfo.maxHp) * 100}%` }}
-                      ></div>
-                   </div>
-               </div>
-            </div>
-         </div>
-      )}
-
-      {/* HUD Score */}
-      {(gameState === GameState.PLAYING || gameState === GameState.PAUSED) && (
-        <div className="absolute top-6 md:top-10 left-0 right-0 text-center z-10 pointer-events-none flex flex-col items-center">
-          <span className={`text-5xl md:text-6xl font-black drop-shadow-lg select-none font-['Outfit'] transition-all text-white leading-none`}>
-            {score}
-          </span>
-          
-          {/* Previous Best Score Display */}
-          {gameMode !== 'playground' && (
-             <div className="text-white/50 font-bold text-xs md:text-sm tracking-widest uppercase drop-shadow-sm mt-1">
-                 Best {highScores[gameMode]}
-             </div>
-          )}
-
-          {gameMode === 'battle' && (
-             <div className="flex justify-center mt-3">
-                <div className="px-5 py-1.5 bg-red-950/40 backdrop-blur-md border border-red-500/30 rounded-full shadow-[0_0_15px_rgba(220,38,38,0.3)] flex items-center gap-2.5">
-                    <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.8)]"></span>
-                    <span className="text-white/90 font-bold tracking-[0.2em] text-xs uppercase drop-shadow-md">BATTLE MODE</span>
-                </div>
-             </div>
-          )}
-          {gameMode === 'playground' && (
-             <div className="flex justify-center mt-3">
-                <div className="px-5 py-1.5 bg-blue-950/40 backdrop-blur-md border border-blue-500/30 rounded-full shadow-[0_0_15px_rgba(59,130,246,0.3)] flex items-center gap-2.5">
-                    <span className="text-white/90 font-bold tracking-[0.2em] text-xs uppercase drop-shadow-md">PRACTICE</span>
-                </div>
-             </div>
-          )}
-        </div>
-      )}
-      
-      {/* Pause Button */}
-      {gameState === GameState.PLAYING && (
-        <button 
-          onClick={togglePause}
-          className="absolute top-6 right-6 md:top-8 md:right-8 z-30 w-10 h-10 md:w-12 md:h-12 bg-white/20 backdrop-blur-md border border-white/30 rounded-full flex items-center justify-center hover:bg-white/30 transition-all active:scale-95 group"
-        >
-          <div className="flex gap-1.5">
-            <div className="w-1.5 h-4 md:h-5 bg-white rounded-full shadow-sm group-hover:scale-y-110 transition-transform"></div>
-            <div className="w-1.5 h-4 md:h-5 bg-white rounded-full shadow-sm group-hover:scale-y-110 transition-transform"></div>
-          </div>
-        </button>
-      )}
-
-      {/* Pause Menu */}
+      {/* Menus & Modals */}
       {gameState === GameState.PAUSED && (
-        <div className="absolute inset-0 flex items-center justify-center z-40 bg-slate-900/40 backdrop-blur-md">
-          <div className="glass-panel p-6 md:p-8 rounded-3xl text-center min-w-[300px] md:min-w-[320px] shadow-2xl border border-white/10 max-h-[90vh] overflow-y-auto no-scrollbar mx-4">
-             <h2 className="text-3xl md:text-4xl font-black text-white tracking-wide drop-shadow-sm mb-6 md:mb-8">PAUSED</h2>
-             <div className="flex flex-col gap-4">
-                <Button onClick={togglePause} className="w-full">RESUME</Button>
-                <Button 
-                   onClick={(e) => toggleMute(e as any)} 
-                   variant="secondary" 
-                   className="w-full"
-                >
-                   <div className="flex items-center justify-center gap-2">
-                       <span>{isMuted ? 'UNMUTE SOUND' : 'MUTE SOUND'}</span>
-                       <span className="text-xl">{isMuted ? '🔇' : '🔊'}</span>
-                   </div>
-                </Button>
-                <Button onClick={resetGame} variant="secondary" className="w-full">QUIT</Button>
-             </div>
-          </div>
-        </div>
+          <PauseMenu 
+             onResume={togglePause} 
+             onQuit={resetGame} 
+             isMuted={isMuted} 
+             toggleMute={toggleMute} 
+          />
       )}
 
-      {/* Start Screen */}
-      {gameState === GameState.START && !isShopOpen && !isGuideOpen && !isWeaponSelectOpen && !isLeaderboardOpen && !isProfileEditOpen && (
-        <div className="absolute inset-0 flex items-center justify-center z-20 bg-black/20 backdrop-blur-sm">
-          <div className="glass-panel p-6 md:p-10 rounded-3xl text-center w-full max-w-md mx-4 shadow-2xl transform transition-all animate-fade-in-up max-h-[90vh] overflow-y-auto no-scrollbar">
-            <h1 className="text-5xl md:text-7xl font-black text-white mb-2 drop-shadow-xl tracking-tighter italic transform -rotate-2">
-              Fliply
-            </h1>
-            <div className="text-amber-400 font-bold tracking-widest uppercase mb-4 md:mb-8 text-sm">Arcade Edition</div>
-            
-            <div className="flex flex-col gap-3 md:gap-4 mb-4 md:mb-6">
-                <Button onClick={() => startGame(null, 'standard')} className="w-full text-lg md:text-xl py-3 md:py-4 shadow-xl">PLAY CLASSIC</Button>
-                
-                <button 
-                  onClick={() => setIsWeaponSelectOpen(true)}
-                  className="w-full py-3 md:py-4 rounded-full font-bold text-base md:text-lg text-white bg-gradient-to-r from-red-600 to-rose-600 border-b-4 border-red-800 active:scale-95 shadow-lg hover:brightness-110 transition-all flex items-center justify-center gap-2"
-                >
-                  <span>⚔️</span> BATTLE MODE
-                </button>
-            </div>
-
-            <div className="flex gap-3 md:gap-4 w-full mb-3">
-              <button 
-                onClick={() => setIsShopOpen(true)}
-                className="flex-1 py-3 md:py-4 rounded-2xl font-bold text-base tracking-wide bg-white/5 text-white border border-white/10 hover:bg-white/15 hover:border-white/30 transition-all flex flex-col items-center justify-center gap-1 group"
-              >
-                <span className="text-2xl mb-1 group-hover:scale-110 transition-transform">🎨</span> 
-                SKINS
-              </button>
-              <button 
-                onClick={() => setIsGuideOpen(true)}
-                className="flex-1 py-3 md:py-4 rounded-2xl font-bold text-base tracking-wide bg-white/5 text-white border border-white/10 hover:bg-white/15 hover:border-white/30 transition-all flex flex-col items-center justify-center gap-1 group"
-              >
-                <span className="text-2xl mb-1 group-hover:scale-110 transition-transform">⚡</span> 
-                POWERS
-              </button>
-            </div>
-            
-            <button 
-                onClick={handleOpenLeaderboard}
-                className="w-full py-3 rounded-2xl font-bold text-base tracking-wide bg-gradient-to-r from-yellow-500/20 to-amber-500/20 text-amber-200 border border-amber-500/30 hover:bg-amber-500/30 hover:border-amber-500/50 transition-all flex items-center justify-center gap-2 group"
-            >
-                <span className="text-xl group-hover:scale-110 transition-transform">🏆</span>
-                LEADERBOARD
-            </button>
-
-            <div className="text-white/30 text-xs uppercase tracking-widest mt-4 md:mt-6">Press Space to Start</div>
-          </div>
-        </div>
+      {gameState === GameState.START && !isMenuOpen && (
+          <MainMenu 
+             startGame={startGame}
+             setShopOpen={setIsShopOpen}
+             setGuideOpen={setIsGuideOpen}
+             setLeaderboardOpen={setIsLeaderboardOpen}
+             setWeaponSelectOpen={setIsWeaponSelectOpen}
+             setProfileOpen={setIsProfileEditOpen}
+             user={user}
+             handleGoogleSignIn={handleGoogleSignIn}
+          />
       )}
 
-      {/* LEADERBOARD */}
-      {isLeaderboardOpen && (
-          <div className="absolute inset-0 z-50 bg-slate-900/90 backdrop-blur-lg flex flex-col items-center justify-center p-6 animate-fade-in">
-              <div className="w-full max-w-2xl h-full flex flex-col max-h-[85vh]">
-                  <div className="flex justify-between items-center mb-4">
-                      <div className="flex items-center gap-3">
-                        <span className="text-4xl">🏆</span>
-                        <h2 className="text-3xl font-black text-white italic tracking-tighter">LEADERBOARD</h2>
-                      </div>
-                      <button onClick={() => setIsLeaderboardOpen(false)} className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-white hover:bg-white/20 transition-colors">✕</button>
-                  </div>
-
-                  {/* MODE TOGGLE */}
-                  <div className="flex bg-white/5 p-1 rounded-xl mb-6 border border-white/10 w-full max-w-sm self-center">
-                      <button 
-                          onClick={() => setLeaderboardTab('standard')}
-                          className={`flex-1 py-2 rounded-lg text-xs font-bold uppercase tracking-widest transition-all ${leaderboardTab === 'standard' ? 'bg-amber-500 text-black shadow-lg scale-100' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
-                      >
-                          Classic
-                      </button>
-                      <button 
-                          onClick={() => setLeaderboardTab('battle')}
-                          className={`flex-1 py-2 rounded-lg text-xs font-bold uppercase tracking-widest transition-all ${leaderboardTab === 'battle' ? 'bg-red-600 text-white shadow-lg scale-100' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
-                      >
-                          Battle
-                      </button>
-                  </div>
-
-                  <div className="flex-1 overflow-hidden bg-white/5 rounded-3xl border border-white/10 flex flex-col">
-                      <div className="grid grid-cols-6 p-4 bg-white/5 font-bold text-xs uppercase tracking-widest text-slate-400 border-b border-white/10">
-                          <div className="col-span-1 text-center">Rank</div>
-                          <div className="col-span-4 pl-2">Player</div>
-                          <div className="col-span-1 text-right">Score</div>
-                      </div>
-                      
-                      <div className="flex-1 overflow-y-auto no-scrollbar relative">
-                          {leaderboardLoading ? (
-                               <div className="absolute inset-0 flex items-center justify-center">
-                                   <div className="w-8 h-8 border-2 border-amber-400 border-t-transparent rounded-full animate-spin"></div>
-                               </div>
-                          ) : (
-                               <div className="flex flex-col">
-                                   {leaderboardData.length === 0 ? (
-                                       <div className="text-center p-8 text-white/30 italic">No records found yet.</div>
-                                   ) : (
-                                       leaderboardData.map((entry, index) => {
-                                           const isMe = user && entry.uid === user.uid;
-                                           return (
-                                               <div 
-                                                   key={entry.uid} 
-                                                   className={`grid grid-cols-6 p-4 items-center border-b border-white/5 hover:bg-white/5 transition-colors
-                                                      ${isMe ? 'bg-amber-500/10 hover:bg-amber-500/20' : ''}
-                                                   `}
-                                               >
-                                                   <div className="col-span-1 flex justify-center">
-                                                       {index < 3 ? (
-                                                           <div className={`w-8 h-8 rounded-full flex items-center justify-center text-lg shadow-lg
-                                                               ${index === 0 ? 'bg-yellow-400 text-yellow-900' : 
-                                                                 index === 1 ? 'bg-slate-300 text-slate-800' : 'bg-orange-400 text-orange-900'}
-                                                           `}>
-                                                               {index === 0 ? '🥇' : index === 1 ? '🥈' : '🥉'}
-                                                           </div>
-                                                       ) : (
-                                                           <span className="text-slate-400 font-bold text-lg">#{index + 1}</span>
-                                                       )}
-                                                   </div>
-                                                   <div className="col-span-4 flex items-center gap-3 pl-2">
-                                                       <div className="w-10 h-10 rounded-full bg-slate-700 overflow-hidden border border-white/20 flex-shrink-0">
-                                                           {entry.photoURL ? (
-                                                               <img src={entry.photoURL} alt="avi" className="w-full h-full object-cover" />
-                                                           ) : (
-                                                               <div className="w-full h-full flex items-center justify-center text-white/50 font-bold bg-gradient-to-br from-indigo-500 to-purple-600">
-                                                                   {entry.displayName ? entry.displayName.charAt(0).toUpperCase() : '?'}
-                                                               </div>
-                                                           )}
-                                                       </div>
-                                                       <div className="flex flex-col">
-                                                           <span className={`font-bold text-sm truncate ${isMe ? 'text-amber-300' : 'text-white'}`}>
-                                                               {entry.displayName} {isMe && '(You)'}
-                                                           </span>
-                                                       </div>
-                                                   </div>
-                                                   <div className="col-span-1 text-right font-black text-xl text-white tracking-wide">
-                                                       {entry.score}
-                                                   </div>
-                                               </div>
-                                           );
-                                       })
-                                   )}
-                               </div>
-                          )}
-                      </div>
-                  </div>
-                  
-                  <div className="mt-4 text-center text-white/30 text-xs">
-                      Top players for {leaderboardTab === 'standard' ? 'Classic' : 'Battle'} Mode
-                  </div>
-              </div>
-          </div>
+      {gameState === GameState.GAME_OVER && !isMenuOpen && (
+          <GameOverMenu 
+              score={score}
+              highScore={highScores[gameMode]}
+              isNewHighScore={isNewHighScore}
+              gameMode={gameMode}
+              initialPowerup={initialPowerup}
+              onRestart={startGame}
+              onHome={resetGame}
+          />
       )}
 
-      {/* EDIT PROFILE MODAL */}
-      {isProfileEditOpen && (
-          <div className="absolute inset-0 z-50 bg-black/40 backdrop-blur-sm flex flex-col items-center justify-center p-6 animate-fade-in">
-              <div className="w-full max-w-sm glass-panel p-6 rounded-3xl shadow-2xl relative">
-                  {/* Close Button */}
-                  <button 
-                      onClick={() => setIsProfileEditOpen(false)}
-                      className="absolute top-6 right-6 text-white/50 hover:text-white transition-colors"
-                  >
-                      ✕
-                  </button>
+      {/* Content Modals */}
+      <ShopModal 
+          isOpen={isShopOpen} 
+          onClose={() => setIsShopOpen(false)} 
+          stats={stats}
+          unlockedSkins={unlockedSkins}
+          currentSkinId={currentSkinId}
+          onEquip={setCurrentSkinId}
+      />
+      
+      <LeaderboardModal 
+          isOpen={isLeaderboardOpen} 
+          onClose={() => setIsLeaderboardOpen(false)} 
+          user={user}
+      />
 
-                  <h2 className="text-xl font-black text-white mb-8 text-center tracking-wide drop-shadow-md">PROFILE SETTINGS</h2>
-                  
-                  {/* Avatar Section */}
-                  <div className="flex flex-col items-center mb-8">
-                      <div className="relative group cursor-pointer">
-                          <div className="w-24 h-24 rounded-full border-4 border-[#6366F1] flex items-center justify-center overflow-hidden bg-black/20 shadow-inner">
-                               {user?.photoURL ? (
-                                   <img src={user.photoURL} alt="User" className="w-full h-full object-cover" />
-                               ) : (
-                                   <div className="text-3xl font-bold text-white">
-                                       {user?.displayName ? user.displayName.substring(0, 2).toUpperCase() : 'GU'}
-                                   </div>
-                               )}
-                          </div>
-                          {/* Edit Pencil Badge */}
-                          <div className="absolute bottom-0 right-0 w-8 h-8 bg-[#4F46E5] rounded-full border-2 border-white/20 flex items-center justify-center text-white text-xs shadow-lg">
-                              ✏️
-                          </div>
-                      </div>
-                      <div className="mt-3 text-[10px] font-bold text-white/70 uppercase tracking-widest hover:text-white transition-colors cursor-pointer">
-                          Change Avatar
-                      </div>
-                  </div>
-                  
-                  {/* Display Name Section */}
-                  <div className="mb-8">
-                      <label className="text-[10px] font-bold text-white/70 uppercase tracking-widest mb-2 block">Display Name</label>
-                      <div className="relative">
-                          <input 
-                             type="text" 
-                             value={editNameValue}
-                             onChange={(e) => setEditNameValue(e.target.value)}
-                             maxLength={20}
-                             className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-white font-bold outline-none focus:border-[#6366F1] transition-colors pr-16 placeholder-white/30 focus:bg-black/30"
-                             placeholder="Enter name"
-                          />
-                          <div className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-bold text-white/50">
-                              {editNameValue.length}/20
-                          </div>
-                      </div>
-                  </div>
-                  
-                  {/* Account / Google Section */}
-                  <div className="mb-8 border-t border-white/10 pt-6">
-                      <label className="text-[10px] font-bold text-white/70 uppercase tracking-widest mb-3 block">Connected Accounts</label>
-                      
-                      {user && user.isAnonymous ? (
-                           <button 
-                               onClick={handleGoogleSignIn}
-                               className="w-full py-3 rounded-xl font-bold bg-white text-slate-900 shadow-lg flex items-center justify-center gap-3 hover:bg-slate-100 transition-all active:scale-95"
-                           >
-                               <div className="w-5 h-5">
-                                  {/* Google G Logo SVG */}
-                                  <svg viewBox="0 0 24 24" className="w-full h-full">
-                                      <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
-                                      <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-                                      <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
-                                      <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
-                                  </svg>
-                               </div>
-                               Sign in with Google
-                           </button>
-                      ) : (
-                           <div className="flex gap-2">
-                               <div className="flex-1 py-3 rounded-xl bg-green-500/20 border border-green-500/30 text-green-300 font-bold text-center text-sm flex items-center justify-center gap-2">
-                                   <span>✓</span> Connected
-                               </div>
-                               <button 
-                                   onClick={() => { handleLogout(); setIsProfileEditOpen(false); }}
-                                   className="px-4 py-3 rounded-xl font-bold bg-red-500/10 text-red-300 border border-red-500/20 hover:bg-red-500/20 transition-all text-sm"
-                               >
-                                   Log Out
-                               </button>
-                           </div>
-                      )}
-                  </div>
+      <WeaponSelectorModal 
+          isOpen={isWeaponSelectOpen} 
+          onClose={() => setIsWeaponSelectOpen(false)} 
+          onSelectWeapon={(weapon) => startGame(weapon, 'battle')} 
+      />
 
-                  {/* Footer Buttons */}
-                  <div className="flex gap-4">
-                      <button 
-                         onClick={() => setIsProfileEditOpen(false)}
-                         className="flex-1 py-3.5 rounded-xl font-bold bg-white/10 hover:bg-white/20 text-white border border-white/10 transition-all text-sm tracking-wide"
-                      >
-                         CANCEL
-                      </button>
-                      <button 
-                         onClick={handleSaveProfile}
-                         className="flex-1 py-3.5 rounded-xl font-bold bg-gradient-to-r from-amber-500 to-orange-600 text-white shadow-lg hover:shadow-orange-500/20 transition-all active:scale-95 text-sm tracking-wide"
-                      >
-                         SAVE CHANGES
-                      </button>
-                  </div>
-              </div>
-          </div>
-      )}
+      <GuideModal 
+          isOpen={isGuideOpen} 
+          onClose={() => setIsGuideOpen(false)} 
+          onTryPowerup={(type) => startGame(type, 'playground')} 
+      />
 
-      {/* WEAPON SELECTOR */}
-      {isWeaponSelectOpen && (
-          <div className="absolute inset-0 z-50 bg-slate-900/90 backdrop-blur-lg flex flex-col items-center justify-center p-4 md:p-6 animate-fade-in">
-              <div className="w-full max-w-5xl h-full flex flex-col relative">
-                  <div className="flex justify-between items-center mb-6 flex-shrink-0 px-2">
-                     <h2 className="text-2xl md:text-4xl font-black text-white italic tracking-tighter">CHOOSE YOUR WEAPON</h2>
-                     <button onClick={() => setIsWeaponSelectOpen(false)} className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-white hover:bg-white/20 transition-colors">✕</button>
-                  </div>
-                  
-                  <div className="flex-1 overflow-y-auto no-scrollbar w-full">
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6 pb-20 px-2">
-                          {WEAPON_LOADOUTS.map((weapon) => (
-                              <div 
-                                 key={weapon.id}
-                                 onClick={() => startGame(weapon.id as any, 'battle')}
-                                 className="bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/30 rounded-3xl p-6 cursor-pointer transition-all hover:-translate-y-2 group flex flex-col h-full"
-                              >
-                                 <div className="flex items-center gap-4 mb-4">
-                                     <div 
-                                        className="w-16 h-16 rounded-2xl shadow-lg flex-shrink-0 flex items-center justify-center text-3xl transition-transform group-hover:scale-110"
-                                        style={{ backgroundColor: weapon.color }}
-                                     >
-                                        {weapon.id === 'gun' ? '🔫' : weapon.id.includes('gun') ? '🦅' : '⚔️'}
-                                     </div>
-                                     <h3 className="text-2xl font-bold text-white leading-none">{weapon.name}</h3>
-                                 </div>
-                                 
-                                 <p className="text-sm text-slate-300 mb-4 flex-grow">{weapon.description}</p>
-                                 
-                                 <div className="bg-black/20 rounded-xl p-3 mb-4">
-                                     <div className="text-xs font-mono text-white/70 whitespace-pre-wrap">{weapon.stats}</div>
-                                 </div>
-
-                                 <div className="w-full py-3 bg-white/10 rounded-xl text-center font-bold text-sm tracking-widest text-white group-hover:bg-white/20 transition-colors uppercase">
-                                     Select
-                                 </div>
-                              </div>
-                          ))}
-                      </div>
-                  </div>
-              </div>
-          </div>
-      )}
-
-      {/* POWERUP GUIDE */}
-      {isGuideOpen && (
-         <div className="absolute inset-0 z-50 bg-slate-900/90 backdrop-blur-lg flex flex-col items-center justify-center p-6 animate-fade-in">
-             <div className="w-full max-w-lg h-full max-h-[80vh] flex flex-col">
-                <div className="flex justify-between items-center mb-6">
-                    <h2 className="text-3xl font-black text-white">POWER-UPS</h2>
-                    <button onClick={() => setIsGuideOpen(false)} className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-white hover:bg-white/20">✕</button>
-                </div>
-                
-                <div className="flex-1 overflow-y-auto flex flex-col gap-3 no-scrollbar">
-                   {POWERUP_INFO.map(p => (
-                      <div key={p.type} className="bg-white/5 border border-white/10 rounded-2xl p-4 flex items-center gap-4 hover:bg-white/10 transition-colors">
-                          <div className="w-12 h-12 rounded-full shadow-lg flex-shrink-0" style={{ backgroundColor: p.color }}></div>
-                          <div className="flex-1">
-                             <h3 className="text-xl font-bold text-white mb-1">{p.name}</h3>
-                             <p className="text-sm text-slate-300 leading-tight">{p.desc}</p>
-                          </div>
-                          <button 
-                             onClick={() => startGame(p.type as any, 'playground')}
-                             className="px-4 py-2 bg-white/20 hover:bg-white/30 rounded-full text-xs font-bold text-white tracking-wide border border-white/20 transition-all active:scale-95"
-                          >
-                             TRY OUT
-                          </button>
-                      </div>
-                   ))}
-                </div>
-                <div className="mt-6 text-center text-white/40 text-sm">
-                   Click TRY OUT to start a run with the power-up active!
-                </div>
-             </div>
-         </div>
-      )}
-
-      {/* SKIN SHOP */}
-      {isShopOpen && (
-        <div className="absolute inset-0 z-50 bg-slate-900/90 backdrop-blur-lg flex flex-col items-center justify-center p-6 animate-fade-in">
-           <div className="w-full max-w-4xl h-full flex flex-col">
-              <div className="flex justify-between items-center mb-8">
-                  <h2 className="text-4xl font-black text-white">SKIN SHOP</h2>
-                  <div className="flex items-center gap-4">
-                      {/* Stats Display in Shop */}
-                      <div className="bg-black/30 px-4 py-1.5 rounded-full flex gap-4 text-xs font-bold border border-white/10">
-                          <div className="text-slate-300">GAMES: <span className="text-white">{stats.gamesPlayed}</span></div>
-                          <div className="text-slate-300">LIFETIME SCORE: <span className="text-amber-400">{stats.totalScore}</span></div>
-                      </div>
-                      <button onClick={() => setIsShopOpen(false)} className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-white hover:bg-white/20">✕</button>
-                  </div>
-              </div>
-
-              <div className="flex-1 overflow-y-auto grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 pb-8 no-scrollbar">
-                 {Object.values(SKINS).map((skin) => {
-                     const isUnlocked = unlockedSkins.includes(skin.id);
-                     const isEquipped = currentSkinId === skin.id;
-
-                     return (
-                         <div key={skin.id} 
-                              onClick={() => isUnlocked && handleEquipSkin(skin.id)}
-                              className={`relative p-4 rounded-2xl border transition-all cursor-pointer group
-                                ${isEquipped ? 'bg-amber-500/20 border-amber-500' : 'bg-white/5 border-white/10 hover:border-white/30'}
-                                ${!isUnlocked && 'opacity-60 grayscale'}
-                              `}
-                         >
-                             <div className="flex justify-between items-start mb-2">
-                                <span className={`text-xs font-bold px-2 py-1 rounded uppercase
-                                    ${skin.rarity === 'Legendary' ? 'bg-yellow-500 text-black' : 
-                                      skin.rarity === 'Epic' ? 'bg-purple-500 text-white' :
-                                      skin.rarity === 'Rare' ? 'bg-blue-500 text-white' : 'bg-slate-600 text-slate-200'}
-                                `}>{skin.rarity}</span>
-                                {isEquipped && <span className="text-xs text-amber-400 font-bold">EQUIPPED</span>}
-                             </div>
-                             
-                             <div className="h-24 flex items-center justify-center mb-2">
-                                 {/* Minimal CSS representation of skin */}
-                                 <div className="w-12 h-12 rounded-full shadow-lg relative" style={{ backgroundColor: '#' + skin.colors.body.toString(16) }}>
-                                     <div className="absolute right-[-4px] top-[14px] w-6 h-4 rounded-full bg-white"></div>
-                                     <div className="absolute right-[-8px] top-[18px] w-4 h-3 bg-orange-500" style={{ backgroundColor: '#' + skin.colors.beak.toString(16) }}></div>
-                                 </div>
-                             </div>
-
-                             <h3 className="text-lg font-bold text-white mb-1">{skin.name}</h3>
-                             <div className={`text-xs font-bold ${isUnlocked ? 'text-green-400' : 'text-red-400'}`}>
-                                 {isUnlocked ? 'Unlocked' : `🔒 ${skin.unlockCondition.description}`}
-                             </div>
-                             
-                             {!isUnlocked && (
-                                 <div className="absolute inset-0 bg-black/40 flex items-center justify-center rounded-2xl backdrop-blur-[1px]">
-                                     <span className="text-2xl">🔒</span>
-                                 </div>
-                             )}
-                         </div>
-                     );
-                 })}
-              </div>
-           </div>
-        </div>
-      )}
-
-      {/* Game Over Screen */}
-      {gameState === GameState.GAME_OVER && !isShopOpen && !isGuideOpen && !isWeaponSelectOpen && !isLeaderboardOpen && !isProfileEditOpen && (
-        <div className="absolute inset-0 flex items-center justify-center z-20 bg-slate-900/60 backdrop-blur-md">
-          <div className="glass-panel p-6 md:p-8 rounded-3xl text-center w-full max-w-xs mx-4 shadow-2xl border border-white/10 relative max-h-[90vh] overflow-y-auto no-scrollbar">
-            <h2 className={`text-3xl md:text-4xl font-bold text-white mb-4 md:mb-6 tracking-wide`}>GAME OVER</h2>
-
-            <div className="flex flex-col gap-3 md:gap-4 mb-6 md:mb-8">
-                <div className={`p-4 rounded-2xl border transition-all duration-500 ${isNewHighScore ? 'bg-yellow-400/20 border-yellow-400/50 shadow-[0_0_30px_rgba(251,191,36,0.3)]' : 'bg-white/10 border-white/5'}`}>
-                    <div className={`text-sm uppercase tracking-wider text-xs ${isNewHighScore ? 'text-yellow-200' : 'text-slate-300'}`}>Score</div>
-                    <div className={`text-4xl md:text-5xl font-bold ${isNewHighScore ? 'text-yellow-400' : 'text-amber-400'}`}>{score}</div>
-                </div>
-                {gameMode !== 'playground' && (
-                  <div className="p-3 bg-white/5 rounded-xl border border-white/5 flex justify-center px-6">
-                      <div className="text-center">
-                          <div className="text-xs uppercase tracking-wider text-slate-400">Best</div>
-                          <div className="text-xl font-bold text-white">{highScores[gameMode]}</div>
-                      </div>
-                  </div>
-                )}
-            </div>
-
-            <div className="flex flex-col gap-3">
-              <Button onClick={() => startGame(initialPowerup, gameMode)}>TRY AGAIN</Button>
-              <Button onClick={resetGame} variant="secondary">HOME</Button>
-            </div>
-            <div className="text-white/30 text-xs mt-4">Press Space to Restart</div>
-          </div>
-        </div>
-      )}
+      <ProfileEditModal 
+          isOpen={isProfileEditOpen} 
+          onClose={() => setIsProfileEditOpen(false)} 
+          user={user} 
+          onSaveName={handleSaveProfile} 
+      />
     </div>
   );
 };
