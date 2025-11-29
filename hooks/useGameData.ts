@@ -112,7 +112,7 @@ export const useGameData = () => {
             // creating a race condition.
             setTimeout(() => {
                 isRemoteUpdate.current = false;
-            }, 200);
+            }, 300);
 
             setHighScores(prev => ({
                 standard: Math.max(prev.standard, data.highScores?.standard || 0),

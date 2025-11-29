@@ -115,18 +115,26 @@ export const signInWithGoogle = async () => {
         if (auth.currentUser && auth.currentUser.isAnonymous) {
             const anonUid = auth.currentUser.uid;
             try {
+                // Try to link the anonymous account to Google
                 result = await linkWithPopup(auth.currentUser, googleProvider);
+                // If successful, the anon account becomes the Google account.
+                // The UID remains the same, so we KEEP the data.
             } catch (linkError: any) {
                 if (linkError.code === 'auth/credential-already-in-use') {
-                    // Google account already exists. We must sign in to it, abandoning the anon account.
-                    // This explains why users might see "2 separate users" if they link to an existing account.
-                    console.log("Account exists, switching to it...");
-                    result = await signInWithPopup(auth, googleProvider);
+                    // Google account already exists. We must sign in to it.
+                    // This creates a "new" session with the existing Google user.
+                    // The previous anonymous account is now abandoned.
                     
-                    // Cleanup: Delete the old anonymous account data to prevent table flooding
+                    console.log("Account exists, switching to it...");
+                    
+                    // 1. Delete the ABANDONED anonymous account data to prevent table flooding
                     if (anonUid) {
                         await deleteUserDocument(anonUid);
                     }
+
+                    // 2. Sign in to the existing Google account
+                    result = await signInWithPopup(auth, googleProvider);
+                    
                 } else {
                     throw linkError;
                 }
@@ -306,7 +314,7 @@ export const loadUserGameData = async (uid: string, userProfile?: { displayName:
         } else {
             console.error("Load Error", error);
         }
-        // Fallback to defaults
+        // Fallback for failed load
         return defaultData; 
     }
 };
