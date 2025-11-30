@@ -1,6 +1,8 @@
 
 
 
+
+
 import { useState, useEffect, useRef } from 'react';
 import { subscribeToAuth, loadUserGameData, saveGameData, signIn, updateUserProfile, subscribeToGameData } from '../services/firebase';
 import { GameMode, SkinId } from '../types';
@@ -47,6 +49,12 @@ export const useGameData = () => {
   );
   const [streak, setStreak] = useState(() => 
       getLocal('fliply_streak', 0)
+  );
+  const [longestStreak, setLongestStreak] = useState(() => 
+      getLocal('fliply_longestStreak', 0)
+  );
+  const [loginHistory, setLoginHistory] = useState<string[]>(() => 
+      getLocal('fliply_loginHistory', [])
   );
   const [lastLoginDate, setLastLoginDate] = useState(() => 
       getLocal('fliply_lastLoginDate', '')
@@ -98,6 +106,8 @@ export const useGameData = () => {
              setCurrentSkinId('default');
              setCoins(0);
              setStreak(0);
+             setLongestStreak(0);
+             setLoginHistory([]);
              setLastLoginDate('');
              
              // Automatically sign in anonymously to ensure game functionality
@@ -127,13 +137,30 @@ export const useGameData = () => {
                 isRemoteUpdate.current = false;
             }, 300);
 
-            // STREAK LOGIC Calculation
+            // STREAK & HISTORY LOGIC Calculation
             const today = new Date().toDateString();
             let currentStreak = data.streak || 0;
             let currentLastLogin = data.lastLoginDate || '';
+            let currentLongest = data.longestStreak || currentStreak;
+            let history = [...(data.loginHistory || [])];
+
+            // If history is empty but we have streak, init history with today
+            if (history.length === 0 && currentStreak > 0) {
+                 // Try to backfill simple history if missing
+                 history.push(today);
+            }
 
             // If the date stored in cloud is different from today, we need to process streak
             if (currentLastLogin !== today) {
+                // It's a new day
+                
+                // Add to history if not present
+                if (!history.includes(today)) {
+                    history.push(today);
+                    // Keep last 60 days
+                    if (history.length > 60) history = history.slice(history.length - 60);
+                }
+
                 const yesterday = new Date();
                 yesterday.setDate(yesterday.getDate() - 1);
                 
@@ -142,6 +169,11 @@ export const useGameData = () => {
                 } else {
                     currentStreak = 1;
                 }
+                
+                if (currentStreak > currentLongest) {
+                    currentLongest = currentStreak;
+                }
+                
                 currentLastLogin = today;
             }
 
@@ -176,6 +208,8 @@ export const useGameData = () => {
             }
             
             setStreak(currentStreak);
+            setLongestStreak(currentLongest);
+            setLoginHistory(history);
             setLastLoginDate(currentLastLogin);
 
             setUser((prev: any) => ({ 
@@ -243,11 +277,14 @@ export const useGameData = () => {
 
   useEffect(() => {
       localStorage.setItem('fliply_streak', JSON.stringify(streak));
+      localStorage.setItem('fliply_longestStreak', JSON.stringify(longestStreak));
+      localStorage.setItem('fliply_loginHistory', JSON.stringify(loginHistory));
       localStorage.setItem('fliply_lastLoginDate', JSON.stringify(lastLoginDate));
+      
       if (user && user.uid === loadedUid.current) {
-          saveGameData(user.uid, { streak, lastLoginDate });
+          saveGameData(user.uid, { streak, longestStreak, loginHistory, lastLoginDate });
       }
-  }, [streak, lastLoginDate, user]);
+  }, [streak, longestStreak, loginHistory, lastLoginDate, user]);
 
   useEffect(() => {
       if (user) {
@@ -348,6 +385,8 @@ export const useGameData = () => {
       processGameEnd,
       updateProfile,
       streak,
+      longestStreak,
+      loginHistory,
       purchaseItem,
       spendCoins
   };

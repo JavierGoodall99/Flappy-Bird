@@ -1,4 +1,6 @@
 
+
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { GameEngine } from './components/GameEngine';
 import { GameState, ActivePowerup, SkinId, PowerupType, GameMode } from './types';
@@ -21,6 +23,7 @@ import { LeaderboardModal } from './components/menus/LeaderboardModal';
 import { WeaponSelectorModal } from './components/menus/WeaponSelectorModal';
 import { GuideModal } from './components/menus/GuideModal';
 import { ProfileEditModal } from './components/menus/ProfileEditModal';
+import { StreakModal } from './components/menus/StreakModal';
 
 const App: React.FC = () => {
   // --- Game Local State ---
@@ -39,7 +42,7 @@ const App: React.FC = () => {
   // --- Persistent Data & Auth (Hook) ---
   const { 
       user, isLoading, highScores, stats, unlockedSkins, purchasedItems, currentSkinId, coins, isMuted,
-      setIsMuted, setCurrentSkinId, processGameEnd, updateProfile, streak, purchaseItem, spendCoins
+      setIsMuted, setCurrentSkinId, processGameEnd, updateProfile, streak, longestStreak, loginHistory, purchaseItem, spendCoins
   } = useGameData();
 
   const [isNewHighScore, setIsNewHighScore] = useState(false);
@@ -50,6 +53,7 @@ const App: React.FC = () => {
   const [isWeaponSelectOpen, setIsWeaponSelectOpen] = useState(false);
   const [isLeaderboardOpen, setIsLeaderboardOpen] = useState(false);
   const [isProfileEditOpen, setIsProfileEditOpen] = useState(false);
+  const [isStreakModalOpen, setIsStreakModalOpen] = useState(false);
   
   // --- Notification System ---
   const [notificationQueue, setNotificationQueue] = useState<Array<{message: string, type: 'unlock' | 'info'}>>([]);
@@ -111,6 +115,7 @@ const App: React.FC = () => {
     setIsLeaderboardOpen(false);
     setIsProfileEditOpen(false);
     setIsShopOpen(false);
+    setIsStreakModalOpen(false);
     
     setBossInfo({ active: false, hp: 0, maxHp: 0 });
     setPlayerHealth({ current: 1, max: 1 });
@@ -189,7 +194,7 @@ const App: React.FC = () => {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (isLoading) return;
-      if (isShopOpen || isGuideOpen || isWeaponSelectOpen || isLeaderboardOpen || isProfileEditOpen) return;
+      if (isShopOpen || isGuideOpen || isWeaponSelectOpen || isLeaderboardOpen || isProfileEditOpen || isStreakModalOpen) return;
       
       if (e.code === 'Escape' || e.code === 'KeyP') togglePause();
       if (e.code === 'KeyM') toggleMute({ stopPropagation: () => {} } as React.MouseEvent);
@@ -203,11 +208,11 @@ const App: React.FC = () => {
     
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [togglePause, gameState, startGame, isShopOpen, isGuideOpen, isWeaponSelectOpen, isLeaderboardOpen, isProfileEditOpen, initialPowerup, gameMode, isMuted, isLoading]);
+  }, [togglePause, gameState, startGame, isShopOpen, isGuideOpen, isWeaponSelectOpen, isLeaderboardOpen, isProfileEditOpen, isStreakModalOpen, initialPowerup, gameMode, isMuted, isLoading]);
 
   if (isLoading) return <LoadingScreen />;
 
-  const isMenuOpen = isShopOpen || isGuideOpen || isWeaponSelectOpen || isLeaderboardOpen || isProfileEditOpen;
+  const isMenuOpen = isShopOpen || isGuideOpen || isWeaponSelectOpen || isLeaderboardOpen || isProfileEditOpen || isStreakModalOpen;
 
   return (
     <div className={`relative w-full h-[100dvh] overflow-hidden ${shake ? 'animate-pulse' : ''}`}>
@@ -268,6 +273,7 @@ const App: React.FC = () => {
              setLeaderboardOpen={setIsLeaderboardOpen}
              setWeaponSelectOpen={setIsWeaponSelectOpen}
              setProfileOpen={setIsProfileEditOpen}
+             setStreakModalOpen={setIsStreakModalOpen}
              user={user}
              handleGoogleSignIn={handleGoogleSignIn}
              streak={streak}
@@ -330,6 +336,14 @@ const App: React.FC = () => {
           onClose={() => setIsProfileEditOpen(false)} 
           user={user} 
           onSaveName={handleSaveProfile} 
+      />
+      
+      <StreakModal
+          isOpen={isStreakModalOpen}
+          onClose={() => setIsStreakModalOpen(false)}
+          streak={streak}
+          longestStreak={longestStreak}
+          loginHistory={loginHistory}
       />
     </div>
   );

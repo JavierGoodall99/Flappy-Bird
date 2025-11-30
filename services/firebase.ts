@@ -1,6 +1,5 @@
 
 
-
 import { initializeApp } from "firebase/app";
 import { getAnalytics } from "firebase/analytics";
 import { 
@@ -29,6 +28,7 @@ import {
   getDocs,
   onSnapshot
 } from "firebase/firestore";
+import { SKINS, WEAPON_LOADOUTS } from '../constants';
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
@@ -66,6 +66,23 @@ try {
     // Ignore persistence errors
 }
 
+// --- HELPER: DEV MODE & FIXED UID ---
+const isDevMode = () => {
+    const hostname = window.location.hostname;
+    // We are in DEV mode unless we are explicitly on the Firebase Production Domains.
+    const isProd = hostname.includes('fliply-dba75.web.app') || hostname.includes('fliply-dba75.firebaseapp.com');
+    return !isProd;
+};
+
+// In Dev/Preview modes, we map ALL anonymous users to a single fixed ID.
+// This prevents creating a new locked profile every time the browser session resets.
+const getEffectiveUid = (uid: string) => {
+    if (isDevMode()) {
+        return 'dev_tester_fixed_id';
+    }
+    return uid;
+};
+
 // --- NAME GENERATOR ---
 const ADJECTIVES = ["Neon", "Cyber", "Turbo", "Hyper", "Pixel", "Mega", "Super", "Quantum", "Rapid", "Swift", "Epic", "Shadow", "Cosmic", "Rogue", "Iron", "Golden", "Mystic", "Solar", "Lunar", "Aero"];
 const NOUNS = ["Pilot", "Flyer", "Ace", "Scout", "Bird", "Wing", "Glider", "Striker", "Dash", "Falcon", "Eagle", "Raven", "Phoenix", "Viper", "Hawk", "Storm", "Rider", "Ghost", "Surfer"];
@@ -102,6 +119,8 @@ export const signIn = async () => {
 export const deleteUserDocument = async (uid: string) => {
     if (!uid) return;
     try {
+        // We do NOT use getEffectiveUid here because we specifically want to delete
+        // the abandoned anonymous UID provided by Auth, not our fixed dev profile.
         await deleteDoc(doc(db, 'users', uid));
         console.log(`Deleted anonymous user data for ${uid}`);
     } catch (e) {
@@ -200,7 +219,8 @@ export const subscribeToAuth = (callback: (user: User | null) => void) => {
 export const updateUserProfile = async (uid: string, data: any) => {
     if (!uid) return;
     try {
-        const userRef = doc(db, 'users', uid);
+        const targetUid = getEffectiveUid(uid);
+        const userRef = doc(db, 'users', targetUid);
         // Ensure data is an object
         const payload = typeof data === 'string' ? { displayName: data } : data;
         await setDoc(userRef, payload, { merge: true });
@@ -212,7 +232,8 @@ export const updateUserProfile = async (uid: string, data: any) => {
 // Listen to User Data Changes (Real-time)
 export const subscribeToGameData = (uid: string, onData: (data: any) => void) => {
     if (!uid) return () => {};
-    const userRef = doc(db, 'users', uid);
+    const targetUid = getEffectiveUid(uid);
+    const userRef = doc(db, 'users', targetUid);
     return onSnapshot(userRef, (docSnap) => {
         if (docSnap.exists()) {
             onData(docSnap.data());
@@ -224,16 +245,26 @@ export const subscribeToGameData = (uid: string, onData: (data: any) => void) =>
 export const loadUserGameData = async (uid: string, userProfile?: { displayName: string | null, email: string | null, photoURL: string | null }) => {
     if (!uid) return null;
     
+    const isDev = isDevMode();
+    const targetUid = getEffectiveUid(uid);
+
+    if (isDev) {
+        console.log(`🔧 Dev Mode Detected: Using Fixed Profile ID (${targetUid})`);
+    }
+
     // Default State
     const defaultData = {
         highScores: { standard: 0, battle: 0, danger: 0, playground: 0 },
-        unlockedSkins: ['default'],
-        purchasedItems: ['default'],
+        // DEV: Unlock everything if isDev is true
+        unlockedSkins: isDev ? Object.keys(SKINS) : ['default'],
+        purchasedItems: isDev ? [...Object.keys(SKINS), ...WEAPON_LOADOUTS.map(w => w.id)] : ['default'],
         currentSkinId: 'default',
-        coins: 0,
+        coins: isDev ? 100000 : 0,
         muted: false,
         stats: { gamesPlayed: 0, totalScore: 0 },
         streak: 0,
+        longestStreak: 0,
+        loginHistory: [] as string[], // Array of date strings
         lastLoginDate: null as string | null,
         displayName: null as string | null,
         photoURL: null as string | null,
@@ -243,7 +274,7 @@ export const loadUserGameData = async (uid: string, userProfile?: { displayName:
     };
 
     try {
-        const userRef = doc(db, 'users', uid);
+        const userRef = doc(db, 'users', targetUid);
         const snap = await getDoc(userRef);
         
         if (snap.exists()) {
@@ -276,19 +307,52 @@ export const loadUserGameData = async (uid: string, userProfile?: { displayName:
                 shouldUpdate = true;
             }
 
+            // --- DEV MODE FORCE SYNC ---
+            // Ensure dev account always has items unlocked, even if DB is stale
+            if (isDev) {
+                const allSkins = Object.keys(SKINS);
+                const currentUnlocks = remoteData.unlockedSkins || [];
+                
+                // If they don't have all skins, force update
+                if (currentUnlocks.length < allSkins.length) {
+                    updatePayload.unlockedSkins = allSkins;
+                    shouldUpdate = true;
+                }
+                
+                const allItems = [...Object.keys(SKINS), ...WEAPON_LOADOUTS.map(w => w.id)];
+                const currentItems = remoteData.purchasedItems || [];
+                if (currentItems.length < allItems.length) {
+                    updatePayload.purchasedItems = allItems;
+                    shouldUpdate = true;
+                }
+
+                if ((remoteData.coins || 0) < 100000) {
+                    updatePayload.coins = 100000;
+                    shouldUpdate = true;
+                }
+            }
+
             if (shouldUpdate) {
                 await setDoc(userRef, updatePayload, { merge: true });
+                if (isDev) console.log("🔧 Dev Mode: Forced DB update for unlocked items.");
             }
+
+            // Apply Dev Overrides to existing data if needed (for immediate return)
+            const effectiveUnlockedSkins = isDev ? Object.keys(SKINS) : (remoteData.unlockedSkins || defaultData.unlockedSkins);
+            const effectivePurchasedItems = isDev ? [...Object.keys(SKINS), ...WEAPON_LOADOUTS.map(w => w.id)] : (remoteData.purchasedItems || defaultData.purchasedItems);
+            const effectiveCoins = isDev ? 100000 : (remoteData.coins || 0);
 
             return {
                 highScores: { ...defaultData.highScores, ...remoteData.highScores },
-                unlockedSkins: remoteData.unlockedSkins || defaultData.unlockedSkins,
-                purchasedItems: remoteData.purchasedItems || defaultData.purchasedItems,
+                unlockedSkins: effectiveUnlockedSkins,
+                purchasedItems: effectivePurchasedItems,
                 currentSkinId: remoteData.currentSkinId || defaultData.currentSkinId,
-                coins: remoteData.coins || 0,
+                coins: effectiveCoins,
                 muted: remoteData.muted !== undefined ? remoteData.muted : defaultData.muted,
                 stats: { ...defaultData.stats, ...remoteData.stats },
                 streak: remoteData.streak || defaultData.streak,
+                longestStreak: remoteData.longestStreak || defaultData.longestStreak,
+                loginHistory: remoteData.loginHistory || defaultData.loginHistory,
                 lastLoginDate: remoteData.lastLoginDate || defaultData.lastLoginDate,
                 displayName: finalDisplayName || defaultData.displayName,
                 photoURL: remoteData.photoURL || userProfile?.photoURL || defaultData.photoURL,
@@ -305,13 +369,17 @@ export const loadUserGameData = async (uid: string, userProfile?: { displayName:
                 finalDisplayName = generateRandomName();
             }
 
+            const today = new Date().toDateString();
+
             const newData = { 
                 ...defaultData, 
                 ...(userProfile || {}),
                 displayName: finalDisplayName,
                 // Initialize streak for new user
                 streak: 1,
-                lastLoginDate: new Date().toDateString()
+                longestStreak: 1,
+                loginHistory: [today],
+                lastLoginDate: today
             };
             await setDoc(userRef, newData, { merge: true });
             
@@ -334,7 +402,8 @@ export const loadUserGameData = async (uid: string, userProfile?: { displayName:
 export const saveGameData = async (uid: string, data: any) => {
     if (!uid) return;
     try {
-        const userRef = doc(db, 'users', uid);
+        const targetUid = getEffectiveUid(uid);
+        const userRef = doc(db, 'users', targetUid);
         await setDoc(userRef, data, { merge: true });
     } catch (error: any) {
         if (error.code === 'permission-denied') return;

@@ -1,4 +1,6 @@
 
+
+
 import React from 'react';
 import { Button } from '../Button';
 import { GameMode, PowerupType } from '../../types';
@@ -10,6 +12,7 @@ interface MainMenuProps {
   setLeaderboardOpen: (open: boolean) => void;
   setWeaponSelectOpen: (open: boolean) => void;
   setProfileOpen: (open: boolean) => void;
+  setStreakModalOpen: (open: boolean) => void;
   user: any;
   handleGoogleSignIn: () => void;
   streak: number;
@@ -18,7 +21,7 @@ interface MainMenuProps {
 }
 
 export const MainMenu: React.FC<MainMenuProps> = ({ 
-  startGame, setShopOpen, setGuideOpen, setLeaderboardOpen, setWeaponSelectOpen, setProfileOpen, user, handleGoogleSignIn, streak, coins, stats
+  startGame, setShopOpen, setGuideOpen, setLeaderboardOpen, setWeaponSelectOpen, setProfileOpen, setStreakModalOpen, user, handleGoogleSignIn, streak, coins, stats
 }) => {
   
   const shouldUseCustomAvatar = user && (user.useCustomAvatar || !user.photoURL);
@@ -40,7 +43,11 @@ export const MainMenu: React.FC<MainMenuProps> = ({
               </div>
 
               {/* SECTION 2: STREAK */}
-              <div className="flex items-center gap-3 px-3 md:px-4 border-r border-white/10 relative group cursor-help" title="Daily Streak">
+              <button 
+                  onClick={() => setStreakModalOpen(true)}
+                  className="flex items-center gap-3 px-3 md:px-4 border-r border-white/10 relative group cursor-pointer hover:bg-white/5 transition-colors" 
+                  title="View Streak Details"
+              >
                   <div className="relative">
                       <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-[#D97706] flex items-center justify-center shadow-lg shadow-orange-500/20 text-lg md:text-xl text-white">
                           🔥
@@ -53,7 +60,7 @@ export const MainMenu: React.FC<MainMenuProps> = ({
                       <span className="text-lg md:text-xl font-black text-white">{streak}</span>
                       <span className="text-[9px] md:text-[10px] font-bold text-[#FCD34D] uppercase tracking-wider">DAY</span>
                   </div>
-              </div>
+              </button>
 
               {/* SECTION 3: PROFILE */}
               <button 
