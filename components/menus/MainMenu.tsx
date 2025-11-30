@@ -1,6 +1,4 @@
 
-
-
 import React from 'react';
 import { Button } from '../Button';
 import { GameMode, PowerupType } from '../../types';
@@ -13,6 +11,7 @@ interface MainMenuProps {
   setWeaponSelectOpen: (open: boolean) => void;
   setProfileOpen: (open: boolean) => void;
   setStreakModalOpen: (open: boolean) => void;
+  setWorldSelectOpen: (open: boolean) => void; // New prop
   user: any;
   handleGoogleSignIn: () => void;
   streak: number;
@@ -21,7 +20,7 @@ interface MainMenuProps {
 }
 
 export const MainMenu: React.FC<MainMenuProps> = ({ 
-  startGame, setShopOpen, setGuideOpen, setLeaderboardOpen, setWeaponSelectOpen, setProfileOpen, setStreakModalOpen, user, handleGoogleSignIn, streak, coins, stats
+  startGame, setShopOpen, setGuideOpen, setLeaderboardOpen, setWeaponSelectOpen, setProfileOpen, setStreakModalOpen, setWorldSelectOpen, user, handleGoogleSignIn, streak, coins, stats
 }) => {
   
   const shouldUseCustomAvatar = user && (user.useCustomAvatar || !user.photoURL);
@@ -109,30 +108,36 @@ export const MainMenu: React.FC<MainMenuProps> = ({
               </button>
           </div>
 
-          <div className="flex gap-3 md:gap-4 w-full mb-3">
+          <div className="grid grid-cols-2 gap-3 md:gap-4 w-full mb-3">
             <button 
               onClick={() => setShopOpen(true)}
-              className="flex-1 py-3 md:py-4 rounded-2xl font-bold text-base tracking-wide bg-white/5 text-white border border-white/10 hover:bg-white/15 hover:border-white/30 transition-all flex flex-col items-center justify-center gap-1 group"
+              className="py-3 md:py-4 rounded-2xl font-bold text-base tracking-wide bg-white/5 text-white border border-white/10 hover:bg-white/15 hover:border-white/30 transition-all flex flex-col items-center justify-center gap-1 group"
             >
               <span className="text-2xl mb-1 group-hover:scale-110 transition-transform">🎨</span> 
               SKINS
             </button>
             <button 
               onClick={() => setGuideOpen(true)}
-              className="flex-1 py-3 md:py-4 rounded-2xl font-bold text-base tracking-wide bg-white/5 text-white border border-white/10 hover:bg-white/15 hover:border-white/30 transition-all flex flex-col items-center justify-center gap-1 group"
+              className="py-3 md:py-4 rounded-2xl font-bold text-base tracking-wide bg-white/5 text-white border border-white/10 hover:bg-white/15 hover:border-white/30 transition-all flex flex-col items-center justify-center gap-1 group"
             >
               <span className="text-2xl mb-1 group-hover:scale-110 transition-transform">⚡</span> 
               POWERS
             </button>
-          </div>
-          
-          <button 
+            <button 
+              onClick={() => setWorldSelectOpen(true)}
+              className="py-3 md:py-4 rounded-2xl font-bold text-base tracking-wide bg-white/5 text-white border border-white/10 hover:bg-white/15 hover:border-white/30 transition-all flex flex-col items-center justify-center gap-1 group"
+            >
+              <span className="text-2xl mb-1 group-hover:scale-110 transition-transform">🌍</span> 
+              WORLDS
+            </button>
+             <button 
               onClick={() => setLeaderboardOpen(true)}
-              className="w-full py-3 rounded-2xl font-bold text-base tracking-wide bg-gradient-to-r from-yellow-500/20 to-amber-500/20 text-amber-200 border border-amber-500/30 hover:bg-amber-500/30 hover:border-amber-500/50 transition-all flex items-center justify-center gap-2 group"
-          >
-              <span className="text-xl group-hover:scale-110 transition-transform">🏆</span>
-              LEADERBOARD
-          </button>
+              className="py-3 md:py-4 rounded-2xl font-bold text-base tracking-wide bg-white/5 text-white border border-white/10 hover:bg-white/15 hover:border-white/30 transition-all flex flex-col items-center justify-center gap-1 group"
+            >
+              <span className="text-2xl mb-1 group-hover:scale-110 transition-transform">🏆</span> 
+              RANK
+            </button>
+          </div>
 
           <div className="text-white/30 text-xs uppercase tracking-widest mt-4 md:mt-6">Press Space to Start</div>
         </div>

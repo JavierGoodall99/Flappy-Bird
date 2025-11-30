@@ -1,20 +1,8 @@
 
-
-
-
-
-
-
-
-
-
-
-
-
 import { useState, useEffect, useRef } from 'react';
 import { subscribeToAuth, loadUserGameData, saveGameData, signIn, updateUserProfile, subscribeToGameData } from '../services/firebase';
 import { GameMode, SkinId } from '../types';
-import { SKINS, WEAPON_LOADOUTS, ECONOMY, STREAK_REWARDS } from '../constants';
+import { SKINS, WEAPON_LOADOUTS, ECONOMY, STREAK_REWARDS, WORLDS } from '../constants';
 import { audioService } from '../services/audioService';
 
 export interface GameStats {
@@ -48,6 +36,9 @@ export const useGameData = () => {
   );
   const [currentSkinId, setCurrentSkinId] = useState<SkinId>(() => 
       getLocal('fliply_currentSkinId', 'default')
+  );
+  const [currentWorldId, setCurrentWorldId] = useState<string>(() => 
+      getLocal('fliply_currentWorldId', 'city_day')
   );
   const [coins, setCoins] = useState<number>(() => 
       getLocal('fliply_coins', 0)
@@ -118,6 +109,7 @@ export const useGameData = () => {
              setUnlockedSkins(['default']);
              setPurchasedItems(['default']);
              setCurrentSkinId('default');
+             setCurrentWorldId('city_day');
              setCoins(0);
              setStreak(0);
              setLongestStreak(0);
@@ -188,8 +180,6 @@ export const useGameData = () => {
                     const reward = STREAK_REWARDS[currentStreak as keyof typeof STREAK_REWARDS];
                     if (reward) {
                          newCoins += reward.coins;
-                         // Ideally we would show a notification here, but we are inside a hook.
-                         // The UI will update automatically.
                     }
                 } else {
                     currentStreak = 1;
@@ -225,6 +215,8 @@ export const useGameData = () => {
             });
 
             if (data.currentSkinId) setCurrentSkinId(data.currentSkinId as SkinId);
+            if (data.currentWorldId) setCurrentWorldId(data.currentWorldId);
+            
             setCoins(newCoins);
             
             if (data.muted !== undefined) {
@@ -297,6 +289,11 @@ export const useGameData = () => {
       localStorage.setItem('fliply_currentSkinId', JSON.stringify(currentSkinId));
       if (shouldSaveToCloud(user)) saveGameData(user.uid, { currentSkinId }); 
   }, [currentSkinId, user]);
+
+  useEffect(() => { 
+      localStorage.setItem('fliply_currentWorldId', JSON.stringify(currentWorldId));
+      if (shouldSaveToCloud(user)) saveGameData(user.uid, { currentWorldId }); 
+  }, [currentWorldId, user]);
 
   useEffect(() => { 
       localStorage.setItem('fliply_muted', JSON.stringify(isMuted));
@@ -429,6 +426,8 @@ export const useGameData = () => {
       unlockedSkins,
       purchasedItems,
       currentSkinId,
+      currentWorldId,
+      setCurrentWorldId,
       coins,
       isMuted,
       setIsMuted,

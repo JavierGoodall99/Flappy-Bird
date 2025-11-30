@@ -3,7 +3,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { GameEngine } from './components/GameEngine';
 import { CityBackground, Ground } from './components/CityBackground';
 import { GameState, ActivePowerup, SkinId, PowerupType, GameMode } from './types';
-import { SKINS, ECONOMY } from './constants';
+import { SKINS, ECONOMY, WORLDS } from './constants';
 import { audioService } from './services/audioService';
 import { signInWithGoogle, logout } from './services/firebase';
 import { useGameData } from './hooks/useGameData';
@@ -24,6 +24,7 @@ import { GuideModal } from './components/menus/GuideModal';
 import { ProfileEditModal } from './components/menus/ProfileEditModal';
 import { StreakModal } from './components/menus/StreakModal';
 import { TutorialModal } from './components/menus/TutorialModal';
+import { WorldSelectModal } from './components/menus/WorldSelectModal';
 
 const App: React.FC = () => {
   // --- Game Local State ---
@@ -41,7 +42,7 @@ const App: React.FC = () => {
 
   // --- Persistent Data & Auth (Hook) ---
   const { 
-      user, isLoading, highScores, stats, unlockedSkins, purchasedItems, currentSkinId, coins, isMuted,
+      user, isLoading, highScores, stats, unlockedSkins, purchasedItems, currentSkinId, currentWorldId, setCurrentWorldId, coins, isMuted,
       setIsMuted, setCurrentSkinId, processGameEnd, updateProfile, streak, longestStreak, loginHistory, purchaseItem, spendCoins,
       tutorialSeen, markTutorialSeen, battleTutorialSeen, markBattleTutorialSeen
   } = useGameData();
@@ -55,6 +56,7 @@ const App: React.FC = () => {
   const [isLeaderboardOpen, setIsLeaderboardOpen] = useState(false);
   const [isProfileEditOpen, setIsProfileEditOpen] = useState(false);
   const [isStreakModalOpen, setIsStreakModalOpen] = useState(false);
+  const [isWorldSelectOpen, setIsWorldSelectOpen] = useState(false);
   
   // --- Tutorial State ---
   const [isTutorialOpen, setIsTutorialOpen] = useState(false);
@@ -64,6 +66,9 @@ const App: React.FC = () => {
   // --- Notification System ---
   const [notificationQueue, setNotificationQueue] = useState<Array<{message: string, type: 'unlock' | 'info'}>>([]);
   const [notification, setNotification] = useState<{message: string, type: 'unlock' | 'info'} | null>(null);
+
+  // Get Current World Object
+  const currentWorld = WORLDS.find(w => w.id === currentWorldId) || WORLDS[0];
 
   const showNotification = (msg: string, type: 'unlock' | 'info') => {
       setNotificationQueue(prev => [...prev, { message: msg, type }]);
@@ -123,6 +128,7 @@ const App: React.FC = () => {
     setIsProfileEditOpen(false);
     setIsShopOpen(false);
     setIsStreakModalOpen(false);
+    setIsWorldSelectOpen(false);
     setIsTutorialOpen(false); // Ensure tutorial is closed
     
     setBossInfo({ active: false, hp: 0, maxHp: 0 });
@@ -242,7 +248,7 @@ const App: React.FC = () => {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (isLoading) return;
-      if (isShopOpen || isGuideOpen || isWeaponSelectOpen || isLeaderboardOpen || isProfileEditOpen || isStreakModalOpen || isTutorialOpen) return;
+      if (isShopOpen || isGuideOpen || isWeaponSelectOpen || isLeaderboardOpen || isProfileEditOpen || isStreakModalOpen || isTutorialOpen || isWorldSelectOpen) return;
       
       if (e.code === 'Escape' || e.code === 'KeyP') togglePause();
       if (e.code === 'KeyM') toggleMute({ stopPropagation: () => {} } as React.MouseEvent);
@@ -256,17 +262,17 @@ const App: React.FC = () => {
     
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [togglePause, gameState, startGame, isShopOpen, isGuideOpen, isWeaponSelectOpen, isLeaderboardOpen, isProfileEditOpen, isStreakModalOpen, isTutorialOpen, initialPowerup, gameMode, isMuted, isLoading]);
+  }, [togglePause, gameState, startGame, isShopOpen, isGuideOpen, isWeaponSelectOpen, isLeaderboardOpen, isProfileEditOpen, isStreakModalOpen, isTutorialOpen, isWorldSelectOpen, initialPowerup, gameMode, isMuted, isLoading]);
 
   if (isLoading) return <LoadingScreen />;
 
-  const isMenuOpen = isShopOpen || isGuideOpen || isWeaponSelectOpen || isLeaderboardOpen || isProfileEditOpen || isStreakModalOpen || isTutorialOpen;
+  const isMenuOpen = isShopOpen || isGuideOpen || isWeaponSelectOpen || isLeaderboardOpen || isProfileEditOpen || isStreakModalOpen || isTutorialOpen || isWorldSelectOpen;
 
   return (
     <div className={`relative w-full h-[100dvh] overflow-hidden ${shake ? 'animate-pulse' : ''}`}>
       
-      {/* Background Layer */}
-      <CityBackground />
+      {/* Background Layer with Dynamic World */}
+      <CityBackground world={currentWorld} />
 
       {/* Game Engine Layer */}
       <div className="absolute inset-0 z-0">
@@ -287,8 +293,8 @@ const App: React.FC = () => {
         />
       </div>
 
-      {/* Ground Layer - Foreground */}
-      <Ground />
+      {/* Ground Layer - Foreground with Dynamic World */}
+      <Ground world={currentWorld} />
 
       <NotificationToast notification={notification} />
 
@@ -329,6 +335,7 @@ const App: React.FC = () => {
              setWeaponSelectOpen={handleBattleModeInit} 
              setProfileOpen={setIsProfileEditOpen}
              setStreakModalOpen={setIsStreakModalOpen}
+             setWorldSelectOpen={setIsWorldSelectOpen}
              user={user}
              handleGoogleSignIn={handleGoogleSignIn}
              streak={streak}
@@ -358,6 +365,13 @@ const App: React.FC = () => {
           isOpen={isTutorialOpen} 
           onClose={handleTutorialComplete}
           mode={tutorialMode}
+      />
+
+      <WorldSelectModal 
+          isOpen={isWorldSelectOpen}
+          onClose={() => setIsWorldSelectOpen(false)}
+          currentWorldId={currentWorldId}
+          onSelectWorld={setCurrentWorldId}
       />
 
       <ShopModal 

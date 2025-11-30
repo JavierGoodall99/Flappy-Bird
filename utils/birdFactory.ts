@@ -18,12 +18,13 @@ export const createBirdMesh = (skin: Skin, geometries: any, materials: any) => {
         const bodyColor = skin.colors.body;
         const wingColor = skin.colors.wing;
         
+        // Increased emissive intensity for better visibility
         const bodyMat = new THREE.MeshStandardMaterial({ 
             color: bodyColor, 
             roughness: isNeon ? 0.2 : 0.1, 
             metalness: isNeon ? 0.8 : 0.1,
             emissive: isNeon ? (skin.colors.glow || bodyColor) : bodyColor,
-            emissiveIntensity: isNeon ? 1.0 : 0.25,
+            emissiveIntensity: isNeon ? 1.0 : 0.5, // Increased from 0.25 to 0.5 for standard
             transparent, opacity
         });
         const whiteMat = new THREE.MeshStandardMaterial({ color: skin.colors.eye, roughness: 0.2, metalness: 0.1, transparent, opacity });
@@ -226,7 +227,14 @@ export const createBirdMesh = (skin: Skin, geometries: any, materials: any) => {
         const size = 3;
         const geo = geometries.voxel || new THREE.BoxGeometry(size, size, size);
 
-        const mat = new THREE.MeshStandardMaterial({ color: skin.colors.body, roughness: 0.5, transparent, opacity });
+        // Boost emissive for pixel too
+        const mat = new THREE.MeshStandardMaterial({ 
+            color: skin.colors.body, 
+            roughness: 0.5, 
+            emissive: skin.colors.body,
+            emissiveIntensity: 0.2,
+            transparent, opacity 
+        });
         const beakMat = new THREE.MeshStandardMaterial({ color: skin.colors.beak, roughness: 0.5, transparent, opacity });
         const eyeMat = new THREE.MeshBasicMaterial({ color: skin.colors.eye, transparent, opacity });
         const pupilMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent, opacity });
@@ -276,6 +284,6 @@ export const createBirdMesh = (skin: Skin, geometries: any, materials: any) => {
         gunMesh.position.set(5, -5, 10); // Side mounted
         group.add(gunMesh);
     }
-
+    
     return group;
 }

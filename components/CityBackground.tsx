@@ -1,23 +1,22 @@
 
 import React from 'react';
+import { World } from '../types';
 
 // Shared Parallax Component using Image Strip technique
-// This renders 'count' copies of the image and slides them by 1/'count' of the total width
-// This ensures that when the animation resets (at 100%), the first image is exactly where the second one was.
 interface ParallaxLayerProps {
   image: string;
   speed: number; // seconds per loop
   count: number; // how many copies to stitch
   className?: string;
   style?: React.CSSProperties;
+  filter?: string;
 }
 
-const ParallaxLayer: React.FC<ParallaxLayerProps> = ({ image, speed, count, className, style }) => {
+const ParallaxLayer: React.FC<ParallaxLayerProps> = ({ image, speed, count, className, style, filter }) => {
   const translateAmount = 100 / count;
   
   return (
     <div className={`absolute inset-0 overflow-hidden whitespace-nowrap ${className}`} style={style}>
-        {/* Inject Keyframes for this specific translation requirement */}
         <style>
             {`
             @keyframes scroll-${count} {
@@ -31,7 +30,8 @@ const ParallaxLayer: React.FC<ParallaxLayerProps> = ({ image, speed, count, clas
             className="flex h-full w-max"
             style={{
                 willChange: 'transform',
-                animation: `scroll-${count} ${speed}s linear infinite`
+                animation: `scroll-${count} ${speed}s linear infinite`,
+                filter: filter
             }}
         >
             {Array.from({ length: count }).map((_, i) => (
@@ -48,29 +48,42 @@ const ParallaxLayer: React.FC<ParallaxLayerProps> = ({ image, speed, count, clas
   );
 };
 
-export const CityBackground: React.FC = () => {
+interface CityBackgroundProps {
+  world: World;
+}
+
+export const CityBackground: React.FC<CityBackgroundProps> = ({ world }) => {
   return (
-    <div className="absolute inset-0 w-full h-full bg-[#4ec0ca] overflow-hidden -z-10 pointer-events-none">
+    <div 
+        className="absolute inset-0 w-full h-full overflow-hidden -z-10 pointer-events-none transition-colors duration-1000"
+        style={{ backgroundColor: world.skyColor }}
+    >
       {/* City Layer - Slow Parallax (40s) */}
       <ParallaxLayer 
-        image="https://i.postimg.cc/VLvCNxmH/Gemini_Generated_Image_enihz0enihz0enih.png"
+        image={world.cityImage}
         speed={40}
         count={6}
         className="opacity-80 z-0"
+        filter={world.filter}
       />
     </div>
   );
 };
 
-export const Ground: React.FC = () => {
+interface GroundProps {
+  world: World;
+}
+
+export const Ground: React.FC<GroundProps> = ({ world }) => {
   return (
       // Ground Layer - Fast Parallax (8s)
       <ParallaxLayer 
-        image="https://i.postimg.cc/qBjK4JV6/Gemini_Generated_Image_ef4yjaef4yjaef4y.png"
+        image={world.groundImage}
         speed={8}
         count={100}
         className="bottom-0 left-0 w-full h-[80px] z-10 pointer-events-none"
         style={{ top: 'auto', bottom: 0 }}
+        filter={world.filter}
       />
   );
 };

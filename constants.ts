@@ -1,9 +1,5 @@
 
-
-
-
-
-import { Skin } from './types';
+import { Skin, World } from './types';
 
 export const GAME_CONSTANTS = {
   GRAVITY: 0.55,
@@ -100,6 +96,45 @@ export const COLORS = {
 
   COIN: '#FFD700', // Single Gold Color
 };
+
+// --- WORLDS ---
+export const WORLDS: World[] = [
+  {
+    id: 'city_day',
+    name: 'Neo City',
+    description: 'The classic bright and sunny cityscape.',
+    skyColor: '#4ec0ca',
+    cityImage: 'https://i.postimg.cc/VLvCNxmH/Gemini_Generated_Image_enihz0enihz0enih.png',
+    groundImage: 'https://i.postimg.cc/qBjK4JV6/Gemini_Generated_Image_ef4yjaef4yjaef4y.png',
+  },
+  {
+    id: 'city_night',
+    name: 'Midnight',
+    description: 'A quiet night under the city lights.',
+    skyColor: '#171720',
+    cityImage: 'https://i.postimg.cc/VLvCNxmH/Gemini_Generated_Image_enihz0enihz0enih.png',
+    groundImage: 'https://i.postimg.cc/qBjK4JV6/Gemini_Generated_Image_ef4yjaef4yjaef4y.png',
+    filter: 'brightness(0.6) contrast(1.1) hue-rotate(220deg)'
+  },
+  {
+    id: 'sunset',
+    name: 'Golden Hour',
+    description: 'Bask in the warm glow of the setting sun.',
+    skyColor: '#f97316',
+    cityImage: 'https://i.postimg.cc/VLvCNxmH/Gemini_Generated_Image_enihz0enihz0enih.png',
+    groundImage: 'https://i.postimg.cc/qBjK4JV6/Gemini_Generated_Image_ef4yjaef4yjaef4y.png',
+    filter: 'sepia(0.4) saturate(1.4) hue-rotate(-20deg)'
+  },
+  {
+    id: 'matrix',
+    name: 'The Grid',
+    description: 'Digital frontier.',
+    skyColor: '#002200',
+    cityImage: 'https://i.postimg.cc/VLvCNxmH/Gemini_Generated_Image_enihz0enihz0enih.png',
+    groundImage: 'https://i.postimg.cc/qBjK4JV6/Gemini_Generated_Image_ef4yjaef4yjaef4y.png',
+    filter: 'grayscale(1) sepia(1) hue-rotate(70deg) saturate(2) brightness(0.8)'
+  }
+];
 
 export const POWERUP_INFO = [
   { type: 'random', name: 'Mystery Box', desc: 'Gives you a random power-up. Good luck!', color: COLORS.POWERUP_RANDOM },

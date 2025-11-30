@@ -6,6 +6,16 @@ export enum GameState {
   PAUSED = 'PAUSED',
 }
 
+export interface World {
+  id: string;
+  name: string;
+  skyColor: string; // Hex
+  cityImage: string;
+  groundImage: string;
+  filter?: string; // CSS filter
+  description: string;
+}
+
 export interface Bird {
   y: number;
   velocity: number;
