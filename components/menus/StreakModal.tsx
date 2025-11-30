@@ -1,5 +1,8 @@
 
+
+
 import React from 'react';
+import { STREAK_REWARDS } from '../../constants';
 
 interface StreakModalProps {
     isOpen: boolean;
@@ -27,6 +30,8 @@ export const StreakModal: React.FC<StreakModalProps> = ({ isOpen, onClose, strea
     // Use simple date string for comparison to avoid time issues
     const activeDaysSet = new Set(loginHistory.map(d => new Date(d).toDateString()));
     const todayStr = new Date().toDateString();
+
+    let nextFound = false;
 
     return (
         <div className="absolute inset-0 z-50 bg-black/40 backdrop-blur-sm flex flex-col items-center justify-center p-6 animate-fade-in">
@@ -67,7 +72,7 @@ export const StreakModal: React.FC<StreakModalProps> = ({ isOpen, onClose, strea
                 </div>
 
                 {/* Calendar Viz */}
-                <div className="flex justify-between items-center px-1">
+                <div className="flex justify-between items-center px-1 mb-8">
                     {weekDays.map((date, i) => {
                         const dateStr = date.toDateString();
                         const isActive = activeDaysSet.has(dateStr);
@@ -102,6 +107,50 @@ export const StreakModal: React.FC<StreakModalProps> = ({ isOpen, onClose, strea
                         );
                     })}
                 </div>
+
+                {/* UPCOMING REWARDS */}
+                <div className="border-t border-white/10 pt-6">
+                    <h3 className="text-xs font-black text-white/50 uppercase tracking-widest mb-4">Upcoming Rewards</h3>
+                    <div className="space-y-3">
+                        {Object.entries(STREAK_REWARDS).map(([dayStr, reward]) => {
+                            const day = parseInt(dayStr);
+                            const isCompleted = streak >= day;
+                            const isNext = streak < day && (!nextFound);
+                            if (isNext) nextFound = true;
+                            
+                            return (
+                                 <div key={day} className={`relative p-3 rounded-xl border flex items-center justify-between transition-all duration-300
+                                      ${isCompleted ? 'bg-green-500/10 border-green-500/30' : 
+                                        isNext ? 'bg-amber-500/10 border-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.2)] scale-[1.02]' : 
+                                        'bg-white/5 border-white/5 opacity-60'}
+                                 `}>
+                                      <div className="flex items-center gap-3">
+                                          <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black text-xs border
+                                              ${isCompleted ? 'bg-green-500 text-white border-green-400' : 
+                                                isNext ? 'bg-amber-500 text-black border-amber-400 animate-pulse' : 'bg-white/5 text-white/50 border-white/10'}
+                                          `}>
+                                              {day}d
+                                          </div>
+                                          <div className="flex flex-col">
+                                              <span className={`text-[10px] font-bold uppercase tracking-widest ${isCompleted ? 'text-green-400' : isNext ? 'text-white' : 'text-slate-400'}`}>
+                                                  {reward.label}
+                                              </span>
+                                              <div className="flex items-center gap-1.5">
+                                                  <span className="text-sm">🪙</span>
+                                                  <span className={`text-sm font-bold font-mono ${isCompleted || isNext ? 'text-white' : 'text-white/50'}`}>{reward.coins}</span>
+                                              </div>
+                                          </div>
+                                      </div>
+                                      
+                                      {isCompleted && <div className="text-green-500 text-lg bg-green-500/20 w-8 h-8 rounded-full flex items-center justify-center">✓</div>}
+                                      {isNext && <div className="text-[10px] font-bold text-amber-500 uppercase px-3 py-1 rounded-full bg-amber-500/20 border border-amber-500/30">Next</div>}
+                                      {!isCompleted && !isNext && <div className="text-white/20 text-lg">🔒</div>}
+                                 </div>
+                            )
+                        })}
+                    </div>
+                </div>
+
             </div>
         </div>
     );

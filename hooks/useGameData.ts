@@ -3,10 +3,12 @@
 
 
 
+
+
 import { useState, useEffect, useRef } from 'react';
 import { subscribeToAuth, loadUserGameData, saveGameData, signIn, updateUserProfile, subscribeToGameData } from '../services/firebase';
 import { GameMode, SkinId } from '../types';
-import { SKINS, WEAPON_LOADOUTS, ECONOMY } from '../constants';
+import { SKINS, WEAPON_LOADOUTS, ECONOMY, STREAK_REWARDS } from '../constants';
 import { audioService } from '../services/audioService';
 
 export interface GameStats {
@@ -143,6 +145,7 @@ export const useGameData = () => {
             let currentLastLogin = data.lastLoginDate || '';
             let currentLongest = data.longestStreak || currentStreak;
             let history = [...(data.loginHistory || [])];
+            let newCoins = data.coins || 0;
 
             // If history is empty but we have streak, init history with today
             if (history.length === 0 && currentStreak > 0) {
@@ -166,6 +169,14 @@ export const useGameData = () => {
                 
                 if (currentLastLogin === yesterday.toDateString()) {
                     currentStreak += 1;
+                    
+                    // REWARD LOGIC
+                    const reward = STREAK_REWARDS[currentStreak as keyof typeof STREAK_REWARDS];
+                    if (reward) {
+                         newCoins += reward.coins;
+                         // Ideally we would show a notification here, but we are inside a hook.
+                         // The UI will update automatically.
+                    }
                 } else {
                     currentStreak = 1;
                 }
@@ -200,7 +211,7 @@ export const useGameData = () => {
             });
 
             if (data.currentSkinId) setCurrentSkinId(data.currentSkinId as SkinId);
-            setCoins(data.coins || 0);
+            setCoins(newCoins);
             
             if (data.muted !== undefined) {
                 setIsMuted(data.muted);

@@ -1,4 +1,5 @@
 
+
 import { Skin } from './types';
 
 export const GAME_CONSTANTS = {
@@ -60,6 +61,14 @@ export const ECONOMY = {
     500: 100
   },
   STREAK_BONUS_MULTIPLIER: 1.5 
+};
+
+export const STREAK_REWARDS = {
+    3: { coins: 100, label: 'Bronze Bonus' },
+    7: { coins: 500, label: 'Silver Stash' },
+    14: { coins: 1500, label: 'Gold Hoard' },
+    30: { coins: 5000, label: 'Diamond Chest' },
+    100: { coins: 25000, label: 'Century Jackpot' }
 };
 
 export const COLORS = {
