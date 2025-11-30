@@ -298,7 +298,25 @@ class AudioController {
     osc.stop(this.ctx.currentTime + 0.2);
   }
   
-  playDangerSurge() {}
+  playDangerSurge() {
+    if (this.isMuted || !this.ctx || !this.masterGain) return;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.connect(gain);
+    gain.connect(this.masterGain);
+    
+    // Low frequency sweep warning
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(100, this.ctx.currentTime);
+    osc.frequency.linearRampToValueAtTime(50, this.ctx.currentTime + 1.0);
+    
+    gain.gain.setValueAtTime(0.5, this.ctx.currentTime);
+    gain.gain.linearRampToValueAtTime(0.01, this.ctx.currentTime + 1.0);
+    
+    osc.start();
+    osc.stop(this.ctx.currentTime + 1.0);
+  }
+  
   playSuperMode() {}
   playLaserCharge() {}
 

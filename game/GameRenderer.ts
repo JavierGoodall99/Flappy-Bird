@@ -1,7 +1,7 @@
 
 import * as THREE from 'three';
 import { GameState, Pipe, Powerup, Enemy, Skin, Bird, Coin } from '../types';
-import { GAME_CONSTANTS, COLORS, PARTICLE_CONFIG, ENEMY_SKIN, BOSS_SKIN } from '../constants';
+import { GAME_CONSTANTS, COLORS, PARTICLE_CONFIG, ENEMY_SKIN, BOSS_SKIN, BATTLE_CONSTANTS } from '../constants';
 import { setupThreeScene, updateCamera } from '../utils/threeSetup';
 import { createGeometries, createMaterials } from '../utils/assetManager';
 import { createBirdMesh } from '../utils/birdFactory';
@@ -17,7 +17,7 @@ export class GameRenderer {
   private pipeMeshes: Map<Pipe, THREE.Group> = new Map();
   private powerupMeshes: Map<Powerup, THREE.Mesh> = new Map();
   private coinMeshes: Map<Coin, THREE.Sprite> = new Map();
-  private projectileMeshes: THREE.Group[] = []; // Changed to Group to hold multiple types
+  private projectileMeshes: THREE.Group[] = []; 
   private bossProjectileMeshes: THREE.Mesh[] = [];
   private enemyMeshes: Map<Enemy, THREE.Group> = new Map();
   private bossMesh: THREE.Group | null = null;
@@ -33,7 +33,6 @@ export class GameRenderer {
   private container: HTMLDivElement | null = null;
 
   public init(container: HTMLDivElement) {
-    // Clean up any existing renderer first (handles React Strict Mode double-mount)
     if (this.renderer) {
         this.renderer.dispose();
         if (this.renderer.domElement.parentNode) {
@@ -54,7 +53,6 @@ export class GameRenderer {
     this.geometry = createGeometries();
     this.material = createMaterials();
 
-    // Create particle pool
     for(let i=0; i<PARTICLE_CONFIG.MAX_PARTICLES; i++) {
         const mesh = new THREE.Mesh(this.geometry.particleSphere, new THREE.MeshBasicMaterial({color: 0xffffff, transparent: true}));
         mesh.visible = false;
@@ -62,9 +60,7 @@ export class GameRenderer {
         this.particleMeshes.push(mesh);
     }
 
-    // If a skin was set before init (via props), build the bird now
     if (this.currentSkin) {
-        // Force update by clearing the cached mesh reference if it exists (though it shouldn't be valid yet)
         if (this.birdMesh) {
             this.scene.remove(this.birdMesh);
             this.birdMesh = null;
@@ -76,42 +72,24 @@ export class GameRenderer {
 
   public resize(width: number, height: number) {
       if (!this.camera || !this.renderer) return;
-      
       this.width = width;
       this.height = height;
-
-      // Update camera using the unified logic that handles mobile zooming
       updateCamera(this.camera, width, height);
-      
       this.renderer.setSize(width, height);
   }
 
   public updateSkin(skin: Skin) {
       this.currentSkin = skin;
-      
-      // Guard: Cannot create mesh without assets or scene. 
-      // The init() method will handle this skin when called later.
-      if (!this.geometry || !this.material || !this.scene) {
-          return;
-      }
-      
-      // If we already have this skin and a valid mesh, do nothing
-      if (this.birdMesh && this.birdMesh.userData.skinId === skin.id) {
-          return;
-      }
-
+      if (!this.geometry || !this.material || !this.scene) return;
+      if (this.birdMesh && this.birdMesh.userData.skinId === skin.id) return;
       this.rebuildBirdMesh(skin);
   }
 
   private rebuildBirdMesh(skin: Skin) {
       if (!this.scene || !this.geometry || !this.material) return;
-
-      if (this.birdMesh) {
-          this.scene.remove(this.birdMesh);
-      }
-      
+      if (this.birdMesh) this.scene.remove(this.birdMesh);
       this.birdMesh = createBirdMesh(skin, this.geometry, this.material);
-      this.birdMesh.userData.skinId = skin.id; // Store ID to prevent unnecessary rebuilds
+      this.birdMesh.userData.skinId = skin.id; 
       this.scene.add(this.birdMesh);
   }
 
@@ -132,28 +110,21 @@ export class GameRenderer {
   }
 
   public render(gameLogic: GameLogic) {
-    if (!this.scene || !this.camera || !this.renderer) {
-        return;
-    }
+    if (!this.scene || !this.camera || !this.renderer) return;
 
-    // Guard: Bird mesh might not be ready yet
     if (!this.birdMesh) {
-        // Try to recover if we have the data but missed a cycle
         if (this.currentSkin && this.geometry && this.material) {
             this.rebuildBirdMesh(this.currentSkin);
         }
         if (!this.birdMesh) {
-            // Still render the scene background at least
             this.renderer.render(this.scene, this.camera);
             return;
         }
     }
     
-    // Calculate Logical Dimensions for Render scaling using cached dimensions
     const width = this.width || window.innerWidth;
     const height = this.height || window.innerHeight;
     
-    // Scale must match GameEngine logic
     const scale = Math.max(1, GAME_CONSTANTS.MIN_GAME_WIDTH / width, GAME_CONSTANTS.MIN_GAME_HEIGHT / height);
     const logicWidth = width * scale;
     const logicHeight = height * scale;
@@ -167,7 +138,6 @@ export class GameRenderer {
     const toWorldY = (gameY: number) => (logicHeight / 2) - gameY;
     const toWorldX = (gameX: number) => gameX - (logicWidth / 2);
     
-    // Note: birdX is now relative to logicWidth
     const birdX = logicWidth * GAME_CONSTANTS.BIRD_X_POSITION;
 
     // Bird Update
@@ -211,7 +181,6 @@ export class GameRenderer {
     const isShieldActive = gameLogic.activePowerup?.type === 'shield';
     const isGunActive = gameLogic.activePowerup?.type.startsWith('gun') || gameLogic.activePowerup?.type.startsWith('weapon_');
     const isIframe = birdState.invulnerabilityTimer > 0;
-    // Blink effect if damaged
     const alpha = isIframe ? (Math.sin(performance.now() * 0.03) > 0 ? 0.3 : 0.8) : 1.0;
 
     this.birdMesh.traverse((child) => {
@@ -223,7 +192,6 @@ export class GameRenderer {
         if (child instanceof THREE.Mesh) {
            const mat = child.material as THREE.MeshStandardMaterial;
            if (mat.name !== 'shield' && mat.name !== 'gun') { 
-               // Combine ghost opacity with iframe opacity
                mat.opacity = (isGhostActive ? 0.3 : 1.0) * alpha;
                mat.transparent = true; 
            }
@@ -262,6 +230,19 @@ export class GameRenderer {
         group.rotation.z = 0.2;
         const s = 1.2 * enemy.scale;
         group.scale.set(s, s, s);
+        
+        // Color override based on type (Visual Polish)
+        const stats = BATTLE_CONSTANTS.ENEMY_TYPES[enemy.type || 'standard'];
+        if (stats) {
+            group.traverse((child) => {
+                if (child instanceof THREE.Mesh && child.geometry.type === 'CylinderGeometry' && child.scale.y < 3) {
+                     const mat = child.material as THREE.MeshStandardMaterial;
+                     if (mat && mat.color) {
+                         mat.color.setHex(stats.color);
+                     }
+                }
+            });
+        }
     });
 
     // Render Boss
@@ -274,15 +255,32 @@ export class GameRenderer {
         this.bossMesh.visible = true;
         this.bossMesh.position.x = toWorldX(gameLogic.boss.x);
         this.bossMesh.position.y = toWorldY(gameLogic.boss.y);
-        this.bossMesh.scale.set(4, 4, 4); // Reduced from 5 to match new smaller constant
+        this.bossMesh.scale.set(4, 4, 4); 
         this.bossMesh.rotation.z = Math.sin(gameLogic.frameCount * 0.05) * 0.1;
+
+        // Boss Rage Phase Visuals: Pulsating red
+        const isRage = gameLogic.boss.phase === 2;
+        this.bossMesh.traverse((child) => {
+             if (child instanceof THREE.Mesh) {
+                 const mat = child.material as THREE.MeshStandardMaterial;
+                 // Safely check for emissive property before setting it
+                 if (mat && mat.emissive) {
+                     if (isRage) {
+                         const pulse = Math.sin(performance.now() * 0.01) * 0.5 + 0.5;
+                         mat.emissive.setHex(0xFF0000);
+                         mat.emissiveIntensity = 0.5 + pulse;
+                     } else {
+                         mat.emissive.setHex(0x000000);
+                         mat.emissiveIntensity = 0;
+                     }
+                 }
+             }
+        });
 
         if (gameLogic.boss.hp < gameLogic.boss.maxHp * 0.3) {
              const shake = (Math.random() - 0.5) * 10;
              this.bossMesh.position.x += shake;
              this.bossMesh.position.y += shake;
-             const pulse = 4 + Math.sin(performance.now() * 0.02) * 0.5; // Adjusted base pulse
-             this.bossMesh.scale.set(pulse, pulse, pulse);
         }
     } else if (this.bossMesh) {
         this.bossMesh.visible = false;
@@ -375,7 +373,6 @@ export class GameRenderer {
         mesh.position.y = toWorldY(p.y);
         mesh.rotation.y += 0.05; mesh.rotation.z += 0.02;
 
-        // FLASHING LOGIC FOR MYSTERY BOX
         if (p.type === 'random') {
             const time = performance.now() * 0.003; 
             const hue = (time % 1); 
@@ -386,7 +383,7 @@ export class GameRenderer {
       }
     });
 
-    // Render Coins (Now as Sprites)
+    // Render Coins
     const currentCoins = new Set(coins);
     for (const [c, mesh] of this.coinMeshes.entries()) {
         if (!currentCoins.has(c)) {
@@ -398,17 +395,13 @@ export class GameRenderer {
         if (c.collected) return;
         let mesh = this.coinMeshes.get(c);
         if (!mesh) {
-            // New Sprite creation with emoji texture
             mesh = new THREE.Sprite(this.material.coinMaterial);
-            mesh.scale.set(24, 24, 1); // Roughly 1.5x diameter of old coin
+            mesh.scale.set(24, 24, 1); 
             this.scene?.add(mesh);
             this.coinMeshes.set(c, mesh);
         }
-        
         mesh.position.x = toWorldX(c.x);
-        mesh.position.y = toWorldY(c.y + Math.sin(c.wobbleOffset) * 5); // Floating effect
-        
-        // Scale X to simulate spinning coin flip (arcade style)
+        mesh.position.y = toWorldY(c.y + Math.sin(c.wobbleOffset) * 5); 
         mesh.scale.set(24 * Math.cos(c.rotation), 24, 1); 
     });
 
@@ -416,7 +409,6 @@ export class GameRenderer {
     // Particles
     this.particleMeshes.forEach(m => m.visible = false);
     while (this.particleMeshes.length < gameLogic.particles.length) {
-         // Create more if needed
          const mesh = new THREE.Mesh(this.geometry.particleSphere, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true }));
          this.scene.add(mesh);
          this.particleMeshes.push(mesh);
@@ -437,23 +429,19 @@ export class GameRenderer {
     // Projectiles
     this.projectileMeshes.forEach(group => group.visible = false);
     while (this.projectileMeshes.length < gameLogic.projectiles.length) {
-        // Create a container Group for the projectile
         const group = new THREE.Group();
         
-        // 1. Standard Orb (Sphere)
         const orb = new THREE.Mesh(this.geometry.particleSphere, this.material.projectile.clone());
         const glow = new THREE.Mesh(this.geometry.particleSphere, new THREE.MeshBasicMaterial({ color: 0xFFFFFF, transparent: true, opacity: 0.5 }));
         glow.name = 'glow'; glow.scale.set(1.5, 1.5, 1.5); orb.add(glow);
         orb.name = 'standard';
         group.add(orb);
 
-        // 2. Spear
         const spear = new THREE.Mesh(this.geometry.geoSpear, this.material.projectile.clone());
-        spear.rotation.z = -Math.PI / 2; // Point forward
+        spear.rotation.z = -Math.PI / 2; 
         spear.name = 'spear';
         group.add(spear);
 
-        // 4. Dagger
         const dagger = new THREE.Mesh(this.geometry.geoDagger, this.material.projectile.clone());
         dagger.rotation.z = -Math.PI / 2;
         dagger.name = 'dagger';
@@ -470,14 +458,10 @@ export class GameRenderer {
         group.position.y = toWorldY(p.y);
         group.position.z = 2;
         
-        // Determine active child mesh based on projectile type
         const type = p.type || 'standard';
-        
-        // Hide all children first
         group.children.forEach(c => c.visible = false);
         
         let activeMesh = group.getObjectByName('standard') as THREE.Mesh;
-        
         let visualType = 'standard';
         if (type === 'spear') visualType = 'spear';
         if (type === 'dagger') visualType = 'dagger';
@@ -485,22 +469,18 @@ export class GameRenderer {
         activeMesh = group.getObjectByName(visualType) as THREE.Mesh || activeMesh;
         activeMesh.visible = true;
 
-        // Scaling
         const baseScale = (p.scale || 1);
-        // Visual-specific scaling corrections
-        let s = baseScale * 6; // Standard size
+        let s = baseScale * 6; 
         if (visualType === 'spear') s = baseScale * 2;
         if (visualType === 'dagger') s = baseScale * 1.5;
         
         activeMesh.scale.set(s, s, s);
 
-        // Color Update
         const mat = activeMesh.material as THREE.MeshStandardMaterial;
         const col = p.color || 0xFFFF00;
         mat.color.setHex(col);
         mat.emissive.setHex(col);
         
-        // Update glow if standard
         if (visualType === 'standard') {
             const glow = activeMesh.getObjectByName('glow') as THREE.Mesh;
             if (glow) (glow.material as THREE.MeshBasicMaterial).color.setHex(col);
@@ -537,6 +517,5 @@ export class GameRenderer {
     }
     this.renderer?.dispose();
     this.geometry?.pipe?.dispose();
-    // Add full cleanup if necessary
   }
 }

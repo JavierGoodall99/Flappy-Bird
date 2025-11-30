@@ -172,6 +172,8 @@ export interface Debris {
   size: number;
 }
 
+export type EnemyType = 'standard' | 'charger' | 'tank';
+
 export interface Enemy {
   id: number;
   x: number;
@@ -180,6 +182,7 @@ export interface Enemy {
   targetY: number;
   hp: number;
   scale: number;
+  type: EnemyType;
 }
 
 export interface Boss {

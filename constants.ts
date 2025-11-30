@@ -1,5 +1,6 @@
 
 
+
 import { Skin } from './types';
 
 export const GAME_CONSTANTS = {
@@ -189,7 +190,12 @@ export const BATTLE_CONSTANTS = {
     BOSS_ATTACK_RATE: 50, 
     BOSS_PROJECTILE_SPEED: 11.0, 
     PLAYER_HP: 3, 
-    DAMAGE_COOLDOWN: 60, 
+    DAMAGE_COOLDOWN: 60,
+    ENEMY_TYPES: {
+        standard: { hp: 1, speed: 12.5, score: 10, color: 0xD32F2F, scale: 1.0 },
+        charger: { hp: 1, speed: 19.0, score: 25, color: 0xFF9100, scale: 0.85 },
+        tank: { hp: 6, speed: 7.0, score: 50, color: 0x2E004B, scale: 1.5 },
+    }
 };
 
 export const ENEMY_SKIN: Skin = {
