@@ -1,6 +1,10 @@
 
 
 
+
+
+
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { GameEngine } from './components/GameEngine';
 import { GameState, ActivePowerup, SkinId, PowerupType, GameMode } from './types';
@@ -24,6 +28,7 @@ import { WeaponSelectorModal } from './components/menus/WeaponSelectorModal';
 import { GuideModal } from './components/menus/GuideModal';
 import { ProfileEditModal } from './components/menus/ProfileEditModal';
 import { StreakModal } from './components/menus/StreakModal';
+import { TutorialModal } from './components/menus/TutorialModal';
 
 const App: React.FC = () => {
   // --- Game Local State ---
@@ -42,7 +47,8 @@ const App: React.FC = () => {
   // --- Persistent Data & Auth (Hook) ---
   const { 
       user, isLoading, highScores, stats, unlockedSkins, purchasedItems, currentSkinId, coins, isMuted,
-      setIsMuted, setCurrentSkinId, processGameEnd, updateProfile, streak, longestStreak, loginHistory, purchaseItem, spendCoins
+      setIsMuted, setCurrentSkinId, processGameEnd, updateProfile, streak, longestStreak, loginHistory, purchaseItem, spendCoins,
+      tutorialSeen, markTutorialSeen, battleTutorialSeen, markBattleTutorialSeen
   } = useGameData();
 
   const [isNewHighScore, setIsNewHighScore] = useState(false);
@@ -54,6 +60,11 @@ const App: React.FC = () => {
   const [isLeaderboardOpen, setIsLeaderboardOpen] = useState(false);
   const [isProfileEditOpen, setIsProfileEditOpen] = useState(false);
   const [isStreakModalOpen, setIsStreakModalOpen] = useState(false);
+  
+  // --- Tutorial State ---
+  const [isTutorialOpen, setIsTutorialOpen] = useState(false);
+  const [tutorialMode, setTutorialMode] = useState<'standard' | 'battle'>('standard');
+  const [pendingGameStart, setPendingGameStart] = useState<{powerup: PowerupType | null, mode: GameMode} | null>(null);
   
   // --- Notification System ---
   const [notificationQueue, setNotificationQueue] = useState<Array<{message: string, type: 'unlock' | 'info'}>>([]);
@@ -100,7 +111,8 @@ const App: React.FC = () => {
     }
   }, [gameState]);
 
-  const startGame = useCallback((forcedPowerup: PowerupType | null = null, mode: GameMode = 'standard') => {
+  // Actual Game Launch Logic
+  const launchGame = useCallback((forcedPowerup: PowerupType | null = null, mode: GameMode = 'standard') => {
     audioService.init();
     setGameMode(mode);
     setInitialPowerup(forcedPowerup);
@@ -116,10 +128,51 @@ const App: React.FC = () => {
     setIsProfileEditOpen(false);
     setIsShopOpen(false);
     setIsStreakModalOpen(false);
+    setIsTutorialOpen(false); // Ensure tutorial is closed
     
     setBossInfo({ active: false, hp: 0, maxHp: 0 });
     setPlayerHealth({ current: 1, max: 1 });
   }, []);
+
+  // Wrapper to intercept for Tutorial
+  const startGame = useCallback((forcedPowerup: PowerupType | null = null, mode: GameMode = 'standard') => {
+    // Check if user has seen tutorial using persistent DB state
+    if (mode === 'standard' && !tutorialSeen) {
+        setPendingGameStart({ powerup: forcedPowerup, mode });
+        setTutorialMode('standard');
+        setIsTutorialOpen(true);
+    } else {
+        launchGame(forcedPowerup, mode);
+    }
+  }, [tutorialSeen, launchGame]);
+
+  // Logic to handle battle mode click (checks tutorial first)
+  const handleBattleModeInit = useCallback(() => {
+      if (!battleTutorialSeen) {
+          setTutorialMode('battle');
+          setIsTutorialOpen(true);
+      } else {
+          setIsWeaponSelectOpen(true);
+      }
+  }, [battleTutorialSeen]);
+  
+  const handleTutorialComplete = () => {
+      setIsTutorialOpen(false);
+      
+      if (tutorialMode === 'standard') {
+          markTutorialSeen(); // Updates state and saves to DB
+          if (pendingGameStart) {
+              launchGame(pendingGameStart.powerup, pendingGameStart.mode);
+              setPendingGameStart(null);
+          } else {
+              launchGame(null, 'standard');
+          }
+      } else if (tutorialMode === 'battle') {
+          markBattleTutorialSeen();
+          // After battle tutorial, open loadout
+          setIsWeaponSelectOpen(true);
+      }
+  };
 
   const resetGame = () => {
     setGameState(GameState.START);
@@ -194,7 +247,7 @@ const App: React.FC = () => {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (isLoading) return;
-      if (isShopOpen || isGuideOpen || isWeaponSelectOpen || isLeaderboardOpen || isProfileEditOpen || isStreakModalOpen) return;
+      if (isShopOpen || isGuideOpen || isWeaponSelectOpen || isLeaderboardOpen || isProfileEditOpen || isStreakModalOpen || isTutorialOpen) return;
       
       if (e.code === 'Escape' || e.code === 'KeyP') togglePause();
       if (e.code === 'KeyM') toggleMute({ stopPropagation: () => {} } as React.MouseEvent);
@@ -208,11 +261,11 @@ const App: React.FC = () => {
     
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [togglePause, gameState, startGame, isShopOpen, isGuideOpen, isWeaponSelectOpen, isLeaderboardOpen, isProfileEditOpen, isStreakModalOpen, initialPowerup, gameMode, isMuted, isLoading]);
+  }, [togglePause, gameState, startGame, isShopOpen, isGuideOpen, isWeaponSelectOpen, isLeaderboardOpen, isProfileEditOpen, isStreakModalOpen, isTutorialOpen, initialPowerup, gameMode, isMuted, isLoading]);
 
   if (isLoading) return <LoadingScreen />;
 
-  const isMenuOpen = isShopOpen || isGuideOpen || isWeaponSelectOpen || isLeaderboardOpen || isProfileEditOpen || isStreakModalOpen;
+  const isMenuOpen = isShopOpen || isGuideOpen || isWeaponSelectOpen || isLeaderboardOpen || isProfileEditOpen || isStreakModalOpen || isTutorialOpen;
 
   return (
     <div className={`relative w-full h-[100dvh] overflow-hidden ${shake ? 'animate-pulse' : ''}`}>
@@ -271,7 +324,7 @@ const App: React.FC = () => {
              setShopOpen={setIsShopOpen}
              setGuideOpen={setIsGuideOpen}
              setLeaderboardOpen={setIsLeaderboardOpen}
-             setWeaponSelectOpen={setIsWeaponSelectOpen}
+             setWeaponSelectOpen={handleBattleModeInit} 
              setProfileOpen={setIsProfileEditOpen}
              setStreakModalOpen={setIsStreakModalOpen}
              user={user}
@@ -291,7 +344,7 @@ const App: React.FC = () => {
               isNewHighScore={isNewHighScore}
               gameMode={gameMode}
               initialPowerup={initialPowerup}
-              onRestart={startGame}
+              onRestart={(powerup, mode) => launchGame(powerup, mode)}
               onHome={resetGame}
               onRevive={handleRevive}
               canRevive={coins >= ECONOMY.REVIVE_COST}
@@ -299,6 +352,12 @@ const App: React.FC = () => {
       )}
 
       {/* Content Modals */}
+      <TutorialModal 
+          isOpen={isTutorialOpen} 
+          onClose={handleTutorialComplete}
+          mode={tutorialMode}
+      />
+
       <ShopModal 
           isOpen={isShopOpen} 
           onClose={() => setIsShopOpen(false)} 

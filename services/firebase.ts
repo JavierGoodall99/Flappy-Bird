@@ -1,5 +1,6 @@
 
 
+
 import { initializeApp } from "firebase/app";
 import { getAnalytics } from "firebase/analytics";
 import { 
@@ -270,7 +271,9 @@ export const loadUserGameData = async (uid: string, userProfile?: { displayName:
         photoURL: null as string | null,
         avatarColor: '#6366F1',
         avatarText: '',
-        useCustomAvatar: false
+        useCustomAvatar: false,
+        tutorialSeen: false,
+        battleTutorialSeen: false
     };
 
     try {
@@ -358,7 +361,9 @@ export const loadUserGameData = async (uid: string, userProfile?: { displayName:
                 photoURL: remoteData.photoURL || userProfile?.photoURL || defaultData.photoURL,
                 avatarColor: remoteData.avatarColor || defaultData.avatarColor,
                 avatarText: remoteData.avatarText || defaultData.avatarText,
-                useCustomAvatar: remoteData.useCustomAvatar ?? defaultData.useCustomAvatar
+                useCustomAvatar: remoteData.useCustomAvatar ?? defaultData.useCustomAvatar,
+                tutorialSeen: remoteData.tutorialSeen !== undefined ? remoteData.tutorialSeen : defaultData.tutorialSeen,
+                battleTutorialSeen: remoteData.battleTutorialSeen !== undefined ? remoteData.battleTutorialSeen : defaultData.battleTutorialSeen
             };
         } else {
             // New User: Create default document

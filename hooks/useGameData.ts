@@ -5,6 +5,12 @@
 
 
 
+
+
+
+
+
+
 import { useState, useEffect, useRef } from 'react';
 import { subscribeToAuth, loadUserGameData, saveGameData, signIn, updateUserProfile, subscribeToGameData } from '../services/firebase';
 import { GameMode, SkinId } from '../types';
@@ -61,6 +67,12 @@ export const useGameData = () => {
   const [lastLoginDate, setLastLoginDate] = useState(() => 
       getLocal('fliply_lastLoginDate', '')
   );
+  const [tutorialSeen, setTutorialSeen] = useState(() => 
+      getLocal('fliply_tutorialSeen', false)
+  );
+  const [battleTutorialSeen, setBattleTutorialSeen] = useState(() => 
+      getLocal('fliply_battleTutorialSeen', false)
+  );
   
   // Optimistic User Loading
   const [user, setUser] = useState<any>(() => 
@@ -111,6 +123,8 @@ export const useGameData = () => {
              setLongestStreak(0);
              setLoginHistory([]);
              setLastLoginDate('');
+             setTutorialSeen(false);
+             setBattleTutorialSeen(false);
              
              // Automatically sign in anonymously to ensure game functionality
              signIn(); 
@@ -217,6 +231,14 @@ export const useGameData = () => {
                 setIsMuted(data.muted);
                 audioService.setMuted(data.muted);
             }
+
+            if (data.tutorialSeen !== undefined) {
+                setTutorialSeen(data.tutorialSeen);
+            }
+
+            if (data.battleTutorialSeen !== undefined) {
+                setBattleTutorialSeen(data.battleTutorialSeen);
+            }
             
             setStreak(currentStreak);
             setLongestStreak(currentLongest);
@@ -296,6 +318,16 @@ export const useGameData = () => {
           saveGameData(user.uid, { streak, longestStreak, loginHistory, lastLoginDate });
       }
   }, [streak, longestStreak, loginHistory, lastLoginDate, user]);
+
+  useEffect(() => {
+    localStorage.setItem('fliply_tutorialSeen', JSON.stringify(tutorialSeen));
+    if (shouldSaveToCloud(user)) saveGameData(user.uid, { tutorialSeen });
+  }, [tutorialSeen, user]);
+
+  useEffect(() => {
+    localStorage.setItem('fliply_battleTutorialSeen', JSON.stringify(battleTutorialSeen));
+    if (shouldSaveToCloud(user)) saveGameData(user.uid, { battleTutorialSeen });
+  }, [battleTutorialSeen, user]);
 
   useEffect(() => {
       if (user) {
@@ -381,6 +413,14 @@ export const useGameData = () => {
       return false;
   };
 
+  const markTutorialSeen = () => {
+    setTutorialSeen(true);
+  };
+
+  const markBattleTutorialSeen = () => {
+    setBattleTutorialSeen(true);
+  };
+
   return {
       user,
       isLoading,
@@ -399,6 +439,10 @@ export const useGameData = () => {
       longestStreak,
       loginHistory,
       purchaseItem,
-      spendCoins
+      spendCoins,
+      tutorialSeen,
+      markTutorialSeen,
+      battleTutorialSeen,
+      markBattleTutorialSeen
   };
 };
