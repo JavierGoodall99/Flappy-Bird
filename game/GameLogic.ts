@@ -1,5 +1,4 @@
 
-
 import { GameState, ActivePowerup, GameMode, PowerupType } from '../types';
 import { GAME_CONSTANTS, COLORS, BATTLE_CONSTANTS, ECONOMY } from '../constants';
 import { audioService } from '../services/audioService';
@@ -44,7 +43,7 @@ export class GameLogic {
   private initialPowerup: PowerupType | null = null;
   private currentSkinTrail: string = 'none';
   private currentSkinColors: any = {};
-
+  
   // Controllers
   public birdCtrl: BirdController;
   public pipeCtrl: PipeController;
@@ -96,7 +95,7 @@ export class GameLogic {
     this.timeScale = 1.0;
     this.targetTimeScale = 1.0;
     this.activePowerup = null;
-
+    
     this.callbacks.setActivePowerup(null);
     this.callbacks.setScore(0);
     this.callbacks.setBossActive(false, 0, 0);
@@ -233,8 +232,8 @@ export class GameLogic {
         
         // Shoot boss projectiles (handled in updateBoss logic internally for timing, spawned into list)
     } else {
-        // Standard Mode Spawning
-        this.pipeCtrl.spawn(this.frameCount, this.speed, this.timeScale, width, height);
+        // Standard Mode Spawning (Pass Score for moving pipe logic)
+        this.pipeCtrl.spawn(this.frameCount, this.speed, this.timeScale, width, height, this.score);
         
         // Prevent powerup spawning in playground mode
         if (this.gameMode !== 'playground') {

@@ -25,6 +25,12 @@ export interface Pipe {
   type: 'normal' | 'glass';
   brokenTop: boolean;
   brokenBottom: boolean;
+  // Dynamic features
+  moving: boolean;
+  initialTopHeight: number;
+  moveSpeed: number;
+  moveRange: number;
+  moveOffset: number;
 }
 
 export interface Coin {

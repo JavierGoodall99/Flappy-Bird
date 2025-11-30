@@ -31,7 +31,7 @@ export class GameRenderer {
   private width: number = 0;
   private height: number = 0;
   private container: HTMLDivElement | null = null;
-
+  
   public init(container: HTMLDivElement) {
     if (this.renderer) {
         this.renderer.dispose();
@@ -299,6 +299,7 @@ export class GameRenderer {
       if (!group) {
         group = new THREE.Group();
         const isGlass = pipe.type === 'glass';
+        // Note: For standard pipes, we now use the single shared material that updates color dynamically
         const bodyMat = isGlass ? this.material.glassPipe : this.material.pipe;
         const capMat = isGlass ? this.material.glassCap : this.material.pipeCap;
         const topMesh = new THREE.Mesh(this.geometry.pipe, bodyMat);

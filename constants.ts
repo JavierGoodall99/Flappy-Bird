@@ -1,6 +1,8 @@
 
 
 
+
+
 import { Skin } from './types';
 
 export const GAME_CONSTANTS = {
@@ -121,42 +123,6 @@ export const WEAPON_LOADOUTS = [
   { id: 'weapon_spear', name: 'Gungnir Spear', description: 'High-velocity piercing throw. Penetrates multiple enemies.', color: '#FFD700', stats: 'Fire Rate: ⭐⭐\nPierce: ⭐⭐⭐⭐⭐', price: 2000 },
   { id: 'weapon_dagger', name: 'Shadow Daggers', description: 'Throw 3 knives in a burst. Fast but weak.', color: '#A8A29E', stats: 'Fire Rate: ⭐⭐⭐⭐⭐\nSpeed: ⭐⭐⭐⭐⭐', price: 800 },
 ];
-
-// --- ENVIRONMENT CONSTANTS ---
-
-export const BIOME_CONFIG = {
-  City: {
-    bgTop: 0x475569, // Slate 600
-    bgBottom: 0x1e293b, // Slate 800
-    pipeColor: 0x64748b, // Slate 500
-    particleType: 'none',
-  },
-  Jungle: {
-    bgTop: 0x14532d, // Green 900
-    bgBottom: 0x166534, // Green 800
-    pipeColor: 0x15803d, // Green 700
-    particleType: 'spores',
-  },
-  Space: {
-    bgTop: 0x0f172a, // Slate 900
-    bgBottom: 0x020617, // Slate 950
-    pipeColor: 0x334155, // Slate 700
-    particleType: 'stars',
-  },
-  Underwater: {
-    bgTop: 0x1e40af, // Blue 800
-    bgBottom: 0x172554, // Blue 900
-    pipeColor: 0x1e3a8a, // Blue 900
-    particleType: 'bubbles',
-  }
-};
-
-export const TIME_CYCLES = {
-  Dawn: { skyTop: 0xfbbf24, skyBottom: 0xfeb4b2, lightIntensity: 0.6 },
-  Noon: { skyTop: 0x38bdf8, skyBottom: 0xbae6fd, lightIntensity: 1.0 },
-  Dusk: { skyTop: 0x4c1d95, skyBottom: 0xf472b6, lightIntensity: 0.7 },
-  Night: { skyTop: 0x0f172a, skyBottom: 0x312e81, lightIntensity: 0.3 }
-};
 
 // --- DANGER MODE CONSTANTS ---
 
