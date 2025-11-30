@@ -1,6 +1,4 @@
 
-
-
 import { Pipe } from '../../types';
 import { GAME_CONSTANTS } from '../../constants';
 
@@ -13,9 +11,14 @@ export class PipeController {
         this.lastSpawnFrame = 0;
     }
 
-    public addInitialPipe(width: number, height: number) {
+    public addInitialPipe(width: number, height: number, scale: number = 1) {
         const minPipeHeight = 50;
-        const maxTopPipeHeight = Math.max(minPipeHeight, height - GAME_CONSTANTS.PIPE_GAP - minPipeHeight);
+        // Visual ground is 80px. We convert to logical units and add a buffer.
+        const groundHeight = 90 * scale; 
+        
+        // Ensure gap is above ground
+        const maxTopPipeHeight = Math.max(minPipeHeight, height - GAME_CONSTANTS.PIPE_GAP - minPipeHeight - groundHeight);
+        
         const startPipeHeight = Math.floor(minPipeHeight + (maxTopPipeHeight - minPipeHeight) / 2 + (Math.random() * 100 - 50));
         
         this.pipes.push({
@@ -54,14 +57,21 @@ export class PipeController {
         }
     }
 
-    public spawn(frameCount: number, speed: number, timeScale: number, width: number, height: number, score: number) {
+    public spawn(frameCount: number, speed: number, timeScale: number, width: number, height: number, score: number, scale: number = 1) {
         const spawnInterval = Math.floor(GAME_CONSTANTS.PIPE_SPAWN_RATE * (GAME_CONSTANTS.BASE_PIPE_SPEED / speed));
         const spawnRate = Math.floor(Math.max(30, spawnInterval / timeScale));
 
         if (frameCount - this.lastSpawnFrame >= spawnRate) {
             this.lastSpawnFrame = frameCount;
             const minPipeHeight = 50;
-            const maxTopPipeHeight = Math.max(minPipeHeight, height - GAME_CONSTANTS.PIPE_GAP - minPipeHeight);
+            // Visual ground is 80px. Add buffer and convert to logical units.
+            const groundHeight = 90 * scale;
+            
+            // Calculate max top height such that the bottom of the gap is above ground + min bottom pipe
+            const maxTopPipeHeight = Math.max(
+                minPipeHeight, 
+                height - GAME_CONSTANTS.PIPE_GAP - minPipeHeight - groundHeight
+            );
             
             let minBound = minPipeHeight;
             let maxBound = maxTopPipeHeight;
@@ -70,15 +80,25 @@ export class PipeController {
                 const lastPipe = this.pipes[this.pipes.length - 1];
                 const timeFactor = (GAME_CONSTANTS.BASE_PIPE_SPEED / speed);
                 
-                // ADJUSTMENT: Increased maxJump from 230 to 340 to reduce "inline" boring generation.
+                // ADJUSTMENT: Increased maxJump to reduce "inline" boring generation.
                 const maxJump = Math.min(340, (height * 0.32)) * timeFactor;
                 
+                // Ensure bounds respect the safe ground margin
                 minBound = Math.max(minPipeHeight, lastPipe.topHeight - maxJump);
+                // Clamp maxBound to the safe maxTopPipeHeight
                 maxBound = Math.min(maxTopPipeHeight, lastPipe.topHeight + maxJump);
+                
+                // Safety fix if logic results in invalid range
+                if (minBound > maxBound) {
+                    minBound = Math.max(minPipeHeight, maxBound - 50);
+                }
             } else {
                 minBound = height / 3;
-                maxBound = height / 1.5;
+                maxBound = maxTopPipeHeight;
             }
+
+            // Final safety clamp
+            if (maxBound < minBound) maxBound = minBound;
 
             const topHeight = Math.floor(minBound + Math.random() * (maxBound - minBound));
             const isGlass = Math.random() < GAME_CONSTANTS.GLASS_PIPE_CHANCE;
@@ -101,7 +121,11 @@ export class PipeController {
                     // Clamp range to prevent hitting ceiling/floor too hard
                     const safetyMargin = 50;
                     const maxUp = topHeight - safetyMargin; 
-                    const maxDown = (height - GAME_CONSTANTS.PIPE_GAP - topHeight) - safetyMargin;
+                    
+                    // Ensure moving down doesn't clip into ground
+                    // pipe bottom is topHeight + GAP + moveRange. Must be < height - groundHeight
+                    const maxDown = (height - GAME_CONSTANTS.PIPE_GAP - groundHeight - topHeight) - safetyMargin;
+                    
                     moveRange = Math.min(moveRange, maxUp, maxDown);
                     
                     if (moveRange < 10) moving = false; // Too risky/small

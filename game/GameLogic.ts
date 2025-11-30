@@ -83,7 +83,7 @@ export class GameLogic {
     this.currentSkinColors = skin.colors;
   }
 
-  public reset(spawnEntities: boolean = false, width: number, height: number) {
+  public reset(spawnEntities: boolean = false, width: number, height: number, scale: number = 1) {
     this.isRoundActive = false;
     this.score = 0;
     this.coinsCollectedThisRun = 0;
@@ -122,7 +122,7 @@ export class GameLogic {
 
     if (spawnEntities) {
         if (this.gameMode !== 'battle') {
-            this.pipeCtrl.addInitialPipe(width, height);
+            this.pipeCtrl.addInitialPipe(width, height, scale);
         }
 
         if (this.gameMode === 'battle') {
@@ -170,7 +170,7 @@ export class GameLogic {
     this.birdCtrl.jump();
   }
 
-  public update(dtRaw: number, width: number, height: number) {
+  public update(dtRaw: number, width: number, height: number, scale: number) {
     if (this.gameState === GameState.PAUSED) return;
     
     // Time scaling logic
@@ -233,7 +233,8 @@ export class GameLogic {
         // Shoot boss projectiles (handled in updateBoss logic internally for timing, spawned into list)
     } else {
         // Standard Mode Spawning (Pass Score for moving pipe logic)
-        this.pipeCtrl.spawn(this.frameCount, this.speed, this.timeScale, width, height, this.score);
+        // Pass scale to correctly calculate ground margin
+        this.pipeCtrl.spawn(this.frameCount, this.speed, this.timeScale, width, height, this.score, scale);
         
         // Prevent powerup spawning in playground mode
         if (this.gameMode !== 'playground') {
@@ -264,7 +265,9 @@ export class GameLogic {
     this.checkProjectileCollisions(width, dt);
 
     // Ground/Ceiling
-    if (this.bird.y + birdCollideRadius >= height || this.bird.y - birdCollideRadius <= 0) {
+    // 80 is the height of the visual ground layer in the new CityBackground
+    const groundHeight = 80 * scale; 
+    if (this.bird.y + birdCollideRadius >= height - groundHeight || this.bird.y - birdCollideRadius <= 0) {
        this.handleCrash();
     }
   }

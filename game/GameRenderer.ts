@@ -44,11 +44,53 @@ export class GameRenderer {
     this.width = window.innerWidth;
     this.height = window.innerHeight;
 
-    const { scene, camera, renderer, bgTexture } = setupThreeScene(container, this.width, this.height);
+    // Modified setup for transparent background
+    const scene = new THREE.Scene();
+    // Removed fog and background texture to allow CSS background to show
+    
+    // Camera Setup
+    const fov = 40;
+    const camera = new THREE.PerspectiveCamera(fov, this.width / this.height, 0.1, 5000);
+    updateCamera(camera, this.width, this.height);
+    camera.lookAt(0, 0, 0);
+
+    // Renderer Setup with Alpha for transparency
+    const renderer = new THREE.WebGLRenderer({ 
+        antialias: true, 
+        powerPreference: 'high-performance',
+        alpha: true 
+    });
+    renderer.setSize(this.width, this.height);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    // Set clear color to transparent
+    renderer.setClearColor(0x000000, 0);
+    container.appendChild(renderer.domElement);
+
+    // Lighting
+    const ambient = new THREE.AmbientLight(0xffffff, 0.7);
+    scene.add(ambient);
+
+    const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    dirLight.position.set(100, 200, 200);
+    dirLight.castShadow = true;
+    dirLight.shadow.mapSize.width = 2048; 
+    dirLight.shadow.mapSize.height = 2048;
+    const d = 1000;
+    dirLight.shadow.camera.left = -d; dirLight.shadow.camera.right = d; 
+    dirLight.shadow.camera.top = d; dirLight.shadow.camera.bottom = -d;
+    dirLight.shadow.bias = -0.0005;
+    scene.add(dirLight);
+
+    const fillLight = new THREE.DirectionalLight(0xffffff, 0.4);
+    fillLight.position.set(-50, 50, 100);
+    scene.add(fillLight);
+
     this.scene = scene;
     this.camera = camera;
     this.renderer = renderer;
-    this.bgTexture = bgTexture;
+    // this.bgTexture = bgTexture; // No longer used
 
     this.geometry = createGeometries();
     this.material = createMaterials();

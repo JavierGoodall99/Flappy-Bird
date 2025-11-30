@@ -73,7 +73,8 @@ export const GameEngine: React.FC<GameEngineProps> = (props) => {
     lastTimeRef.current = now;
     const rawDeltaFactor = rawDeltaMS / 16.666;
 
-    logicRef.current.update(rawDeltaFactor, logicWidth, logicHeight);
+    // We pass the scale to update the ground collision logic
+    logicRef.current.update(rawDeltaFactor, logicWidth, logicHeight, scale);
     rendererRef.current.render(logicRef.current);
 
     requestRef.current = requestAnimationFrame(loop);
@@ -107,14 +108,15 @@ export const GameEngine: React.FC<GameEngineProps> = (props) => {
 
       if (props.gameState === GameState.START) {
           // Full Reset on START
-          logicRef.current.reset(false, logicWidth, logicHeight);
+          // Pass scale to reset so spawn can calculate correct margins
+          logicRef.current.reset(false, logicWidth, logicHeight, scale);
           rendererRef.current.reset();
       } else if (props.gameState === GameState.PLAYING) {
           // Transitioning to PLAYING
           if (prevGameStateRef.current === GameState.START || prevGameStateRef.current === GameState.GAME_OVER) {
               // Only reset and spawn entities if we are NOT reviving.
               if (props.reviveTrigger === 0) {
-                  logicRef.current.reset(true, logicWidth, logicHeight);
+                  logicRef.current.reset(true, logicWidth, logicHeight, scale);
               }
           }
       }

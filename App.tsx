@@ -1,12 +1,7 @@
 
-
-
-
-
-
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { GameEngine } from './components/GameEngine';
+import { CityBackground, Ground } from './components/CityBackground';
 import { GameState, ActivePowerup, SkinId, PowerupType, GameMode } from './types';
 import { SKINS, ECONOMY } from './constants';
 import { audioService } from './services/audioService';
@@ -269,6 +264,10 @@ const App: React.FC = () => {
 
   return (
     <div className={`relative w-full h-[100dvh] overflow-hidden ${shake ? 'animate-pulse' : ''}`}>
+      
+      {/* Background Layer */}
+      <CityBackground />
+
       {/* Game Engine Layer */}
       <div className="absolute inset-0 z-0">
         <GameEngine 
@@ -287,6 +286,9 @@ const App: React.FC = () => {
           reviveTrigger={reviveTrigger}
         />
       </div>
+
+      {/* Ground Layer - Foreground */}
+      <Ground />
 
       <NotificationToast notification={notification} />
 
