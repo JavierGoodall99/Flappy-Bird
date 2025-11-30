@@ -436,8 +436,7 @@ export class GameLogic {
                          if ((hitTop && !pipe.brokenTop) || (hitBottom && !pipe.brokenBottom)) {
                              if (hitTop) pipe.brokenTop = true;
                              if (hitBottom) pipe.brokenBottom = true;
-                             this.score += GAME_CONSTANTS.GLASS_BREAK_SCORE;
-                             this.callbacks.setScore(this.score);
+                             // No score added for breaking glass/ghost pipes
                              audioService.playGlassBreak();
                              this.callbacks.triggerEffect();
                              this.bird.velocity = Math.max(this.bird.velocity + GAME_CONSTANTS.GLASS_BREAK_PENALTY, GAME_CONSTANTS.GLASS_BREAK_PENALTY / 2);
@@ -458,9 +457,15 @@ export class GameLogic {
          // Score check happens independently of collision/ghost status
          if (!pipe.passed && birdX > pipe.x + GAME_CONSTANTS.PIPE_WIDTH) {
              pipe.passed = true;
-             this.score += 1;
-             this.callbacks.setScore(this.score);
-             audioService.playScore();
+             
+             // If player collided with a glass pipe (breaking it), they don't get the point.
+             const isBrokenGlass = pipe.type === 'glass' && (pipe.brokenTop || pipe.brokenBottom);
+
+             if (!isBrokenGlass) {
+                 this.score += 1;
+                 this.callbacks.setScore(this.score);
+                 audioService.playScore();
+             }
          }
       }
   }
